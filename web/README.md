@@ -6,7 +6,7 @@ A Vite + React editor for design projects. Each project is a sandboxed folder of
 
 ```sh
 npm install
-npm run dev          # vite on http://127.0.0.1:5173 by default
+npm run dev          # vite on http://localhost:5173 by default
 ```
 
 For tests + scripts that hit the running server, see [tests/README.md](./tests/README.md).

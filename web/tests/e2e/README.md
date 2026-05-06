@@ -42,7 +42,7 @@ inspector flow.
 ## Conventions
 
 - Always start at `await page.goto('/')` (the `baseURL` resolves to
-  `http://127.0.0.1:5173`).
+  `http://localhost:5173`).
 - Prefer role-based selectors (`getByRole`, `getByLabel`) over CSS
   selectors so tests survive markup changes.
 - One scenario per file unless they share fixtures.

@@ -11,7 +11,7 @@ bun install
 bun run dev
 ```
 
-The dev script boots the Bun API on port 5174 and the Vite SPA on port 5173. Open <http://127.0.0.1:5173>.
+The dev script boots the Bun API on port 5174 and the Vite SPA on port 5173. Open <http://localhost:5173>.
 
 You'll need one agent CLI on your `PATH`:
 - [Claude Code](https://claude.com/claude-code) (recommended — subscription OAuth, no API key)

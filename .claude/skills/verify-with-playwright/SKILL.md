@@ -1,6 +1,6 @@
 ---
 name: verify-with-playwright
-description: Drive a real browser against AI Atelie's running dev server to verify a change works, and capture screenshots + video as PR evidence. Use whenever the user asks to "verify in browser", "prove it works", "add PR evidence", or before opening a PR that touches `web/` or any user-facing surface. Assumes `bun run dev` is already running on http://127.0.0.1:5173.
+description: Drive a real browser against AI Atelie's running dev server to verify a change works, and capture screenshots + video as PR evidence. Use whenever the user asks to "verify in browser", "prove it works", "add PR evidence", or before opening a PR that touches `web/` or any user-facing surface. Assumes `bun run dev` is already running on http://localhost:5173.
 ---
 
 # verify-with-playwright
@@ -24,7 +24,7 @@ Skip when:
 
 1. **Confirm the dev server is up.** Run:
    ```sh
-   curl -sSf http://127.0.0.1:5173 > /dev/null && echo "up" || echo "down"
+   curl -sSf http://localhost:5173 > /dev/null && echo "up" || echo "down"
    ```
    If down, **STOP** and tell the user: "Run `bun run dev` in another terminal, then retry." Do NOT spawn `bun run dev` from this skill — backgrounded dev servers leak across sessions and will clobber the user's own terminal.
 2. **Confirm Playwright is installed.** `bunx playwright --version` should print `Version 1.59.x` or higher. If not, run `bun add -D @playwright/test && bunx playwright install chromium`.
@@ -59,7 +59,7 @@ test("live-preview streams text deltas into iframe", async ({ page }) => {
 
 Conventions:
 
-- **Always `await page.goto('/')` first.** The `baseURL` resolves to `http://127.0.0.1:5173`.
+- **Always `await page.goto('/')` first.** The `baseURL` resolves to `http://localhost:5173`.
 - **Prefer role-based selectors** (`getByRole('button', { name: 'New project' })`) over CSS selectors. They survive markup churn.
 - **One scenario per file**, named `<feature>.spec.ts`.
 - **Test the surface, not the agent's output.** The agent is non-deterministic; the surface's behaviour around it should be deterministic.
@@ -113,9 +113,9 @@ Once evidence is uploaded to a PR via `gh attach` (see `ship-task`), the canonic
 
 - **`:5173` taken by stale Vite.** Diagnose with `lsof -ti:5173`; surface the PID to the user. Don't auto-kill.
 - **Headless vs headed divergence.** Some CSS (`:focus-visible`, scrollbar widths) renders differently. Use `--headed` for visual evidence runs.
-- **`localhost` vs `127.0.0.1`.** Always use `127.0.0.1:5173` to match Vite's default bind.
+- **`localhost` vs `127.0.0.1`.** Vite 8.x binds to `localhost` (which resolves to IPv6 `::1` on macOS), not `127.0.0.1`. Always use `localhost:5173`; `curl 127.0.0.1:5173` will fail.
 - **MJS test files masquerading as Playwright specs.** The existing `web/tests/test-*.mjs` are *integration tests*, NOT Playwright specs. Don't put `.spec.ts` files in `web/tests/` root; only under `web/tests/e2e/`.
-- **Bun loader edge cases.** Install Playwright with `bun add`, but **run** with `bunx playwright test` — Playwright's runner doesn't fully support Bun's loader yet (May 2026).
+- **Bun loader edge cases.** Install Playwright with `bun add`, but **run** with `bunx playwright test` — Playwright's runner doesn't fully support Bun's loader at the time of writing.
 - **Evidence too large.** Keep videos under ~10s. Crop with `ffmpeg` if a run is longer than necessary.
 
 ## Reporting back
