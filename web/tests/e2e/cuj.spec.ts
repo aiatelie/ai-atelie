@@ -31,6 +31,14 @@ test.describe("Critical User Journey", () => {
   test("@cuj home → new project → agent → two-frame canvas → cleanup", async ({ page, request }) => {
     let projectId: string | undefined;
 
+    // ─── 0. Snapshot existing projects (cleanup safety guarantee) ────
+    // We record exactly which projects exist BEFORE the test runs.
+    // After cleanup, we assert the project list matches this snapshot
+    // exactly — no leak (test project survived) and no collateral
+    // damage (an unrelated project disappeared). Any contributor's
+    // own projects under web/projects/ are safe by construction.
+    const snapshotBefore = (await readdir(PROJECTS_DIR)).sort();
+
     try {
       // ─── 1. Home loads ─────────────────────────────────────────────
       await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -52,6 +60,12 @@ test.describe("Critical User Journey", () => {
       const match = url.match(/p=(p_[a-z0-9]+)/);
       projectId = match?.[1];
       expect(projectId, "project id captured from URL").toBeTruthy();
+
+      // Confirm this id is genuinely new — wasn't already in the
+      // snapshot. If this fails, it means we somehow captured an
+      // existing project's id from the URL (would be a serious bug).
+      expect(snapshotBefore, `created project id ${projectId} must not exist in pre-test snapshot`)
+        .not.toContain(projectId);
 
       // ─── 5. Project on disk ───────────────────────────────────────
       const projectDir = `${PROJECTS_DIR}/${projectId}`;
@@ -108,9 +122,23 @@ test.describe("Critical User Journey", () => {
     } finally {
       // ─── 10. ALWAYS clean up the test project ─────────────────────
       // Even on failure — we don't leak test projects into web/projects/.
+      // We delete by EXACT id we captured at step 4. The DELETE endpoint
+      // takes a single :id; there's no wildcard or batch-delete path.
+      // Any project the contributor had before the test is safe.
       if (projectId) {
         await request.delete(`${API_BASE}/api/projects/${projectId}`).catch(() => null);
       }
+
+      // ─── 11. Verify cleanup did not touch other projects ───────────
+      // Snapshot diff: post-test list MUST equal pre-test list. If the
+      // delta isn't zero, either we leaked a project (cleanup failed)
+      // or we deleted something we shouldn't have (collateral damage).
+      // Both are bugs; both should fail loudly.
+      const snapshotAfter = (await readdir(PROJECTS_DIR)).sort();
+      expect(
+        snapshotAfter,
+        `post-test project list must exactly match pre-test snapshot (no leak, no collateral). before=[${snapshotBefore.join(",")}] after=[${snapshotAfter.join(",")}]`,
+      ).toEqual(snapshotBefore);
     }
   });
 });

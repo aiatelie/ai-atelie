@@ -24,6 +24,14 @@ See [`.claude/skills/cuj-guardian/SKILL.md`](../../../.claude/skills/cuj-guardia
 
 ---
 
+## 2026-05-06 — PR #48 — tightened
+
+- **Change kind**: `tightened` (added two new guard assertions).
+- **Before**: cleanup deleted by id; safety was a property of the code path, not measurable.
+- **After**: snapshot the project list before the test (sorted), assert the captured `projectId` is NOT in that snapshot (proves it's genuinely new), and after cleanup assert the project list matches the snapshot exactly (proves zero leak + zero collateral damage).
+- **Why**: maintainer asked for an explicit guarantee that the CUJ never touches a contributor's existing local projects under `web/projects/`. The previous code was correct but the property wasn't testable.
+- **Proof of value**: removed the `request.delete(...)` call locally and re-ran — the new snapshot-after assertion (step 11) failed with a clear message naming the leaked project. Re-added the delete and the test passes. The assertion catches the regression it's supposed to catch.
+
 ## 2026-05-06 — PR #48 — created
 
 - **Change kind**: `created` (first version of the test).

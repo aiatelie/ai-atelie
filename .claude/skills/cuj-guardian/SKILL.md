@@ -22,6 +22,17 @@ The single test in `web/tests/e2e/cuj.spec.ts`. Drives:
 
 If this test fails, the product is broken in a way users will notice. That's the contract; everything else (`smoke.spec.ts`, type-check, build) is cheap-pre-flight stuff.
 
+## Cleanup safety guarantee
+
+The CUJ creates exactly one test project (under a fresh `p_*` id assigned by the New Project flow), works against it, and deletes it via `DELETE /api/projects/<id>` in a `finally{}` block — even on failure. The test enforces the safety property explicitly:
+
+1. **Snapshot before**: lists `web/projects/` at the start, sorted.
+2. **Delta assertion at step 4**: the captured `projectId` must NOT appear in the pre-test snapshot. If it does, we somehow latched onto an existing project's id (serious bug); fail loud.
+3. **Cleanup at step 10**: deletes by EXACT id, single-target API call, no wildcards.
+4. **Snapshot after at step 11**: post-test `web/projects/` list MUST equal the pre-test list. If anything was leaked OR anything else disappeared, the test fails.
+
+So **any project the contributor had before the test is safe.** The same machine can have arbitrary `p_*` projects of personal work and the CUJ run will only ever touch the one it itself created. If a future change to the CUJ ever violates this property, the snapshot-diff assertion in step 11 fails the test loudly — which is the correct behavior.
+
 The journal of every change to the CUJ lives at `web/tests/e2e/CUJ_JOURNAL.md`. **Touching the spec without touching the journal is a bug.**
 
 ## When to invoke
