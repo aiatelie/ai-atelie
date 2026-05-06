@@ -26,6 +26,15 @@ These are the areas where a PR is most likely to land:
 - **Wire a new agent CLI.** Adapters live under `api/src/agents/<name>/`. The opencode adapter is a good reference.
 - **Fix a real bug.** Reproduce locally first; PR with a one-line description of the symptom and the fix.
 
+## Dev-time vs. product-runtime config
+
+The repo intentionally separates two namespaces:
+
+- **`/skills/`** — product skills shipped to end users. Adapters (`api/src/services/claude.ts`, `kimi.ts`, etc.) load them into spawned sessions via `ENV.SKILLS_DIR`. Never auto-loaded into your dev session.
+- **`/.claude/`** — dev-time harness config that loads when you open Claude Code in this repo to work *on* AI Atelie. Skills here (`/.claude/skills/`) are contributor workflows, not user features.
+
+If you're adding something for end users, it belongs under `/skills/` with an entry in `skills/index.json`. If you're adding something to make contributing easier, it belongs under `/.claude/skills/`.
+
 ## Bar for merging
 
 - One feature / fix per PR.

@@ -27,15 +27,9 @@ skills/
 
 ## How each consumer uses these
 
-### Claude Code
+### Claude Code (product runtime)
 
-Reads skills natively from `.claude/skills/`. The repo root has a symlink:
-
-```
-.claude/skills -> ../skills
-```
-
-So nothing else to wire up. Claude Code auto-discovers each `SKILL.md` and surfaces it when relevant.
+Adapters spawn `claude` with `additionalDirectories: [ENV.SKILLS_DIR, …]` so the product skills in this folder are loaded into the end-user session — independent of any `.claude/skills/` near the adapter cwd. See `api/src/services/claude.ts`.
 
 ### Kimi K2 / OpenAI / any other model
 

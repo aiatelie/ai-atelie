@@ -58,7 +58,7 @@ These coexist; `_inspector_edits.css` uses `!important` so it always wins the ca
 
 ### Skills
 
-`skills/<name>/SKILL.md` — local skill library (Frontend design, Make tweakable, Interactive prototype, etc.). Symlinked at `web/.claude/skills` so Claude Code auto-discovers them.
+`skills/<name>/SKILL.md` — local skill library (Frontend design, Make tweakable, Interactive prototype, etc.). Loaded into adapter sessions via `ENV.SKILLS_DIR` (see `api/src/services/claude.ts`); not auto-discovered from a `.claude/skills/` symlink.
 
 ## Running just the dev server (no test suite, no install of MCP servers)
 
