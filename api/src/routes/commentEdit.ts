@@ -10,9 +10,8 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { randomUUID } from "node:crypto";
-import { ENV } from "../env.ts";
 import { pickAdapter } from "../agents/registry.ts";
-import { applySnapshot, deleteSnapshot, diffSnapshot, getSnapshot, recordSnapshot, snapshotDir } from "../services/snapshots.ts";
+import { applySnapshot, deleteSnapshot, diffSnapshot, getSnapshot, recordSnapshot } from "../services/snapshots.ts";
 import { activeRuns } from "../services/runRegistry.ts";
 import {
   cancelPendingForStream,
@@ -62,19 +61,17 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
   runLog.log(`turn=${turnId} reqId=${requestId ?? "-"} project=${payload.projectId ?? "-"} model=${payload.modelId ?? "(default)"} comment=${JSON.stringify(payload.comment).slice(0, 200)}`);
 
   // Snapshot the right scope before the agent runs so we can revert
-  // this turn later. Sandbox projects snapshot only their own dir;
-  // legacy snapshots LEGACY_EDITOR_ROOT/src.
+  // this turn later. Sandbox projects snapshot their own files via the
+  // storage driver; legacy snapshots LEGACY_EDITOR_ROOT/src directly.
+  // Survives daemon restart because the snapshot lives on disk under
+  // SHARED_ROOT/snapshot-<turnId>.json.
   let snapshotErr: string | null = null;
   try {
-    let snap;
-    if (payload.projectId) {
-      const projectDir = projectDirOf(payload.projectId);
-      if (!projectDir) throw new Error(`Invalid projectId: ${payload.projectId}`);
-      snap = await snapshotDir(projectDir, /*allExt*/ true);
-    } else {
-      snap = await snapshotDir(`${ENV.LEGACY_EDITOR_ROOT}/src`, /*allExt*/ false);
+    if (payload.projectId && !projectDirOf(payload.projectId)) {
+      throw new Error(`Invalid projectId: ${payload.projectId}`);
     }
-    recordSnapshot(turnId, snap);
+    const entry = await recordSnapshot(turnId, payload.projectId ?? null);
+    if (!entry) snapshotErr = "Snapshot failed: storage write returned no entry";
   } catch (err) {
     // Snapshot is best-effort; if it fails we just don't offer undo.
     snapshotErr = `Snapshot failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -135,13 +132,10 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
     // our abort message can tell the user what landed (and surface
     // Undo). Returns an empty list on snapshot-missing or read errors.
     const editedFilesSummary = async (): Promise<string> => {
-      const snap = getSnapshot(turnId);
+      const snap = await getSnapshot(turnId);
       if (!snap) return "";
-      const rootDir = payload.projectId
-        ? (projectDirOf(payload.projectId) ?? ENV.LEGACY_EDITOR_ROOT)
-        : `${ENV.LEGACY_EDITOR_ROOT}/src`;
       try {
-        const { modified } = await diffSnapshot(snap, rootDir);
+        const { modified } = await diffSnapshot(snap);
         if (modified.length === 0) return "";
         const list = modified.length <= 4
           ? modified.join(", ")
@@ -234,13 +228,13 @@ commentEditRoutes.post("/api/comment-undo", async (c) => {
   let body: { turnId?: string };
   try { body = await c.req.json(); }
   catch { return c.text("Bad JSON", 400); }
-  const snap = body.turnId ? getSnapshot(body.turnId) : null;
+  const snap = body.turnId ? await getSnapshot(body.turnId) : null;
   if (!snap) {
     return c.json({ error: "Turn not found or already reverted." }, 404);
   }
   try {
     const { reverted } = await applySnapshot(snap);
-    deleteSnapshot(body.turnId!);
+    await deleteSnapshot(body.turnId!);
     return c.json({ reverted });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);

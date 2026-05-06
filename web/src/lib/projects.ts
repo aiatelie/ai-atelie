@@ -3,18 +3,22 @@
  * Two storage layers:
  *
  *   Server  (`web/projects/<id>/manifest.json`)  → id, name, createdAt,
- *           updatedAt, pages. Source of truth for "what projects exist."
+ *           updatedAt, pages. **Source of truth** for "what projects exist."
  *           Listed via GET /api/projects.
  *
- *   Browser (`localStorage["projects.v1"]`)       → per-project openTabs,
- *           activeTabId, plus the workspace activeProjectId. These are
- *           genuinely device-specific UX state — your other browser
- *           shouldn't care which tabs are open here.
+ *   Browser (`localStorage["projects.v1"]`)       → SWR-style cache of
+ *           the project list (for fast first paint) plus the
+ *           genuinely-device-local per-project openTabs/activeTabId
+ *           UX state. `activeProjectId` is per-tab via sessionStorage.
  *
- * Calls into here stay synchronous: an in-memory cache merges the two
- * layers and is populated lazily from /api/projects on first read. SSE
- * on /api/__shared-events "projects" lets other tabs/browsers see
- * project create/delete/rename without polling.
+ * Boot sequence:
+ *   1. localStorage cache → in-memory `cache` (sync, for immediate render).
+ *   2. fetch /api/projects → merge into cache, fire `projects:change`.
+ *   3. SSE `/api/__shared-events` "projects" → re-fetch on remote changes.
+ *
+ * `useProjects().loading` is true only on the first paint when there's no
+ * localStorage cache yet, so a fresh browser shows a skeleton instead of
+ * the misleading "No projects yet" empty state — closes #55.
  */
 
 import { useEffect, useState } from "react";
@@ -190,6 +194,11 @@ function reconcileLegacyTabs(s: Store): Store {
 let cache: Store | null = null;
 let serverFetchInflight: Promise<void> | null = null;
 let sharedSubscribed = false;
+/** True from the moment bootCache() runs against an empty localStorage
+ *  until the first /api/projects fetch resolves (success or failure).
+ *  Read by useProjects().loading so the home page renders a skeleton
+ *  instead of "No projects yet" on a fresh browser. */
+let firstFetchPending = false;
 
 function ensureSubscribed() {
   if (typeof window === "undefined") return;
@@ -255,7 +264,18 @@ async function fetchFromServer(): Promise<void> {
       cache = merged;
       write(merged);
     } catch { /* offline */ }
-    finally { serverFetchInflight = null; }
+    finally {
+      serverFetchInflight = null;
+      // First-fetch flips off whether the request succeeded or failed —
+      // an offline / 500 first paint should fall through to the empty
+      // state rather than spin a skeleton forever.
+      if (firstFetchPending) {
+        firstFetchPending = false;
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("projects:change"));
+        }
+      }
+    }
   })();
   return serverFetchInflight;
 }
@@ -266,11 +286,15 @@ async function fetchFromServer(): Promise<void> {
 function bootCache(): Store {
   if (cache) return cache;
   const cur = read();
-  if (cur) {
+  if (cur && cur.projects.length > 0) {
     cache = reconcileLegacyTabs(cur);
     if (cache !== cur) write(cache);
   } else {
     cache = { projects: [], activeProjectId: "" };
+    // Only mark loading when we genuinely don't know yet. A localStorage
+    // store with zero projects means the user is up to date — the server
+    // is also empty unless they touched another browser.
+    firstFetchPending = true;
   }
   if (typeof window !== "undefined") {
     void fetchFromServer();
@@ -282,6 +306,14 @@ function bootCache(): Store {
 export function getStore(): Store { return bootCache(); }
 
 export function listProjects(): Project[] { return bootCache().projects; }
+
+/** True only on the first paint of a fresh browser (no localStorage
+ *  cache) until the first /api/projects fetch resolves. Used by the
+ *  home page to render a skeleton instead of the empty state. */
+export function isLoadingProjects(): boolean {
+  bootCache();
+  return firstFetchPending;
+}
 
 /** May return null when there are no projects yet. */
 export function getActiveProject(): Project | null {
@@ -410,7 +442,7 @@ export function updateProject(id: string, patch: Partial<Project> | ((p: Project
 
 /* ─── React hook ──────────────────────────────────────────────── */
 
-export function useProjects(): { all: Project[]; active: Project | null } {
+export function useProjects(): { all: Project[]; active: Project | null; loading: boolean } {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const refresh = () => setTick((n) => n + 1);
@@ -425,7 +457,7 @@ export function useProjects(): { all: Project[]; active: Project | null } {
     };
   }, []);
   void tick;
-  return { all: listProjects(), active: getActiveProject() };
+  return { all: listProjects(), active: getActiveProject(), loading: isLoadingProjects() };
 }
 
 export const _internal = { uuid };

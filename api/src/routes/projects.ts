@@ -9,27 +9,21 @@
  *  • /api/projects/* — REST: create, manifest read/patch, files list,
  *    upload, delete, recursive project delete, tweak edits, inspector
  *    CSS, per-project meta blobs + SSE event channel.
+ *
+ * Storage is mediated through the repos in storage/repos/. This file
+ * contains only HTTP-shape: parsing, validation, mime/content-type,
+ * reload-script injection, EDITMODE regex.
  */
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, join, relative as relPath, resolve as resolvePath } from "node:path";
+import { basename, extname } from "node:path";
 import { randomBytes } from "node:crypto";
-import { ENV } from "../env.ts";
-import { projectDirOf } from "../services/projectStore.ts";
 import { parseAnyDataUrl } from "../services/utils.ts";
-import {
-  broadcastMeta,
-  broadcastShared,
-  destroyMetaChannel,
-  destroyReloadChannel,
-  getMetaEmitter,
-  getOrCreateReloadChannel,
-} from "../services/sseChannels.ts";
+import { broadcastShared } from "../services/sseChannels.ts";
+import { getRepos, type ProjectManifest } from "../storage/repos/index.ts";
 
 const ID_RE = /^[A-Za-z0-9_-]+$/;
-const META_KEY_RE = /^[a-zA-Z0-9_-]+$/;
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -56,88 +50,8 @@ const MIME: Record<string, string> = {
   ".md":   "text/markdown; charset=utf-8",
 };
 
-export type ProjectManifest = {
-  schemaVersion: 1;
-  id: string;
-  name: string;
-  kind: "sandbox";
-  createdAt: number;
-  updatedAt: number;
-  pages: Array<{ file: string; label: string; title?: string }>;
-  components?: Array<{ file: string; name: string }>;
-  entry: string;
-};
-
-function isInside(parent: string, child: string): boolean {
-  return child === parent || child.startsWith(parent + "/");
-}
-
-/** Resolve a project-relative path; null if invalid or escapes the dir. */
-export function safeProjectFilePath(id: string, rel: string): string | null {
-  if (!ID_RE.test(id)) return null;
-  if (typeof rel !== "string" || rel.includes("\0")) return null;
-  const projectDir = projectDirOf(id);
-  if (!projectDir) return null;
-  const cleaned = rel.replace(/^\/+/, "");
-  const abs = resolvePath(projectDir, cleaned);
-  if (!isInside(projectDir, abs)) return null;
-  return abs;
-}
-
-function projectMetaPath(id: string, key: string): string | null {
-  if (!ID_RE.test(id) || !META_KEY_RE.test(key)) return null;
-  const projectDir = projectDirOf(id);
-  if (!projectDir) return null;
-  return resolvePath(projectDir, ".meta", `${key}.json`);
-}
-
-function etagFromMtime(mtimeMs: number): string {
-  return `W/"${Math.floor(mtimeMs).toString(36)}"`;
-}
-
-/* ─── Manifest IO ─── */
-
-async function readManifest(id: string): Promise<ProjectManifest | null> {
-  const p = safeProjectFilePath(id, "manifest.json");
-  if (!p) return null;
-  try {
-    const raw = await readFile(p, "utf8");
-    return JSON.parse(raw) as ProjectManifest;
-  } catch { return null; }
-}
-
-async function writeManifest(id: string, m: ProjectManifest): Promise<void> {
-  const p = safeProjectFilePath(id, "manifest.json");
-  if (!p) throw new Error("Invalid project id");
-  await mkdir(dirname(p), { recursive: true });
-  const tmp = p + ".tmp";
-  await writeFile(tmp, JSON.stringify(m, null, 2), "utf8");
-  await rename(tmp, p);
-}
-
-/* ─── Listing all projects ─── */
-
-async function listAllProjects(): Promise<Array<{
-  id: string; name: string; createdAt: number; updatedAt: number;
-  pages: ProjectManifest["pages"];
-}>> {
-  const out: Array<{ id: string; name: string; createdAt: number; updatedAt: number; pages: ProjectManifest["pages"] }> = [];
-  const entries = await readdir(ENV.PROJECTS_ROOT, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !ID_RE.test(entry.name)) continue;
-    const manifest = await readManifest(entry.name);
-    if (!manifest) continue;
-    out.push({
-      id: manifest.id,
-      name: manifest.name,
-      createdAt: manifest.createdAt,
-      updatedAt: manifest.updatedAt,
-      pages: manifest.pages,
-    });
-  }
-  out.sort((a, b) => b.updatedAt - a.updatedAt);
-  return out;
-}
+// Re-export for downstream that imports the type from this file.
+export type { ProjectManifest };
 
 /* ─── Reload-script injection (HTML responses get this appended) ─── */
 
@@ -212,54 +126,7 @@ function previewHtml(id: string, file: string, name: string): string {
 `;
 }
 
-/* ─── File listing inside a project ─── */
-
-const SKIP_DIRS = new Set(["node_modules", ".git"]);
-
-async function* walkProject(absDir: string): AsyncGenerator<string> {
-  const items = await readdir(absDir, { withFileTypes: true }).catch(() => []);
-  for (const it of items) {
-    if (it.name.startsWith(".")) continue;
-    if (SKIP_DIRS.has(it.name)) continue;
-    const abs = join(absDir, it.name);
-    if (it.isDirectory()) yield* walkProject(abs);
-    else if (it.isFile()) yield abs;
-  }
-}
-
-export type SandboxFileEntry = {
-  path: string;
-  name: string;
-  size: number;
-  modified: number;
-  kind: "page" | "component" | "asset" | "config";
-};
-
-async function listProjectFiles(id: string): Promise<{ files: SandboxFileEntry[] }> {
-  const projectDir = projectDirOf(id);
-  if (!projectDir) throw new Error("Invalid project id");
-  const files: SandboxFileEntry[] = [];
-  for await (const abs of walkProject(projectDir)) {
-    const rel = relPath(projectDir, abs);
-    if (rel === "manifest.json") continue;
-    const st = await stat(abs).catch(() => null);
-    if (!st) continue;
-    const ext = extname(abs).toLowerCase();
-    let kind: SandboxFileEntry["kind"] = "asset";
-    if (ext === ".html" || ext === ".htm") kind = "page";
-    else if (ext === ".jsx" || ext === ".tsx") kind = "component";
-    else if (ext === ".css" || ext === ".js" || ext === ".mjs" || ext === ".json") kind = "config";
-    files.push({ path: rel, name: basename(abs), size: st.size, modified: st.mtimeMs, kind });
-  }
-  files.sort((a, b) => a.path.localeCompare(b.path));
-  return { files };
-}
-
-/* ─── Scaffold + delete ─── */
-
-function newProjectId(): string {
-  return "p_" + randomBytes(4).toString("hex");
-}
+/* ─── Starter content for new projects ─── */
 
 const STARTER_HTML = `<!doctype html>
 <html lang="en">
@@ -296,39 +163,8 @@ const STARTER_CSS = `/* __NAME__ — base styles. Edit freely. */
 html, body { margin: 0; padding: 0; background: var(--cream); color: var(--ink); font-family: ui-sans-serif, system-ui, sans-serif; }
 `;
 
-async function scaffoldProject(id: string, name: string): Promise<ProjectManifest> {
-  const projectDir = projectDirOf(id);
-  if (!projectDir) throw new Error("Invalid project id");
-  await mkdir(projectDir, { recursive: true });
-  await mkdir(join(projectDir, "uploads"), { recursive: true });
-  const now = Date.now();
-  const manifest: ProjectManifest = {
-    schemaVersion: 1,
-    id,
-    name,
-    kind: "sandbox",
-    createdAt: now,
-    updatedAt: now,
-    pages: [{ file: "index.html", label: "index.html", title: name }],
-    components: [],
-    entry: "index.html",
-  };
-  await writeFile(join(projectDir, "index.html"), STARTER_HTML.replace(/__NAME__/g, name), "utf8");
-  await writeFile(join(projectDir, "style.css"), STARTER_CSS.replace(/__NAME__/g, name), "utf8");
-  await writeManifest(id, manifest);
-  return manifest;
-}
-
-async function deleteProjectDir(id: string): Promise<void> {
-  if (!ID_RE.test(id)) throw new Error("Invalid project id");
-  const projectDir = projectDirOf(id);
-  if (!projectDir || projectDir === ENV.PROJECTS_ROOT) {
-    throw new Error("Refusing to delete outside projects/");
-  }
-  // Tear down channels first so we don't get reload events for our own deletes.
-  destroyReloadChannel(id);
-  destroyMetaChannel(id);
-  await rm(projectDir, { recursive: true, force: true });
+function newProjectId(): string {
+  return "p_" + randomBytes(4).toString("hex");
 }
 
 /* ─── Routes ─── */
@@ -336,7 +172,7 @@ async function deleteProjectDir(id: string): Promise<void> {
 export const projectsRoutes = new Hono();
 
 projectsRoutes.get("/api/projects", async (c) => {
-  try { return c.json(await listAllProjects()); }
+  try { return c.json(await getRepos().projects.list()); }
   catch (err) { return c.json({ error: err instanceof Error ? err.message : String(err) }, 500); }
 });
 
@@ -347,7 +183,12 @@ projectsRoutes.post("/api/projects/create", async (c) => {
   const name = (body.name ?? "Untitled").trim() || "Untitled";
   const id = body.id && ID_RE.test(body.id) ? body.id : newProjectId();
   try {
-    const manifest = await scaffoldProject(id, name);
+    const manifest = await getRepos().projects.create({
+      id,
+      name,
+      indexHtml: STARTER_HTML.replace(/__NAME__/g, name),
+      styleCss: STARTER_CSS.replace(/__NAME__/g, name),
+    });
     broadcastShared("projects");
     return c.json({ id, manifest });
   } catch (err) {
@@ -355,18 +196,14 @@ projectsRoutes.post("/api/projects/create", async (c) => {
   }
 });
 
-// All per-project endpoints require an existing project dir.
-async function requireProject(id: string): Promise<string | null> {
-  const dir = projectDirOf(id);
-  if (!dir) return null;
-  const exists = await stat(dir).then(() => true).catch(() => false);
-  return exists ? dir : null;
+async function requireProject(id: string): Promise<boolean> {
+  return getRepos().projects.exists(id);
 }
 
 projectsRoutes.get("/api/projects/:id/manifest", async (c) => {
   const id = c.req.param("id");
   if (!await requireProject(id)) return c.json({ error: "Project not found" }, 404);
-  const manifest = await readManifest(id);
+  const manifest = await getRepos().projects.getManifest(id);
   if (!manifest) return c.json({ error: "No manifest" }, 404);
   return c.json(manifest);
 });
@@ -377,11 +214,9 @@ projectsRoutes.patch("/api/projects/:id/manifest", async (c) => {
   let patch: Partial<ProjectManifest>;
   try { patch = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
-  const cur = await readManifest(id);
-  if (!cur) return c.json({ error: "No manifest" }, 404);
-  const next: ProjectManifest = { ...cur, ...patch, id, kind: "sandbox", updatedAt: Date.now() };
   try {
-    await writeManifest(id, next);
+    const next = await getRepos().projects.updateManifest(id, patch);
+    if (!next) return c.json({ error: "No manifest" }, 404);
     broadcastShared("projects");
     return c.json(next);
   } catch (err) {
@@ -392,12 +227,11 @@ projectsRoutes.patch("/api/projects/:id/manifest", async (c) => {
 projectsRoutes.get("/api/projects/:id/__meta-events", (c) => {
   const id = c.req.param("id");
   return streamSSE(c, async (stream) => {
-    const emitter = getMetaEmitter(id);
     const sub = (key: string) => {
       stream.writeSSE({ data: key }).catch(() => { /* aborted */ });
     };
-    emitter.on("event", sub);
-    stream.onAbort(() => emitter.off("event", sub));
+    const unsub = getRepos().projectMeta.subscribe(id, sub);
+    stream.onAbort(unsub);
     await stream.writeSSE({ data: "", event: "connected" }).catch(() => { /* aborted */ });
     while (!stream.aborted) {
       await stream.sleep(25_000);
@@ -409,51 +243,32 @@ projectsRoutes.get("/api/projects/:id/__meta-events", (c) => {
 projectsRoutes.get("/api/projects/:id/meta/:key", async (c) => {
   const { id, key } = c.req.param();
   if (!await requireProject(id)) return c.json({ error: "Project not found" }, 404);
-  const path = projectMetaPath(id, key);
-  if (!path) return c.json({ error: "Invalid meta key" }, 400);
-  try {
-    const st = await stat(path);
-    const etag = etagFromMtime(st.mtimeMs);
-    if (c.req.header("if-none-match") === etag) {
-      return new Response(null, { status: 304, headers: { etag } });
-    }
-    const raw = await readFile(path, "utf8");
-    return new Response(raw, {
-      status: 200,
-      headers: { "content-type": "application/json", etag },
-    });
-  } catch {
-    return c.json({ error: "No meta blob" }, 404);
+  const result = await getRepos().projectMeta.get(id, key);
+  if (!result.ok) return c.json({ error: "No meta blob" }, 404);
+  if (c.req.header("if-none-match") === result.etag) {
+    return new Response(null, { status: 304, headers: { etag: result.etag } });
   }
+  return new Response(JSON.stringify(result.value), {
+    status: 200,
+    headers: { "content-type": "application/json", etag: result.etag },
+  });
 });
 
 projectsRoutes.patch("/api/projects/:id/meta/:key", async (c) => {
   const { id, key } = c.req.param();
   if (!await requireProject(id)) return c.json({ error: "Project not found" }, 404);
-  const path = projectMetaPath(id, key);
-  if (!path) return c.json({ error: "Invalid meta key" }, 400);
   let body: unknown;
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
-  const ifMatch = c.req.header("if-match");
-  if (ifMatch) {
-    const cur = await stat(path).catch(() => null);
-    const curEtag = cur ? etagFromMtime(cur.mtimeMs) : null;
-    if (curEtag !== ifMatch) {
-      return c.json({ error: "ETag mismatch — refetch and retry", current_etag: curEtag }, 412);
-    }
-  }
+  const ifMatch = c.req.header("if-match") ?? undefined;
   try {
-    await mkdir(dirname(path), { recursive: true });
-    const tmp = path + ".tmp";
-    await writeFile(tmp, JSON.stringify(body), "utf8");
-    await rename(tmp, path);
-    const st = await stat(path);
-    const etag = etagFromMtime(st.mtimeMs);
-    broadcastMeta(id, key);
-    return new Response(JSON.stringify({ ok: true, etag }), {
+    const result = await getRepos().projectMeta.put(id, key, body, ifMatch ? { ifMatch } : undefined);
+    if (!result.ok) {
+      return c.json({ error: "ETag mismatch — refetch and retry", current_etag: result.currentEtag }, 412);
+    }
+    return new Response(JSON.stringify({ ok: true, etag: result.etag }), {
       status: 200,
-      headers: { "content-type": "application/json", etag },
+      headers: { "content-type": "application/json", etag: result.etag },
     });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
@@ -463,28 +278,29 @@ projectsRoutes.patch("/api/projects/:id/meta/:key", async (c) => {
 projectsRoutes.get("/api/projects/:id/files", async (c) => {
   const id = c.req.param("id");
   if (!await requireProject(id)) return c.json({ error: "Project not found" }, 404);
-  try { return c.json(await listProjectFiles(id)); }
+  try { return c.json(await getRepos().projectFiles.list(id)); }
   catch (err) { return c.json({ error: err instanceof Error ? err.message : String(err) }, 500); }
 });
 
 projectsRoutes.post("/api/projects/:id/file/upload", async (c) => {
   const id = c.req.param("id");
-  const projectDir = await requireProject(id);
-  if (!projectDir) return c.json({ error: "Project not found" }, 404);
+  if (!await requireProject(id)) return c.json({ error: "Project not found" }, 404);
   let body: { path?: string; dataUrl?: string };
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
-  const safe = safeProjectFilePath(id, body.path ?? "");
+  const validated = getRepos().projects.validateFilePath(body.path ?? "");
   const parsed = body.dataUrl ? parseAnyDataUrl(body.dataUrl) : null;
-  if (!safe || !parsed) return c.json({ error: "Invalid path or dataUrl" }, 400);
-  if (basename(safe) === "manifest.json") return c.json({ error: "Refusing to overwrite manifest.json" }, 400);
+  if (!validated.ok || !parsed) {
+    return c.json({ error: !validated.ok ? validated.reason : "Invalid dataUrl" }, 400);
+  }
   try {
-    await mkdir(dirname(safe), { recursive: true });
-    const tmp = safe + ".tmp";
-    await writeFile(tmp, Buffer.from(parsed.data, "base64"));
-    await rename(tmp, safe);
-    const st = await stat(safe);
-    return c.json({ path: relPath(projectDir, safe), size: st.size });
+    const bytes = new Uint8Array(Buffer.from(parsed.data, "base64"));
+    await getRepos().projectFiles.write(id, validated.path, bytes);
+    const stat = await getRepos().projectFiles.read(id, validated.path);
+    return c.json({
+      path: validated.path,
+      size: stat.ok ? stat.stat.size : bytes.byteLength,
+    });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
@@ -492,18 +308,19 @@ projectsRoutes.post("/api/projects/:id/file/upload", async (c) => {
 
 projectsRoutes.post("/api/projects/:id/tweak", async (c) => {
   const id = c.req.param("id");
-  const projectDir = await requireProject(id);
-  if (!projectDir) return c.json({ error: "Project not found" }, 404);
+  if (!await requireProject(id)) return c.json({ error: "Project not found" }, 404);
   let body: { file?: string; edits?: Record<string, unknown> };
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
-  const safe = safeProjectFilePath(id, body.file ?? "");
-  if (!safe) return c.json({ error: "Invalid path" }, 400);
+  const validated = getRepos().projects.validateFilePath(body.file ?? "");
+  if (!validated.ok) return c.json({ error: validated.reason }, 400);
   if (!body.edits || typeof body.edits !== "object" || Array.isArray(body.edits)) {
     return c.json({ error: "edits must be a plain object" }, 400);
   }
   try {
-    const text = await readFile(safe, "utf8");
+    const read = await getRepos().projectFiles.readText(id, validated.path);
+    if (!read.ok) return c.json({ error: "File not found" }, 404);
+    const text = read.text;
     const re = /\/\*EDITMODE-BEGIN\*\/\s*([\s\S]*?)\s*\/\*EDITMODE-END\*\//;
     const match = text.match(re);
     if (!match) {
@@ -528,12 +345,10 @@ projectsRoutes.post("/api/projects/:id/tweak", async (c) => {
     const afterJson = JSON.stringify(merged, null, 2);
     const replaced = text.replace(re, `/*EDITMODE-BEGIN*/${afterJson}/*EDITMODE-END*/`);
     if (replaced === text) {
-      return c.json({ file: relPath(projectDir, safe), unchanged: true });
+      return c.json({ file: validated.path, unchanged: true });
     }
-    const tmp = safe + ".tmp";
-    await writeFile(tmp, replaced, "utf8");
-    await rename(tmp, safe);
-    return c.json({ file: relPath(projectDir, safe), before: parsed, after: merged });
+    await getRepos().projectFiles.write(id, validated.path, replaced);
+    return c.json({ file: validated.path, before: parsed, after: merged });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
@@ -541,8 +356,7 @@ projectsRoutes.post("/api/projects/:id/tweak", async (c) => {
 
 projectsRoutes.post("/api/projects/:id/inspector-css", async (c) => {
   const id = c.req.param("id");
-  const projectDir = await requireProject(id);
-  if (!projectDir) return c.json({ error: "Project not found" }, 404);
+  if (!await requireProject(id)) return c.json({ error: "Project not found" }, 404);
   let body: { route?: string; edits?: Record<string, Record<string, string>> };
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
@@ -563,10 +377,10 @@ projectsRoutes.post("/api/projects/:id/inspector-css", async (c) => {
     }
   }
   try {
-    const jsonPath = join(projectDir, "_inspector_edits.json");
+    const files = getRepos().projectFiles;
     let store: Record<string, Record<string, Record<string, string>>> = {};
-    const existing = await readFile(jsonPath, "utf8").catch(() => null);
-    if (existing) { try { store = JSON.parse(existing); } catch { store = {}; } }
+    const existing = await files.readText(id, "_inspector_edits.json");
+    if (existing.ok) { try { store = JSON.parse(existing.text); } catch { store = {}; } }
     const slice: Record<string, Record<string, string>> = {};
     for (const [sel, props] of Object.entries(body.edits)) {
       const trimmed: Record<string, string> = {};
@@ -578,9 +392,7 @@ projectsRoutes.post("/api/projects/:id/inspector-css", async (c) => {
     }
     if (Object.keys(slice).length === 0) delete store[route];
     else store[route] = slice;
-    const jsonTmp = jsonPath + ".tmp";
-    await writeFile(jsonTmp, JSON.stringify(store, null, 2), "utf8");
-    await rename(jsonTmp, jsonPath);
+    await files.write(id, "_inspector_edits.json", JSON.stringify(store, null, 2));
     const cssLines: string[] = [
       "/* AUTO-GENERATED by the editor's Inspector → Save action.",
       " * Edit by hand at your own risk; the next Save will overwrite.",
@@ -604,14 +416,11 @@ projectsRoutes.post("/api/projects/:id/inspector-css", async (c) => {
       }
       cssLines.push("");
     }
-    const cssPath = join(projectDir, "_inspector_edits.css");
-    const cssTmp = cssPath + ".tmp";
-    await writeFile(cssTmp, cssLines.join("\n"), "utf8");
-    await rename(cssTmp, cssPath);
+    await files.write(id, "_inspector_edits.css", cssLines.join("\n"));
     return c.json({
       rules: ruleCount,
-      css_path: relPath(projectDir, cssPath),
-      json_path: relPath(projectDir, jsonPath),
+      css_path: "_inspector_edits.css",
+      json_path: "_inspector_edits.json",
     });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
@@ -620,23 +429,26 @@ projectsRoutes.post("/api/projects/:id/inspector-css", async (c) => {
 
 projectsRoutes.post("/api/projects/:id/file/delete", async (c) => {
   const id = c.req.param("id");
-  const projectDir = await requireProject(id);
-  if (!projectDir) return c.json({ error: "Project not found" }, 404);
+  if (!await requireProject(id)) return c.json({ error: "Project not found" }, 404);
   let body: { path?: string };
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
-  const safe = safeProjectFilePath(id, body.path ?? "");
-  if (!safe) return c.json({ error: "Invalid path" }, 400);
-  if (basename(safe) === "manifest.json") return c.json({ error: "Refusing to delete manifest.json" }, 400);
-  try { await unlink(safe); return c.json({ deleted: relPath(projectDir, safe) }); }
-  catch (err) { return c.json({ error: err instanceof Error ? err.message : String(err) }, 500); }
+  const validated = getRepos().projects.validateFilePath(body.path ?? "");
+  if (!validated.ok) return c.json({ error: validated.reason }, 400);
+  try {
+    const result = await getRepos().projectFiles.delete(id, validated.path);
+    if (!result.ok) return c.json({ error: "File not found" }, 404);
+    return c.json({ deleted: validated.path });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
 });
 
 projectsRoutes.delete("/api/projects/:id", async (c) => {
   const id = c.req.param("id");
   if (!ID_RE.test(id)) return c.json({ error: "Invalid project id" }, 400);
   try {
-    await deleteProjectDir(id);
+    await getRepos().projects.delete(id);
     broadcastShared("projects");
     return c.json({ deleted: id });
   } catch (err) {
@@ -650,14 +462,11 @@ projectsRoutes.get("/p/:id/__reload", async (c) => {
   const id = c.req.param("id");
   if (!await requireProject(id)) return c.text("Not found", 404);
   return streamSSE(c, async (stream) => {
-    const ch = await getOrCreateReloadChannel(id);
-    if (!ch) {
-      try { await stream.write(":no-channel\n\n"); } catch { /* ignore */ }
-      return;
-    }
-    const sub = () => { stream.writeSSE({ data: "reload" }).catch(() => { /* aborted */ }); };
-    ch.emitter.on("reload", sub);
-    stream.onAbort(() => ch.emitter.off("reload", sub));
+    const writeReload = () => {
+      stream.writeSSE({ data: "reload" }).catch(() => { /* aborted */ });
+    };
+    const unsub = getRepos().projectFiles.subscribe(id, writeReload);
+    stream.onAbort(unsub);
     await stream.writeSSE({ data: "", event: "connected" }).catch(() => { /* aborted */ });
     while (!stream.aborted) {
       await stream.sleep(25_000);
@@ -674,10 +483,10 @@ projectsRoutes.get("/p/:id/_preview/*", async (c) => {
   if (!c.req.path.startsWith(prefix)) return c.text("Not found", 404);
   const fileRaw = c.req.path.slice(prefix.length);
   const file = decodeURIComponent(fileRaw);
-  const safe = safeProjectFilePath(id, file);
-  if (!safe || !(await stat(safe).then(() => true).catch(() => false))) {
-    return c.text("Component not found", 404);
-  }
+  const validated = getRepos().projects.validateFilePath(file);
+  if (!validated.ok) return c.text("Forbidden", 403);
+  const exists = await getRepos().projectFiles.exists(id, validated.path);
+  if (!exists) return c.text("Component not found", 404);
   const compName = basename(file).replace(/\.(jsx|tsx|js|ts)$/, "");
   const html = injectReloadClient(previewHtml(id, file, compName), id);
   return new Response(html, {
@@ -688,32 +497,38 @@ projectsRoutes.get("/p/:id/_preview/*", async (c) => {
 
 projectsRoutes.get("/p/:id/*", async (c) => {
   const id = c.req.param("id");
-  const projectDir = projectDirOf(id);
-  if (!projectDir) return c.text("Forbidden", 403);
+  if (!ID_RE.test(id)) return c.text("Forbidden", 403);
   const prefix = `/p/${id}`;
   let rest = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : "/";
   try { rest = decodeURIComponent(rest); } catch { /* ignore */ }
   if (rest === "" || rest === "/") {
-    rest = "/" + ((await readManifest(id))?.entry ?? "index.html");
+    const manifest = await getRepos().projects.getManifest(id);
+    rest = "/" + (manifest?.entry ?? "index.html");
   }
   if (rest.endsWith("/")) rest += "index.html";
-  const safe = safeProjectFilePath(id, rest);
-  if (!safe) return c.text("Forbidden", 403);
-  let buf: Buffer;
-  try { buf = await readFile(safe); }
-  catch { return c.text("Not found", 404); }
-  const ext = extname(safe).toLowerCase();
+  // Strip the leading `/` so it matches the BlobStore's relative format.
+  const relPathStr = rest.replace(/^\/+/, "");
+  // Manifest is allowed to be served (it's a real file in the project),
+  // but `validateFilePath` refuses it for write/delete. We bypass the
+  // manifest-protection here by checking only path-traversal segments.
+  for (const seg of relPathStr.split("/")) {
+    if (seg === "" || seg === "." || seg === "..") return c.text("Forbidden", 403);
+    if (seg.startsWith(".")) return c.text("Forbidden", 403);
+  }
+  const result = await getRepos().projectFiles.read(id, relPathStr);
+  if (!result.ok) return c.text("Not found", 404);
+  const ext = extname(relPathStr).toLowerCase();
   const mime = MIME[ext] ?? "application/octet-stream";
   if (ext === ".html" || ext === ".htm") {
-    // Ensure the reload channel is ready so the injected script can connect.
-    await getOrCreateReloadChannel(id);
-    return new Response(injectReloadClient(buf.toString("utf8"), id), {
+    const text = new TextDecoder().decode(result.bytes);
+    return new Response(injectReloadClient(text, id), {
       status: 200,
       headers: { "content-type": mime, "cache-control": "no-store" },
     });
   }
-  return new Response(new Uint8Array(buf), {
+  return new Response(result.bytes, {
     status: 200,
     headers: { "content-type": mime, "cache-control": "no-store" },
   });
 });
+

@@ -6,35 +6,34 @@
  *
  * Used by lib/projects (the "what projects exist" list) and
  * lib/sharedAssets (workspace-wide colors/lotties/components library).
+ *
+ * Storage goes through SharedRepo. The SSE channel multiplexes two
+ * event sources:
+ *   • the JsonKv driver event (fired automatically on every PATCH)
+ *   • the `sharedEvents` workspace bus (used for non-kv signals like
+ *     "projects index changed" emitted from project lifecycle routes)
  */
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, resolve as resolvePath } from "node:path";
-import { ENV } from "../env.ts";
-import { broadcastShared, sharedEvents } from "../services/sseChannels.ts";
-
-const META_KEY_RE = /^[a-zA-Z0-9_-]+$/;
-
-function sharedDataPath(key: string): string | null {
-  if (!META_KEY_RE.test(key)) return null;
-  return resolvePath(ENV.SHARED_ROOT, `${key}.json`);
-}
-
-function etagFromMtime(mtimeMs: number): string {
-  return `W/"${Math.floor(mtimeMs).toString(36)}"`;
-}
+import { sharedEvents } from "../services/sseChannels.ts";
+import { getRepos, SharedRepo } from "../storage/repos/index.ts";
 
 export const sharedRoutes = new Hono();
 
 sharedRoutes.get("/api/__shared-events", (c) => {
   return streamSSE(c, async (stream) => {
-    const sub = (key: string) => {
+    const writeEvent = (key: string) => {
       stream.writeSSE({ data: key }).catch(() => { /* aborted */ });
     };
-    sharedEvents.on("event", sub);
-    stream.onAbort(() => sharedEvents.off("event", sub));
+    // Driver-level kv changes — PATCHes auto-fire these via the repo.
+    const unsubKv = getRepos().shared.subscribe(writeEvent);
+    // Workspace-bus signals — project create/delete still emit to this.
+    sharedEvents.on("event", writeEvent);
+    stream.onAbort(() => {
+      unsubKv();
+      sharedEvents.off("event", writeEvent);
+    });
     await stream.writeSSE({ data: "", event: "connected" }).catch(() => { /* aborted */ });
     while (!stream.aborted) {
       await stream.sleep(25_000);
@@ -47,53 +46,43 @@ sharedRoutes.get("/api/__shared-events", (c) => {
 
 sharedRoutes.get("/api/shared/:key", async (c) => {
   const key = c.req.param("key");
-  const path = sharedDataPath(key);
-  if (!path) return c.json({ error: "Invalid shared key" }, 400);
-  try {
-    const st = await stat(path);
-    const etag = etagFromMtime(st.mtimeMs);
-    if (c.req.header("if-none-match") === etag) {
-      return new Response(null, { status: 304, headers: { etag } });
-    }
-    const raw = await readFile(path, "utf8");
-    return new Response(raw, {
-      status: 200,
-      headers: { "content-type": "application/json", etag },
-    });
-  } catch {
+  if (!SharedRepo.isValidKey(key)) {
+    return c.json({ error: "Invalid shared key" }, 400);
+  }
+  const result = await getRepos().shared.get(key);
+  if (!result.ok) {
     return c.json({ error: "No shared blob" }, 404);
   }
+  if (c.req.header("if-none-match") === result.etag) {
+    return new Response(null, { status: 304, headers: { etag: result.etag } });
+  }
+  return new Response(JSON.stringify(result.value), {
+    status: 200,
+    headers: { "content-type": "application/json", etag: result.etag },
+  });
 });
 
 sharedRoutes.patch("/api/shared/:key", async (c) => {
   const key = c.req.param("key");
-  const path = sharedDataPath(key);
-  if (!path) return c.json({ error: "Invalid shared key" }, 400);
+  if (!SharedRepo.isValidKey(key)) {
+    return c.json({ error: "Invalid shared key" }, 400);
+  }
   let body: unknown;
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
-  const ifMatch = c.req.header("if-match");
-  if (ifMatch) {
-    const cur = await stat(path).catch(() => null);
-    const curEtag = cur ? etagFromMtime(cur.mtimeMs) : null;
-    if (curEtag !== ifMatch) {
+
+  const ifMatch = c.req.header("if-match") ?? undefined;
+  try {
+    const result = await getRepos().shared.put(key, body, ifMatch ? { ifMatch } : undefined);
+    if (!result.ok) {
       return c.json(
-        { error: "ETag mismatch — refetch and retry", current_etag: curEtag },
+        { error: "ETag mismatch — refetch and retry", current_etag: result.currentEtag },
         412,
       );
     }
-  }
-  try {
-    await mkdir(dirname(path), { recursive: true });
-    const tmp = path + ".tmp";
-    await writeFile(tmp, JSON.stringify(body), "utf8");
-    await rename(tmp, path);
-    const st = await stat(path);
-    const etag = etagFromMtime(st.mtimeMs);
-    broadcastShared(key);
-    return new Response(JSON.stringify({ ok: true, etag }), {
+    return new Response(JSON.stringify({ ok: true, etag: result.etag }), {
       status: 200,
-      headers: { "content-type": "application/json", etag },
+      headers: { "content-type": "application/json", etag: result.etag },
     });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
