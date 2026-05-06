@@ -21,6 +21,7 @@ import type {
   KvDeleteResult,
   KvGetResult,
   KvPutResult,
+  LogEntry,
   ProjectScope,
   SharedScope,
   StorageDriver,
@@ -182,16 +183,95 @@ function createMemoryBlobStore(): BlobStore & { __destroy(): void } {
   };
 }
 
-/* ─── AppendLog stub (lands in PR 2) ─────────────────────────────── */
+/* ─── AppendLog (memory) ─────────────────────────────────────────── */
 
-function createStubAppendLog(): AppendLog {
-  function notImpl(): never {
-    throw new Error("AppendLog: memory driver does not implement this primitive yet (lands in PR 2).");
-  }
+function createMemoryAppendLog(): AppendLog & { __destroy(): void } {
+  const entries: LogEntry[] = [];
+  const emitter = new EventEmitter();
+  emitter.setMaxListeners(0);
+  let nextSeq = 1;
+
   return {
-    async append() { notImpl(); },
-    async read() { notImpl(); },
-    subscribe() { notImpl(); },
+    async append<T = unknown>(items: T[]): Promise<{ lastSeq: number }> {
+      const ts = Date.now();
+      let last = nextSeq - 1;
+      for (const data of items) {
+        const e: LogEntry<T> = { seq: nextSeq, ts, data };
+        entries.push(e);
+        emitter.emit("entry", e);
+        last = nextSeq;
+        nextSeq++;
+      }
+      return { lastSeq: last };
+    },
+
+    async read<T = unknown>(opts?: { sinceSeq?: number; limit?: number; reverse?: boolean }): Promise<LogEntry<T>[]> {
+      let result = entries.slice() as LogEntry<T>[];
+      if (opts?.sinceSeq != null) {
+        const since = opts.sinceSeq;
+        result = result.filter((e) => e.seq > since);
+      }
+      if (opts?.reverse) result.reverse();
+      if (opts?.limit != null) result = result.slice(0, opts.limit);
+      return result;
+    },
+
+    subscribe<T = unknown>(
+      opts: { sinceSeq?: number } | undefined,
+      fn: (entry: LogEntry<T>) => void,
+    ): Unsubscribe {
+      if (opts?.sinceSeq == null) {
+        const direct = (e: LogEntry<T>) => fn(e);
+        emitter.on("entry", direct);
+        return () => emitter.off("entry", direct);
+      }
+
+      const since = opts.sinceSeq;
+      let stopped = false;
+      let replaying = true;
+      const buffered: LogEntry<T>[] = [];
+      const handler = (e: LogEntry<T>) => {
+        if (stopped) return;
+        if (replaying) buffered.push(e);
+        else fn(e);
+      };
+      emitter.on("entry", handler);
+
+      // Memory impl: replay synchronously on next microtask so the
+      // semantics match the FS impl (some buffering window).
+      void Promise.resolve().then(() => {
+        if (stopped) return;
+        const past = entries.filter((e) => e.seq > since) as LogEntry<T>[];
+        let lastSent = since;
+        for (const e of past) {
+          fn(e);
+          if (e.seq > lastSent) lastSent = e.seq;
+        }
+        for (const e of buffered) {
+          if (e.seq > lastSent) fn(e);
+        }
+        buffered.length = 0;
+        replaying = false;
+      });
+
+      return () => {
+        stopped = true;
+        emitter.off("entry", handler);
+      };
+    },
+
+    async truncateBefore(seq: number): Promise<{ removed: number }> {
+      const before = entries.length;
+      const remaining = entries.filter((e) => e.seq > seq);
+      entries.length = 0;
+      entries.push(...remaining);
+      return { removed: before - entries.length };
+    },
+
+    __destroy() {
+      emitter.removeAllListeners();
+      entries.length = 0;
+    },
   };
 }
 
@@ -204,12 +284,12 @@ export function createMemoryDriver(): StorageDriver {
   function buildProjectScope(): ProjectScope & { __destroy(): void } {
     const meta = createMemoryJsonKv();
     const files = createMemoryBlobStore();
-    const history = createStubAppendLog();
+    const history = createMemoryAppendLog();
     return {
       meta,
       files,
       history,
-      __destroy() { files.__destroy(); },
+      __destroy() { files.__destroy(); history.__destroy(); },
     };
   }
 

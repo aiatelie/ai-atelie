@@ -193,6 +193,13 @@ function reconcileLegacyTabs(s: Store): Store {
 
 let cache: Store | null = null;
 let serverFetchInflight: Promise<void> | null = null;
+/** Aborts the inflight `fetchFromServer` so a stale GET (sent before
+ *  a local createProject/deleteProject committed) can't overwrite the
+ *  cache. createProject/deleteProject call `invalidateInflightFetch()`
+ *  before they seed cache. Without this, the CUJ flake on a fresh
+ *  browser (race between bootCache's GET and createProject's POST)
+ *  resets the active project to whatever was on the server first. */
+let serverFetchAborter: AbortController | null = null;
 let sharedSubscribed = false;
 /** True from the moment bootCache() runs against an empty localStorage
  *  until the first /api/projects fetch resolves (success or failure).
@@ -255,17 +262,30 @@ function mergeServerWithLocal(server: ServerProject[]): Store {
 
 async function fetchFromServer(): Promise<void> {
   if (serverFetchInflight) return serverFetchInflight;
+  const aborter = new AbortController();
+  serverFetchAborter = aborter;
   serverFetchInflight = (async () => {
     try {
-      const r = await fetch("/api/projects");
-      if (!r.ok) return;
+      const r = await fetch("/api/projects", { signal: aborter.signal });
+      if (!r.ok || aborter.signal.aborted) return;
       const list = (await r.json()) as ServerProject[];
+      // Re-check after the JSON parse — invalidate could have fired
+      // while we were awaiting the body.
+      if (aborter.signal.aborted) return;
       const merged = mergeServerWithLocal(list);
       cache = merged;
       write(merged);
-    } catch { /* offline */ }
-    finally {
-      serverFetchInflight = null;
+    } catch (err) {
+      // Aborted fetches throw; that's expected — silently ignore.
+      if (err instanceof Error && err.name === "AbortError") return;
+      // Other errors: offline, parse failure. Already silent.
+    } finally {
+      // Only clear the singleton if WE own the current aborter — a fresh
+      // invalidation may have already queued a new fetch on top of us.
+      if (serverFetchAborter === aborter) {
+        serverFetchInflight = null;
+        serverFetchAborter = null;
+      }
       // First-fetch flips off whether the request succeeded or failed —
       // an offline / 500 first paint should fall through to the empty
       // state rather than spin a skeleton forever.
@@ -278,6 +298,18 @@ async function fetchFromServer(): Promise<void> {
     }
   })();
   return serverFetchInflight;
+}
+
+/** Cancel any inflight `fetchFromServer`. Used by createProject and
+ *  deleteProject to discard responses to GETs that were sent before
+ *  the local mutation committed — those responses don't include the
+ *  mutation and would clobber the just-seeded cache. */
+function invalidateInflightFetch(): void {
+  if (serverFetchAborter) {
+    serverFetchAborter.abort();
+    serverFetchAborter = null;
+    serverFetchInflight = null;
+  }
 }
 
 /** Initialize the in-memory cache from localStorage, healing any
@@ -353,7 +385,14 @@ export async function hydrateProjectFromServer(id: string): Promise<Project | nu
 }
 
 /** Create a sandbox project. The server scaffolds the directory and
- *  returns the manifest; we add the merged Project to the cache. */
+ *  returns the manifest; we add the merged Project to the cache.
+ *
+ *  Calls `invalidateInflightFetch()` BEFORE seeding cache so any
+ *  fetchFromServer started before this POST (e.g. bootCache's GET on
+ *  page load) can't return its stale [demo,…] list and clobber the
+ *  newly-created project out of cache. Without this guard the CUJ
+ *  bounces a fresh-browser test off into the demo project's editor
+ *  because mergeServerWithLocal drops local-only projects. */
 export async function createProject(name: string): Promise<Project> {
   const r = await fetch("/api/projects/create", {
     method: "POST",
@@ -380,6 +419,8 @@ export async function createProject(name: string): Promise<Project> {
     openTabs: tabs,
     activeTabId: tabs[0]?.id,
   };
+  // Discard any inflight stale GET before we mutate cache + sessionStorage.
+  invalidateInflightFetch();
   const s = bootCache();
   cache = { projects: [...s.projects, p], activeProjectId: p.id };
   write(cache);
@@ -398,6 +439,10 @@ export function deleteProject(id: string) {
   if (!removed) return;
   const next = s.projects.filter((p) => p.id !== id);
   const activeId = s.activeProjectId === id ? (next[0]?.id ?? "") : s.activeProjectId;
+  // Same race guard as createProject: drop any inflight stale GET so a
+  // response that still contains the just-deleted project can't add it
+  // back to cache.
+  invalidateInflightFetch();
   cache = { projects: next, activeProjectId: activeId };
   write(cache);
   trackEvent("project_delete", {}, id);

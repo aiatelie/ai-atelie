@@ -189,4 +189,92 @@ describe.each(drivers)("StorageDriver:$name", ({ make }) => {
     await driver.deleteProject("p_dead");
     expect(await driver.listProjectIds()).not.toContain("p_dead");
   });
+
+  it("AppendLog: append assigns monotonic seqs and read returns them in order", async () => {
+    const driver = make();
+    await driver.createProject("p_log");
+    const log = driver.project("p_log").history;
+
+    const r1 = await log.append([{ kind: "tweak", file: "a" }, { kind: "tweak", file: "b" }]);
+    expect(r1.lastSeq).toBe(2);
+    const r2 = await log.append([{ kind: "comment-edit", turn: "x" }]);
+    expect(r2.lastSeq).toBe(3);
+
+    const all = await log.read();
+    expect(all.map((e) => e.seq)).toEqual([1, 2, 3]);
+    expect(all.map((e) => (e.data as { kind: string }).kind)).toEqual([
+      "tweak", "tweak", "comment-edit",
+    ]);
+  });
+
+  it("AppendLog: read({ sinceSeq, limit, reverse })", async () => {
+    const driver = make();
+    await driver.createProject("p_log");
+    const log = driver.project("p_log").history;
+    await log.append([1, 2, 3, 4, 5]);
+
+    const since2 = await log.read<number>({ sinceSeq: 2 });
+    expect(since2.map((e) => e.data)).toEqual([3, 4, 5]);
+
+    const limited = await log.read<number>({ limit: 2 });
+    expect(limited.map((e) => e.data)).toEqual([1, 2]);
+
+    const reversed = await log.read<number>({ reverse: true, limit: 2 });
+    expect(reversed.map((e) => e.data)).toEqual([5, 4]);
+  });
+
+  it("AppendLog: subscribe (live-only) fires on append", async () => {
+    const driver = make();
+    await driver.createProject("p_log");
+    const log = driver.project("p_log").history;
+
+    const seen: number[] = [];
+    const unsub = log.subscribe<number>(undefined, (e) => seen.push(e.data));
+    await log.append([10, 20, 30]);
+    // Memory dispatches synchronously inside append; FS goes through
+    // the EventEmitter immediately too. Both should be visible by now.
+    await new Promise((r) => setTimeout(r, 5));
+    unsub();
+    expect(seen).toEqual([10, 20, 30]);
+  });
+
+  it("AppendLog: subscribe with sinceSeq replays past entries then live-streams new ones", async () => {
+    const driver = make();
+    await driver.createProject("p_log");
+    const log = driver.project("p_log").history;
+    await log.append(["a", "b", "c"]);
+
+    const seen: { seq: number; data: string }[] = [];
+    const unsub = log.subscribe<string>({ sinceSeq: 1 }, (e) => {
+      seen.push({ seq: e.seq, data: e.data });
+    });
+
+    // Wait for the replay microtask, then append more.
+    await new Promise((r) => setTimeout(r, 10));
+    await log.append(["d"]);
+    await new Promise((r) => setTimeout(r, 10));
+    unsub();
+
+    // Replay returns seq>1 (b, c), then live append delivers d.
+    expect(seen.map((s) => s.data)).toEqual(["b", "c", "d"]);
+    expect(seen.map((s) => s.seq)).toEqual([2, 3, 4]);
+  });
+
+  it("AppendLog: truncateBefore drops old entries and keeps the rest", async () => {
+    const driver = make();
+    await driver.createProject("p_log");
+    const log = driver.project("p_log").history;
+    await log.append([1, 2, 3, 4, 5]);
+
+    if (!log.truncateBefore) {
+      // Drivers may not implement truncate; both of ours do.
+      throw new Error("expected truncateBefore to be defined");
+    }
+    const r = await log.truncateBefore(3);
+    expect(r.removed).toBe(3);
+
+    const after = await log.read<number>();
+    expect(after.map((e) => e.seq)).toEqual([4, 5]);
+    expect(after.map((e) => e.data)).toEqual([4, 5]);
+  });
 });

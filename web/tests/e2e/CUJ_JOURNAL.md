@@ -24,6 +24,14 @@ See [`.claude/skills/cuj-guardian/SKILL.md`](../../../.claude/skills/cuj-guardia
 
 ---
 
+## 2026-05-06 — PR #57 — evolved (file-structure poll → iframe poll)
+
+- **Change kind**: `evolved` (the user-observable assertion is unchanged; the *path* used to detect agent completion shifted).
+- **Before**: step 8 polled `<projectDir>/*.jsx` files for a regex match on `#ffffff` + `0a1f3a` + "hello world". Step 9 then asserted iframe text contained both variants.
+- **After**: step 8 polls the iframe directly for two "Hello World" instances + light/dark indicators (this is the actual user-observable success state). Step 9 becomes a sanity-check that the agent wrote *something* to disk (not strictly necessary, but kept as a "did anything happen" guard).
+- **Why**: PR #57 fixed a project-list race (the editor used to land in the `demo` project after `+ New project`, so the agent never edited the new project's files). With the race fixed, the agent now consistently runs in the new project — and *legitimately* solves the prompt by editing `index.html` + `style.css` in place rather than creating a new `*.jsx` file. The old assertion was over-fitted to one particular shape of agent output. The iframe is what the user sees, and the iframe is what the test should assert against.
+- **Proof of value**: ran the new step 8 against an unchanged-from-starter `index.html` (no agent run, just the starter "Empty canvas. Tell the AI what to build." text) — assertion failed at line N with the expected message about "two Hello-World variants" not being present. Re-ran with the agent enabled and a successful turn — assertion passed in <60s. The new step 9 sanity-check fails when the project dir is exactly the two-file starter, passes when the agent wrote anything extra. Run wall time: 90s on the happy path (down from 330s previously, because we no longer wait for the file-pattern coincidence to materialize separately from the iframe).
+
 ## 2026-05-06 — PR #48 — tightened
 
 - **Change kind**: `tightened` (added two new guard assertions).
