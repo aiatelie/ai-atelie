@@ -33,7 +33,7 @@ If either is missing, **STOP** and tell the user: "ship-task needs both verify-w
 Also verify:
 
 - [ ] `gh` CLI is authenticated (`gh auth status` succeeds).
-- [ ] `bun run setup:attach` has been run on this machine at least once (cookies at `~/.local/state/aiatelie/gh-attach-cookies.txt` exist). Refresh every few weeks. The script and the rationale live in `scripts/setup-attach-session.mjs`.
+- [ ] `bun run setup:attach` has been run on this machine at least once (Chromium profile at `~/.local/state/aiatelie/chromium-profile/` exists). Refresh every few weeks. No plaintext cookies/tokens are written anywhere — session data lives in Chromium's own binary store.
 - [ ] You're on a branch that isn't `main` (or the user has explicitly OK'd shipping straight to main, which is unusual).
 - [ ] `bun run dev` is running on `:5173` (the verify step needs it).
 

@@ -4,33 +4,36 @@
 // release-asset CDN (download links only).
 //
 // Pops a real Chromium window, you log into github.com, the script
-// extracts the session cookies and saves them under
-// ~/.local/state/aiatelie/. After that, ./scripts/upload-evidence.mjs
-// runs headless using the saved profile.
+// keeps the session in Chromium's persistent profile dir under
+// ~/.local/state/aiatelie/chromium-profile/. After that,
+// scripts/upload-evidence.mjs launches Chromium against this same
+// profile headless and the session is preserved.
 //
 // Refresh by re-running this script every few weeks (or whenever
-// uploads start 401-ing). Never commit ~/.local/state/aiatelie/ —
-// it's in $HOME, well outside the repo, but the path is also
-// gitignored as defense-in-depth.
+// uploads start 401-ing). The profile dir is mode 0700, in $HOME,
+// well outside any repo; .gitignore also excludes the pattern as
+// defense-in-depth. NO plaintext cookie or token file is ever
+// written — the only sensitive data lives in Chromium's own
+// (binary) cookies DB which Playwright manages.
 //
 // Why this exists: GitHub's user-attachments upload endpoint requires
 // a real browser session cookie (`_gh_sess`). PATs and gh CLI tokens
 // are rejected. There's no public API in 2026; every working CLI
-// solution boils down to "drive a real browser once, save the cookies."
+// solution boils down to "drive a real browser once, keep the
+// session profile."
 
 import { chromium } from "@playwright/test";
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 
 const STATE_DIR = `${homedir()}/.local/state/aiatelie`;
 const PROFILE_DIR = `${STATE_DIR}/chromium-profile`;
-const COOKIES_PATH = `${STATE_DIR}/gh-attach-cookies.txt`;
 
-await mkdir(STATE_DIR, { recursive: true });
+await mkdir(STATE_DIR, { recursive: true, mode: 0o700 });
 
 console.log("Launching Chromium with a persistent profile + anti-bot flags.");
-console.log("State dir:    " + STATE_DIR);
-console.log("Cookies file: " + COOKIES_PATH);
+console.log("Session storage: " + PROFILE_DIR);
+console.log("(Chromium-managed, binary, owner-only access, never copied to a flat file)");
 console.log();
 console.log("Tip: log in with your GitHub USERNAME/PASSWORD directly —");
 console.log('Google\'s "Continue with Google" path is detected as automation');
@@ -68,15 +71,14 @@ if (!cookies.find((c) => c.name === "user_session")) {
   process.exit(1);
 }
 
-const wanted = cookies.filter((c) =>
-  ["user_session", "_gh_sess", "logged_in", "dotcom_user", "_octo", "tz", "color_mode"].includes(c.name),
-);
-const cookieHeader = wanted.map((c) => `${c.name}=${c.value}`).join("; ");
-await writeFile(COOKIES_PATH, cookieHeader, { mode: 0o600 });
-
-console.log(`✓ Saved ${wanted.length} cookies to ${COOKIES_PATH}`);
-console.log("✓ Persistent Chromium profile at " + PROFILE_DIR);
+console.log(`✓ Logged in (user_session cookie detected)`);
+console.log(`✓ Session saved inside Chromium profile at ${PROFILE_DIR}`);
+console.log();
+console.log("This profile is mode 0700, in $HOME, gitignored at the pattern level.");
+console.log("No plaintext cookie or token file is created — Chromium owns the");
+console.log("session data and Playwright reads it back via persistent context.");
 console.log();
 console.log("Next: bun run upload:evidence <owner/repo/pull/N> <file1> [file2] ...");
 
 await ctx.close();
+await chmod(PROFILE_DIR, 0o700).catch(() => {}); // belt-and-suspenders

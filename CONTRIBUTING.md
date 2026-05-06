@@ -91,7 +91,19 @@ bunx playwright install chromium     # ~80MB, one-time — for the verify-with-p
 bun run setup:attach                 # one-time — opens Chromium so you can log into github.com once
 ```
 
-`setup:attach` saves your GitHub browser session at `~/.local/state/aiatelie/` (per-user, outside the repo, never committed). After that, `bun run upload:evidence <owner/repo/pull/N> <file1> [file2] ...` uploads evidence headless to GitHub's `user-attachments` CDN — videos auto-play inline, images embed natively, no `releases/download/...` download links. Re-run `setup:attach` every few weeks (or when uploads start 401-ing) to refresh the session. We do this instead of using `gh-attach` because the user-attachments upload endpoint is cookie-only — no PAT or `gh auth token` works against it as of May 2026.
+`setup:attach` saves your GitHub browser session inside a Chromium persistent profile at `~/.local/state/aiatelie/chromium-profile/` (per-user, outside the repo, never committed). After that, `bun run upload:evidence <owner/repo/pull/N> <file1> [file2] ...` uploads evidence headless to GitHub's `user-attachments` CDN — videos auto-play inline, images embed natively, no `releases/download/...` download links. Re-run `setup:attach` every few weeks (or when uploads start 401-ing) to refresh the session. We do this instead of using `gh-attach` because the user-attachments upload endpoint is cookie-only — no PAT or `gh auth token` works against it as of May 2026.
+
+### Security model — where credentials live
+
+We don't write any plaintext cookie or token file anywhere. Specifically:
+
+- The only sensitive artifact is the **Chromium persistent profile** at `~/.local/state/aiatelie/chromium-profile/` — a mode-`0700` directory containing Chromium's own (binary) cookies DB. Playwright reads it back via `launchPersistentContext` to drive uploads headless.
+- Path is in `$HOME`, never inside the repo. `.gitignore` also excludes `chromium-profile/` and `*-cookies.txt` patterns as defense-in-depth in case the helper is ever pointed at a path inside the repo.
+- No env var, no `.env.local`, no flat cookie file is required (or written). If a contributor wants their own additional secrets in `.env.local` for unrelated reasons, that's gitignored too (`.env*` rule with `!.env.example` exception), but nothing in this workflow needs it.
+- To nuke the session at any time: `rm -rf ~/.local/state/aiatelie/chromium-profile/`. Re-run `bun run setup:attach`.
+- `bun run release` does need `GH_TOKEN` in the environment (see "Commits and releases" above), but that token comes from `gh auth token` on demand — it isn't persisted anywhere either.
+
+A rule of thumb: **if you ever see a step in the docs that asks you to copy a cookie value into a file, paste it into a command, or commit it anywhere — it's a regression.** The setup is designed so the cookie value is never visible as text outside of Chromium's own storage.
 
 ## The Critical User Journey (CUJ)
 
