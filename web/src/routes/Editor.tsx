@@ -47,6 +47,7 @@ const TweaksPreviewDialog = lazy(() => import("../components/editor/TweaksPrevie
 const QuickSwitcher = lazy(() => import("../components/editor/QuickSwitcher").then((m) => ({ default: m.QuickSwitcher })));
 const DrawOverlay = lazy(() => import("../components/editor/DrawOverlay").then((m) => ({ default: m.DrawOverlay })));
 const DrawActionBar = lazy(() => import("../components/editor/DrawActionBar").then((m) => ({ default: m.DrawActionBar })));
+const IframeErrorOverlay = lazy(() => import("../components/editor/IframeErrorOverlay").then((m) => ({ default: m.IframeErrorOverlay })));
 import { clearStrokes, useStrokes, compositeStrokesOnto } from "../lib/drawings";
 import { kindOf } from "../lib/toolKind";
 import { useProjects, updateProject, setActiveProject, hydrateProjectFromServer } from "../lib/projects";
@@ -3680,6 +3681,11 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
     ? `/p/${encodeURIComponent(projectId)}/${tab.route.replace(/^\/+/, "")}`
     : tab.route;
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // State mirror of the iframe element — children that want to subscribe to
+  // postMessage events scoped to this iframe (e.g. IframeErrorOverlay) need
+  // a re-rendering signal when the element identity changes (project / tab
+  // switch reuses the same DOM node sometimes, swaps it other times).
+  const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null);
   // Fixed device viewport in frame mode — content scrolls inside it.
   // The earlier auto-size loop (ResizeObserver + min-height strip /
   // restore + setSize feedback) caused visible flicker because every
@@ -3689,8 +3695,12 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
   const size = { w: tab.viewport?.w ?? 1280, h: tab.viewport?.h ?? 820 };
 
   // Mirror our local iframe ref out to the parent so it can capture screenshots.
+  // Also publish the element identity into state for children that need a
+  // re-render signal when the iframe DOM node swaps (IframeErrorOverlay).
+  // We compare-then-set so the effect doesn't drive an infinite update loop.
   useEffect(() => {
     parentIframeRef.current = iframeRef.current;
+    setIframeEl((cur) => (cur === iframeRef.current ? cur : iframeRef.current));
     return () => {
       if (parentIframeRef.current === iframeRef.current) parentIframeRef.current = null;
     };
@@ -4204,6 +4214,9 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
           onLoad={onLoad}
         />
         {overlay}
+        <Suspense fallback={null}>
+          <IframeErrorOverlay iframe={iframeEl} />
+        </Suspense>
       </div>
     );
   }
@@ -4231,6 +4244,9 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
         }}
       />
       {overlay}
+      <Suspense fallback={null}>
+        <IframeErrorOverlay iframe={iframeEl} />
+      </Suspense>
     </div>
   );
 });

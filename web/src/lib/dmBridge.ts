@@ -20,6 +20,11 @@ export type DmInbound =
   | { type: "rect"; ref: string; rect: { x: number; y: number; w: number; h: number } }
   | { type: "undoDepth"; depth: number; empty?: boolean; restored?: boolean }
   | { type: "positionModeChanged"; ref: string; mode: string; before: string }
+  /** A JS throw or unhandled promise rejection inside the iframe.
+   *  The inject-script's window.onerror / unhandledrejection listeners
+   *  forward these so the host can render an in-canvas overlay. Same-
+   *  origin iframe makes this possible — sandboxed previews can't do it. */
+  | { type: "runtime-error"; message: string; filename?: string | null; lineno?: number | null; colno?: number | null; stack?: string | null; source: "error" | "unhandledrejection"; timestamp: number }
   /** Legacy: pre-rewrite snapshot event. Kept for back-compat. New
    *  clients should listen on `undoDepth` instead. */
   | { type: "snapshot"; depth: number; empty?: boolean; restored?: boolean };
