@@ -1,7 +1,7 @@
 {
   "name": "ai-atelie",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.1.0",
   "license": "MIT",
   "type": "module",
   "workspaces": [
@@ -14,9 +14,13 @@
     "dev:api": "cd api && bun run --watch src/index.ts",
     "dev:web": "cd web && bun run dev",
     "build": "cd web && bun run build",
-    "preview": "cd web && bun run preview"
+    "preview": "cd web && bun run preview",
+    "release": "bunx changelogen --release --push",
+    "release:manual": "bunx bumpp -r --no-push --execute 'bunx changelogen --no-bump --output CHANGELOG.md'"
   },
   "devDependencies": {
+    "bumpp": "^11.0.1",
+    "changelogen": "0.6.2",
     "concurrently": "^9.0.1"
   }
 }
