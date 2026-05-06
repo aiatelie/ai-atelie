@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from "react";
 import s from "./modelPicker.module.css";
-import { MODEL_PRESETS, DEFAULT_MODEL_ID, presetsByTier, getModel, mergeAgentModels } from "../../data/modelPresets";
+import { DEFAULT_MODEL_ID, presetsByTier, getModel, mergeAgentModels } from "../../data/modelPresets";
 import { useAgents } from "../../data/agents";
 import { useFlag } from "../../lib/flags";
 import { AdaptersDialog } from "./AdaptersDialog";
