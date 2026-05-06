@@ -95,7 +95,7 @@ Format:
 - `Closes #N` for issues this commit fully resolves.
 - `Refs #N` for issues this commit relates to but doesn't close.
 - `BREAKING CHANGE: <description>` when introducing breaking change. Include a one-paragraph migration recipe.
-- `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>` on every commit Claude writes (required by repo convention).
+- `Co-Authored-By: Claude <model> <noreply@anthropic.com>` on every commit Claude writes (required by repo convention). The Claude Code harness auto-injects the current model identifier — don't override it with a frozen version copy-pasted from this skill's examples.
 
 ## Examples
 

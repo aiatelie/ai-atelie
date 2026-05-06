@@ -16,7 +16,7 @@
     "build": "cd web && bun run build",
     "preview": "cd web && bun run preview",
     "release": "bunx changelogen --release --push",
-    "release:manual": "bunx bumpp -r --no-push --execute 'bunx changelogen --no-bump --output CHANGELOG.md'"
+    "release:manual": "bunx bumpp --no-push --execute 'bunx changelogen --no-bump --output CHANGELOG.md'"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
