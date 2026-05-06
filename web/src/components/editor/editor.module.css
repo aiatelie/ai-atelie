@@ -22,7 +22,15 @@
   background: var(--app-bg);
   border-bottom: 1px solid var(--ink-08);
   height: 44px;
+  /* Horizontal-scroll on overflow — wheel listener in TabBar converts
+   * vertical wheel into a scrollLeft so a strip with 12+ tabs stays
+   * reachable on a trackpad/mouse without shift-scrolling (#34). */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
+.tabbar::-webkit-scrollbar { height: 4px; }
+.tabbar::-webkit-scrollbar-thumb { background: var(--ink-15); border-radius: 4px; }
 .projectTitleWrap {
   display: inline-flex;
   align-items: center;
@@ -136,6 +144,43 @@
   filter: saturate(0.8);
   flex-shrink: 0;
 }
+
+/* File-kind glyph rendered before the label in each tab cell.
+ * Uses currentColor so it inherits the tab's tone (muted / active). */
+.tabKind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+.tab.active .tabKind { opacity: 0.92; }
+
+/* Bullet appended to a tab label whose route has unsaved inspector
+ * overrides — same dot the toolbar's "Save N edits" badge uses. */
+.tabDirty {
+  margin-left: 6px;
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Drag-and-drop visuals: dim the source cell while it travels, show a
+ * vertical accent on the leading edge of any cell the cursor enters. */
+.tab[data-dragging] { opacity: 0.45; }
+.tab[data-drop-target]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--brand);
+  border-radius: 2px;
+}
 .tabRenameInput {
   appearance: none;
   border: 1px solid var(--brand);
@@ -172,9 +217,15 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.tabMenuItem:hover { background: var(--ink-04); }
+.tabMenuItem:hover:not(:disabled) { background: var(--ink-04); }
+.tabMenuItem:disabled { opacity: 0.35; cursor: not-allowed; }
 .tabMenuItemDanger { color: var(--danger, #c0392b); }
-.tabMenuItemDanger:hover { background: var(--danger-bg, rgba(192, 57, 43, 0.06)); }
+.tabMenuItemDanger:hover:not(:disabled) { background: var(--danger-bg, rgba(192, 57, 43, 0.06)); }
+.tabMenuSep {
+  height: 1px;
+  background: var(--ink-08);
+  margin: 4px 6px;
+}
 
 .tabPlus {
   display: flex;

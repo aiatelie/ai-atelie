@@ -614,7 +614,7 @@ function FolderIcon() {
     </svg>
   );
 }
-function PageIcon() {
+export function PageIcon() {
   // Document with folded corner — HTML/page metaphor.
   return (
     <svg width="11" height="13" viewBox="0 0 11 13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">
@@ -623,7 +623,7 @@ function PageIcon() {
     </svg>
   );
 }
-function ComponentIcon() {
+export function ComponentIcon() {
   // Angle brackets — JSX/component metaphor.
   return (
     <svg width="13" height="11" viewBox="0 0 13 11" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
@@ -633,7 +633,7 @@ function ComponentIcon() {
     </svg>
   );
 }
-function AssetIcon() {
+export function AssetIcon() {
   // Picture frame with sun + horizon — image/asset metaphor.
   return (
     <svg width="13" height="11" viewBox="0 0 13 11" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">

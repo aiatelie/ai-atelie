@@ -31,7 +31,7 @@ import type { SelectedInfo } from "../components/editor/Inspector";
 import { CommentBubble, type CommentTarget, type Attachment } from "../components/editor/CommentBubble";
 import { CommentPins } from "../components/editor/CommentPins";
 import { LeftPanel } from "../components/editor/LeftPanel";
-import { FileBrowserView } from "../components/editor/FileBrowserView";
+import { FileBrowserView, PageIcon, ComponentIcon, AssetIcon } from "../components/editor/FileBrowserView";
 import { ProjectSwitcher } from "../components/editor/ProjectSwitcher";
 
 // Lazy-loaded heavy components — pulled out of the initial bundle and
@@ -71,7 +71,7 @@ import type { ChatMessage, ChatThread, ThreadArchive, QueuedMessage } from "../c
 import { loadThreads as libLoadThreads, saveThreads, subscribeThreads, releaseProject as releaseThreadsProject } from "../lib/threads";
 import { attachStreamToThread, detachStream, isThreadShadowed } from "../lib/streamPersistence";
 import { cssPath, resolveCssPath, buildDescriptor } from "../lib/cssPath";
-import { applyOverrides, setOverride, clearRoute, readRoute, useOverrideCount } from "../lib/editorOverrides";
+import { applyOverrides, setOverride, clearRoute, readRoute, useOverrideCount, useDirtyRoutes } from "../lib/editorOverrides";
 import { notifyTurnComplete } from "../lib/notifications";
 import { trackEvent } from "../lib/telemetry";
 import {
@@ -124,6 +124,23 @@ const DESIGN_FILES_TAB_ID = "__design_files__";
 
 function uniqueTabId(): string {
   return Math.random().toString(36).slice(2, 9);
+}
+
+/** Infer a kind for the tab strip icon from a file route. Mirrors the
+ *  classification FileBrowserView uses for its file rows so the tab
+ *  glyph matches the design-files glyph for the same file. */
+type TabKind = "page" | "component" | "asset";
+const ASSET_EXT_RE = /\.(png|jpe?g|gif|webp|avif|svg|mp4|webm|mp3|wav|ogg|woff2?|otf|ttf)$/i;
+function tabKind(route: string): TabKind {
+  const path = route.replace(/^\/+/, "");
+  if (ASSET_EXT_RE.test(path)) return "asset";
+  if (/\.(jsx|tsx)$/i.test(path)) return "component";
+  return "page";
+}
+function TabKindIcon({ kind }: { kind: TabKind }) {
+  if (kind === "component") return <ComponentIcon />;
+  if (kind === "asset") return <AssetIcon />;
+  return <PageIcon />;
 }
 
 function mintSessionId(): string {
@@ -1896,6 +1913,9 @@ export default function Editor() {
   // Live count of inspector overrides for the active route — drives the
   // "Save N edits" badge on the toolbar (hidden when 0).
   const overrideCountForActive = useOverrideCount(activeTab?.route ?? "");
+  // Set of routes with at least one inspector override — drives the
+  // dirty-mark on each non-active tab in the strip (#34).
+  const dirtyRoutes = useDirtyRoutes();
 
   /** Clears inspector edits for a route from BOTH layers:
    *   - localStorage (clearRoute), so the badge resets
@@ -2076,6 +2096,40 @@ export default function Editor() {
         onRename={setTabLabel}
         onAdd={() => setTemplatesOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
+        dirtyRoutes={dirtyRoutes}
+        onReorder={(fromId, toId) => {
+          setTabs((prev) => {
+            const fromIdx = prev.findIndex((t) => t.id === fromId);
+            const toIdx = prev.findIndex((t) => t.id === toId);
+            if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return prev;
+            // Pinned tabs sort to the front in `orderedTabs`; we don't
+            // let unpinned land before pinned (or vice-versa) in the
+            // underlying array — the consumer's pinned-first sort would
+            // just snap them back. Bail when the move would cross the
+            // pin boundary.
+            const moving = prev[fromIdx];
+            const dest = prev[toIdx];
+            if (!!moving.pinned !== !!dest.pinned) return prev;
+            const next = prev.slice();
+            const [item] = next.splice(fromIdx, 1);
+            const insertAt = next.findIndex((t) => t.id === toId);
+            next.splice(insertAt, 0, item);
+            trackEvent("tab_reorder", {}, activeProject.id);
+            return next;
+          });
+        }}
+        onCloseMany={(predicate) => {
+          setTabs((prev) => {
+            const next = prev.filter((t) => !predicate(t));
+            if (next.length === 0) {
+              setActiveTabId(DESIGN_FILES_TAB_ID);
+              return prev;
+            }
+            if (!next.some((t) => t.id === activeTabId)) setActiveTabId(next[0].id);
+            trackEvent("tab_close_many", { count: String(prev.length - next.length) }, activeProject.id);
+            return next;
+          });
+        }}
       />
 
       {!isDesignFiles && <Toolbar
@@ -2798,6 +2852,9 @@ function TabBar({
   onRename,
   onAdd,
   onOpenSettings,
+  dirtyRoutes,
+  onReorder,
+  onCloseMany,
 }: {
   projectTitle: string;
   onRenameProject: (next: string) => void;
@@ -2810,11 +2867,39 @@ function TabBar({
   onRename: (id: string, label: string) => void;
   onAdd: () => void;
   onOpenSettings: () => void;
+  /** Routes that currently have inspector overrides — drives the dirty
+   *  mark on tabs whose route is in the set. */
+  dirtyRoutes: Set<string>;
+  /** Move `fromId` to land immediately before `toId`. */
+  onReorder: (fromId: string, toId: string) => void;
+  /** Bulk close — used by the IDE-style context-menu items. */
+  onCloseMany: (predicate: (t: Tab) => boolean) => void;
 }) {
-  // One-at-a-time tab context menu, positioned at the click coordinates.
   const [menu, setMenu] = useState<{ tab: Tab; x: number; y: number } | null>(null);
+  const tabbarRef = useRef<HTMLDivElement>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // Vertical wheel → horizontal scroll on the tabbar so an overflowed tab
+  // strip stays reachable on a trackpad/mouse without forcing the user to
+  // shift-scroll. Native horizontal wheel deltas (Magic Mouse, trackpads)
+  // pass through unchanged. Bound non-passive because we call
+  // preventDefault to keep the page from also scrolling vertically.
+  useEffect(() => {
+    const el = tabbarRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return;
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        el.scrollBy({ left: e.deltaY, behavior: "auto" });
+        e.preventDefault();
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
-    <div className={s.tabbar}>
+    <div className={s.tabbar} ref={tabbarRef}>
       <ProjectTitle value={projectTitle} onChange={onRenameProject} />
       <ProjectSwitcher />
       <div
@@ -2832,6 +2917,8 @@ function TabBar({
           key={t.id}
           tab={t}
           active={t.id === activeId}
+          dirty={dirtyRoutes.has(t.route)}
+          dragging={draggingId === t.id}
           onActivate={() => onActivate(t.id)}
           onReveal={() => onReveal(t.route)}
           onClose={() => onClose(t.id)}
@@ -2841,16 +2928,31 @@ function TabBar({
             e.preventDefault();
             setMenu({ tab: t, x: e.clientX, y: e.clientY });
           }}
+          onDragStart={() => setDraggingId(t.id)}
+          onDragEnd={() => setDraggingId(null)}
+          onDropOn={(fromId) => onReorder(fromId, t.id)}
         />
       ))}
       {menu && (
         <TabContextMenu
           tab={menu.tab}
+          tabs={tabs}
           x={menu.x}
           y={menu.y}
           onPinToggle={() => { onSetPinned(menu.tab.id, !menu.tab.pinned); setMenu(null); }}
           onCloseTab={() => { onClose(menu.tab.id); setMenu(null); }}
           onReveal={() => { onReveal(menu.tab.route); setMenu(null); }}
+          onCloseOthers={() => { onCloseMany((x) => x.id !== menu.tab.id); setMenu(null); }}
+          onCloseToRight={() => {
+            const idx = tabs.findIndex((x) => x.id === menu.tab.id);
+            if (idx >= 0) onCloseMany((x) => tabs.indexOf(x) > idx);
+            setMenu(null);
+          }}
+          onCloseAll={() => { onCloseMany(() => true); setMenu(null); }}
+          onCopyPath={() => {
+            try { void navigator.clipboard.writeText(menu.tab.route); } catch { /* ignore */ }
+            setMenu(null);
+          }}
           onDismiss={() => setMenu(null)}
         />
       )}
@@ -2895,24 +2997,41 @@ function TabBar({
 function TabCell({
   tab,
   active,
+  dirty,
+  dragging,
   onActivate,
   onReveal,
   onClose,
   onUnpin,
   onRenameSubmit,
   onContextMenu,
+  onDragStart,
+  onDragEnd,
+  onDropOn,
 }: {
   tab: Tab;
   active: boolean;
+  /** Inspector overrides exist for this tab's route — surface a small
+   *  bullet so the user knows there's unsaved work on a non-active tab. */
+  dirty: boolean;
+  /** This tab is the source of an in-flight drag. Drives data-dragging
+   *  so CSS can dim the source cell while it's traveling. */
+  dragging: boolean;
   onActivate: () => void;
   onReveal: () => void;
   onClose: () => void;
   onUnpin: () => void;
   onRenameSubmit: (label: string) => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  /** Drop-target callback: another tab landed on this cell — caller
+   *  reorders so `fromId` lands immediately before `tab.id`. */
+  onDropOn: (fromId: string) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(tab.label);
+  const [dropTarget, setDropTarget] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (renaming) { inputRef.current?.focus(); inputRef.current?.select(); } }, [renaming]);
 
@@ -2922,18 +3041,46 @@ function TabCell({
     if (next && next !== tab.label) onRenameSubmit(next);
   };
 
+  const kind = useMemo(() => tabKind(tab.route), [tab.route]);
+
   return (
     <div
       className={`${s.tab} ${active ? s.active : ""} ${tab.pinned ? s.tabPinned : ""}`}
+      data-dragging={dragging || undefined}
+      data-drop-target={dropTarget || undefined}
+      draggable={!renaming}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", tab.id);
+        e.dataTransfer.effectAllowed = "move";
+        onDragStart();
+      }}
+      onDragEnd={() => { setDropTarget(false); onDragEnd(); }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("text/plain")) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          if (!dropTarget) setDropTarget(true);
+        }
+      }}
+      onDragLeave={() => setDropTarget(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropTarget(false);
+        const fromId = e.dataTransfer.getData("text/plain");
+        if (fromId && fromId !== tab.id) onDropOn(fromId);
+      }}
       onClick={(e) => {
         if (renaming) return;
         if (e.metaKey || e.ctrlKey) { onReveal(); return; }
         onActivate();
       }}
       onContextMenu={onContextMenu}
-      title={renaming ? "" : "Click to focus · Cmd-click to reveal in Design Files · Double-click to rename"}
+      title={renaming ? "" : "Click to focus · Cmd-click to reveal in Design Files · Drag to reorder · Double-click to rename"}
     >
       {tab.pinned && <span className={s.tabPin} aria-hidden>📌</span>}
+      <span className={s.tabKind} aria-hidden>
+        <TabKindIcon kind={kind} />
+      </span>
       {renaming ? (
         <input
           ref={inputRef}
@@ -2954,6 +3101,7 @@ function TabCell({
           onDoubleClick={(e) => { e.stopPropagation(); setDraft(tab.label); setRenaming(true); }}
         >
           {tab.label}
+          {dirty && <span className={s.tabDirty} aria-label="Unsaved overrides">•</span>}
         </span>
       )}
       {tab.pinned ? (
@@ -2975,14 +3123,32 @@ function TabCell({
 }
 
 function TabContextMenu({
-  tab, x, y, onPinToggle, onCloseTab, onReveal, onDismiss,
+  tab,
+  tabs,
+  x,
+  y,
+  onPinToggle,
+  onCloseTab,
+  onReveal,
+  onCloseOthers,
+  onCloseToRight,
+  onCloseAll,
+  onCopyPath,
+  onDismiss,
 }: {
   tab: Tab;
+  /** Whole-strip context — used to disable close-to-right when this is
+   *  the rightmost tab, and close-others when it's the only tab. */
+  tabs: Tab[];
   x: number;
   y: number;
   onPinToggle: () => void;
   onCloseTab: () => void;
   onReveal: () => void;
+  onCloseOthers: () => void;
+  onCloseToRight: () => void;
+  onCloseAll: () => void;
+  onCopyPath: () => void;
   onDismiss: () => void;
 }) {
   useEffect(() => {
@@ -2996,6 +3162,11 @@ function TabContextMenu({
       window.removeEventListener("mousedown", onClick);
     };
   }, [onDismiss]);
+
+  const idx = tabs.findIndex((x) => x.id === tab.id);
+  const hasOthers = tabs.length > 1;
+  const hasRight = idx >= 0 && idx < tabs.length - 1;
+
   return (
     <div
       className={s.tabMenu}
@@ -3007,7 +3178,18 @@ function TabContextMenu({
         {tab.pinned ? "Unpin tab" : "Pin tab"}
       </button>
       <button className={s.tabMenuItem} onClick={onReveal}>Reveal in Design Files</button>
-      <button className={`${s.tabMenuItem} ${s.tabMenuItemDanger}`} onClick={onCloseTab}>Close tab</button>
+      <button className={s.tabMenuItem} onClick={onCopyPath}>Copy path</button>
+      <div className={s.tabMenuSep} role="separator" />
+      <button className={s.tabMenuItem} onClick={onCloseTab}>Close tab</button>
+      <button className={s.tabMenuItem} onClick={onCloseOthers} disabled={!hasOthers}>
+        Close others
+      </button>
+      <button className={s.tabMenuItem} onClick={onCloseToRight} disabled={!hasRight}>
+        Close tabs to the right
+      </button>
+      <button className={`${s.tabMenuItem} ${s.tabMenuItemDanger}`} onClick={onCloseAll}>
+        Close all
+      </button>
     </div>
   );
 }
