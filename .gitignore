@@ -35,6 +35,7 @@ bun-debug.log*
 !.claude/skills/
 !.claude/skills/**
 .claude/settings.local.json
+.claude/worktrees/
 
 # Playwright + PR-evidence artifacts. These are produced by the
 # verify-with-playwright skill and uploaded to GitHub's user-attachments

@@ -609,10 +609,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 4px;
-  background: var(--brand-bg);
-  border: 1px solid var(--brand-border);
-  color: var(--brand-fg);
+  gap: 5px;
+  /* Default tint — overridden by [data-kind] selectors below.
+   * Falls back to brand-* if data-kind is missing for any reason. */
+  background: var(--kind-other-bg, var(--brand-bg));
+  border: 1px solid var(--kind-other-border, var(--brand-border));
+  color: var(--kind-other-fg, var(--brand-fg));
   font-family: var(--font-mono);
   font-size: 10.5px;
   padding: 2px 8px;
@@ -626,17 +628,41 @@
   white-space: nowrap;
   transition: background 120ms ease, border-color 120ms ease;
 }
+.toolChip[data-kind="read"]    { background: var(--kind-read-bg);    border-color: var(--kind-read-border);    color: var(--kind-read-fg); }
+.toolChip[data-kind="edit"]    { background: var(--kind-edit-bg);    border-color: var(--kind-edit-border);    color: var(--kind-edit-fg); }
+.toolChip[data-kind="execute"] { background: var(--kind-execute-bg); border-color: var(--kind-execute-border); color: var(--kind-execute-fg); }
+.toolChip[data-kind="fetch"]   { background: var(--kind-fetch-bg);   border-color: var(--kind-fetch-border);   color: var(--kind-fetch-fg); }
+.toolChip[data-kind="search"]  { background: var(--kind-search-bg);  border-color: var(--kind-search-border);  color: var(--kind-search-fg); }
+.toolChip[data-kind="other"]   { background: var(--kind-other-bg);   border-color: var(--kind-other-border);   color: var(--kind-other-fg); }
+.toolChip[data-error="true"] {
+  /* Error overrides any kind tint — stronger danger styling.
+   * Border + dashed underline on the label make a failed call
+   * scannable even in a long chip strip. */
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger-fg);
+}
+.toolChip[data-error="true"] .toolChipLabel {
+  text-decoration: underline dashed;
+  text-underline-offset: 2px;
+}
 .toolChip:hover:not(:disabled) {
-  background: var(--brand-hover);
-  border-color: var(--brand-strong);
+  filter: brightness(0.97) saturate(1.05);
 }
 .toolChip:disabled {
   cursor: default;
+}
+.toolChipLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .toolChipChev {
   font-size: 9px;
   opacity: 0.85;
   transition: transform 140ms ease;
+  flex: 0 0 auto;
 }
 .toolChipOpen .toolChipChev {
   transform: rotate(180deg);

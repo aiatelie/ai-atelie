@@ -48,6 +48,7 @@ const QuickSwitcher = lazy(() => import("../components/editor/QuickSwitcher").th
 const DrawOverlay = lazy(() => import("../components/editor/DrawOverlay").then((m) => ({ default: m.DrawOverlay })));
 const DrawActionBar = lazy(() => import("../components/editor/DrawActionBar").then((m) => ({ default: m.DrawActionBar })));
 import { clearStrokes, useStrokes, compositeStrokesOnto } from "../lib/drawings";
+import { kindOf } from "../lib/toolKind";
 import { useProjects, updateProject, setActiveProject, hydrateProjectFromServer } from "../lib/projects";
 import { applySharedAssetsToDoc } from "../lib/sharedAssets";
 import {
@@ -1500,11 +1501,10 @@ export default function Editor() {
   // chat state — no fetch needed; Editor/MultiEdit/Write/NotebookEdit
   // tool calls are the signal that a real file exists.
   const isEmptyProject = useMemo(() => {
-    const FILE_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
     for (const t of threads) {
       for (const m of t.messages) {
         if (m.role !== "assistant") continue;
-        if (m.tools?.some((tool) => FILE_TOOLS.has(tool.name))) return false;
+        if (m.tools?.some((tool) => kindOf(tool.name) === "edit")) return false;
       }
     }
     return true;

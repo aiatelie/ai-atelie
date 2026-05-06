@@ -133,6 +133,37 @@
   --info-alt-border: rgba(54, 119, 226, 0.25);
   --info-alt-soft: rgba(54, 119, 226, 0.06);
 
+  /* Amber — used by edit-kind tool chips. Distinct from brand orange
+   * so an edit chip doesn't blend into the rest of the brand UI. */
+  --warning: #d97706;
+  --warning-fg: #92400e;
+  --warning-bg: rgba(217, 119, 6, 0.10);
+  --warning-border: rgba(217, 119, 6, 0.22);
+
+  /* ─── Tool-call kinds ──────────────────────────────────────
+   * Used by ChatSidebar's ToolChip via data-kind="<kind>" CSS
+   * selectors. Composed from the semantic tokens above so
+   * theming flows through automatically. See web/src/lib/toolKind.ts
+   * for the name → kind mapping. */
+  --kind-read-bg:        var(--success-alt-bg);
+  --kind-read-border:    var(--success-alt-border);
+  --kind-read-fg:        var(--success-fg);
+  --kind-edit-bg:        var(--warning-bg);
+  --kind-edit-border:    var(--warning-border);
+  --kind-edit-fg:        var(--warning-fg);
+  --kind-execute-bg:     var(--danger-bg);
+  --kind-execute-border: var(--danger-border);
+  --kind-execute-fg:     var(--danger-fg);
+  --kind-fetch-bg:       var(--info-alt-bg);
+  --kind-fetch-border:   var(--info-alt-border);
+  --kind-fetch-fg:       var(--info-strong);
+  --kind-search-bg:      var(--ink-04);
+  --kind-search-border:  var(--ink-12);
+  --kind-search-fg:      var(--ink-65);
+  --kind-other-bg:       var(--ink-02);
+  --kind-other-border:   var(--ink-08);
+  --kind-other-fg:       var(--ink-50);
+
   --brand-warm-soft: rgba(255, 90, 79, 0.08);
   --brand-warm-bg: rgba(255, 90, 79, 0.12);
   --brand-stronger: rgba(217, 119, 87, 0.85);
@@ -282,6 +313,13 @@
   --info-alt-bg: rgba(54, 119, 226, 0.14);
   --info-alt-border: rgba(54, 119, 226, 0.30);
   --info-alt-soft: rgba(54, 119, 226, 0.08);
+
+  /* Amber for edit-kind chips. Slightly hotter than the light theme
+   * version to pop against the cream surface. */
+  --warning: #b45309;
+  --warning-fg: #92400e;
+  --warning-bg: rgba(180, 83, 9, 0.14);
+  --warning-border: rgba(180, 83, 9, 0.30);
 
   /* In retro the warm accents fold into the orange family. */
   --brand-warm-soft: rgba(244, 78, 28, 0.08);
