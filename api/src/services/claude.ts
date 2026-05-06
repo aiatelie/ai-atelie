@@ -104,6 +104,11 @@ export async function runClaude(
         model: payload.modelId || undefined,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
+        // Skills come from `additionalDirectories` only — never from cwd's
+        // `.claude/` or `~/.claude/`. Empty `settingSources` makes that
+        // explicit and prevents an adapter cwd that happens to contain a
+        // `.claude/skills/` from silently bleeding into product runtime.
+        settingSources: [],
         // Disallowed tools — force MCP ask-user, tighten toolbox to relevant tools.
         // Claude Code's native AskUserQuestion has no UI surface in our chat sidebar;
         // force the model onto mcp__ask-user__ask_user which routes through the

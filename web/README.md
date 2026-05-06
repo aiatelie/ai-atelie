@@ -6,7 +6,7 @@ A Vite + React editor for design projects. Each project is a sandboxed folder of
 
 ```sh
 npm install
-npm run dev          # vite on http://127.0.0.1:5173 by default
+npm run dev          # vite on http://localhost:5173 by default
 ```
 
 For tests + scripts that hit the running server, see [tests/README.md](./tests/README.md).
@@ -58,7 +58,7 @@ These coexist; `_inspector_edits.css` uses `!important` so it always wins the ca
 
 ### Skills
 
-`skills/<name>/SKILL.md` — local skill library (Frontend design, Make tweakable, Interactive prototype, etc.). Symlinked at `web/.claude/skills` so Claude Code auto-discovers them.
+`skills/<name>/SKILL.md` — local skill library (Frontend design, Make tweakable, Interactive prototype, etc.). Loaded into adapter sessions via `ENV.SKILLS_DIR` (see `api/src/services/claude.ts`); not auto-discovered from a `.claude/skills/` symlink.
 
 ## Running just the dev server (no test suite, no install of MCP servers)
 

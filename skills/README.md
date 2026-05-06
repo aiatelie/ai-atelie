@@ -1,6 +1,8 @@
-# skills/
+# skills/ — **product skills only**
 
-Composable skill library — named playbooks an agent can call mid-conversation.
+Composable skill library — named playbooks an agent calls mid-conversation. Loaded into adapter-spawned sessions for end users via `ENV.SKILLS_DIR` (see `api/src/services/claude.ts`).
+
+> **Looking for contributor workflows?** Those live at `.claude/skills/` and are not the same thing — see [`.claude/skills/README.md`](../.claude/skills/README.md). The split is documented in `CONTRIBUTING.md#where-does-my-contribution-belong-decision-matrix`.
 
 ## What this is
 
@@ -27,15 +29,9 @@ skills/
 
 ## How each consumer uses these
 
-### Claude Code
+### Claude Code (product runtime)
 
-Reads skills natively from `.claude/skills/`. The repo root has a symlink:
-
-```
-.claude/skills -> ../skills
-```
-
-So nothing else to wire up. Claude Code auto-discovers each `SKILL.md` and surfaces it when relevant.
+Adapters spawn `claude` with `additionalDirectories: [ENV.SKILLS_DIR, …]` so the product skills in this folder are loaded into the end-user session — independent of any `.claude/skills/` near the adapter cwd. See `api/src/services/claude.ts`.
 
 ### Kimi K2 / OpenAI / any other model
 
@@ -62,7 +58,7 @@ node skills/invoke_skill.mjs menu           # printable menu (for system prompt)
 node skills/invoke_skill.mjs get make-tweakable   # print one skill's body
 ```
 
-## Adding your own skill
+## Adding a product skill
 
 Drop a new `skills/<name>/SKILL.md` with frontmatter:
 
@@ -76,4 +72,12 @@ sources: []
 ---
 ```
 
-Then add the entry to `skills/index.json`. Open a PR.
+Note: this repo's product-skill frontmatter carries three non-standard fields beyond the canonical `name`/`description` (`display`, `body_status`, `sources`) that drive the menu UI. Standard Anthropic SKILL.md frontmatter is also accepted; the extras are additive. Dev-time skills under `.claude/skills/` use *only* the standard fields so they remain portable.
+
+Then add the entry to `skills/index.json` so the menu picks it up. Open a PR.
+
+## Where this should NOT go
+
+- **Contributor workflows** ("when I'm working on the repo, do X") → `.claude/skills/`, not here. Auto-loads into your dev session, not into end-user sessions.
+- **Tool calls** (file ops, web fetches, structured input) → `mcp/`, not here. Skills are pure markdown; tool calls require an MCP server.
+- **One-off scripts** (releases, evidence upload, port probes) → `scripts/`, not here.

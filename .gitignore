@@ -26,8 +26,29 @@ bun-debug.log*
 .env.*
 !.env.example
 
-# Local Claude settings
+# Claude Code: this repo's global ~/.gitignore ignores `.claude/`
+# wholesale. Re-include the parts we want tracked (project-shared
+# settings + dev-time contributor skills), then exclude per-user
+# settings.local.json again.
+!.claude/
+!.claude/settings.json
+!.claude/skills/
+!.claude/skills/**
 .claude/settings.local.json
+
+# Playwright + PR-evidence artifacts. These are produced by the
+# verify-with-playwright skill and uploaded to GitHub's user-attachments
+# CDN — no need to track them locally beyond a few recent runs.
+test-results/
+playwright-report/
+.evidence/
+
+# Defense-in-depth: the setup-attach-session helper saves browser
+# session state and cookies to ~/.local/state/aiatelie/ (well outside
+# the repo) — but if anyone ever points it at a path inside the repo,
+# these patterns make sure the cookies never get committed.
+*-cookies.txt
+chromium-profile/
 
 # Per-user projects under web/projects/ are runtime data and not tracked,
 # EXCEPT the bundled demo project. .meta/ (chat history) inside the demo
