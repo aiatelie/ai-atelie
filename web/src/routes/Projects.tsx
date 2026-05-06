@@ -20,7 +20,7 @@ import {
 } from "../lib/projects";
 
 export default function Projects() {
-  const { all } = useProjects();
+  const { all, loading } = useProjects();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Project | null>(null);
@@ -69,7 +69,11 @@ export default function Projects() {
         </header>
 
         {all.length === 0 ? (
-          <EmptyState onCreate={() => setCreating(true)} />
+          loading ? (
+            <LoadingSkeleton />
+          ) : (
+            <EmptyState onCreate={() => setCreating(true)} />
+          )
         ) : (
           <>
             <div className={s.sectionLabel}>Projects · {all.length}</div>
@@ -88,7 +92,7 @@ export default function Projects() {
         )}
 
         <footer className={s.footer}>
-          <span className={s.footerChip}>Local-only · stored in your browser</span>
+          <span className={s.footerChip}>Local-first · stored on disk</span>
         </footer>
       </div>
 
@@ -121,6 +125,28 @@ export default function Projects() {
         />
       )}
     </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <>
+      <div className={s.sectionLabel} aria-busy="true">Projects · …</div>
+      <div className={s.grid}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className={s.card} aria-hidden="true" style={{ opacity: 0.35 }}>
+            <div className={s.cardName} style={{ background: "currentColor", height: 18, borderRadius: 4, opacity: 0.15, width: "60%" }} />
+            <div className={s.tabsList}>
+              <span className={s.tabPill} style={{ width: 80 }}>&nbsp;</span>
+              <span className={s.tabPill} style={{ width: 64 }}>&nbsp;</span>
+            </div>
+            <div className={s.cardMeta}>
+              <span>&nbsp;</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
