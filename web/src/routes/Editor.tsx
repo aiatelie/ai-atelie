@@ -2971,14 +2971,14 @@ function TabBar({
             <path d="M8 1.5v2 M8 12.5v2 M14.5 8h-2 M3.5 8h-2 M12.6 3.4l-1.4 1.4 M4.8 11.2l-1.4 1.4 M12.6 12.6l-1.4-1.4 M4.8 4.8L3.4 3.4" />
           </svg>
         </button>
-        <Link to="/" className={s.present} title="Open without editor chrome">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.4}>
-            <path d="M3 2 L11 7 L3 12 Z" fill="currentColor" />
+        <Link to="/projects" className={s.present} title="Back to projects" aria-label="Back to projects">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="2" y="2" width="4" height="4" rx="0.6" />
+            <rect x="8" y="2" width="4" height="4" rx="0.6" />
+            <rect x="2" y="8" width="4" height="4" rx="0.6" />
+            <rect x="8" y="8" width="4" height="4" rx="0.6" />
           </svg>
-          Present
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={1.6}>
-            <path d="M2 4 L5 7 L8 4" />
-          </svg>
+          Projects
         </Link>
         <button className={s.share} onClick={() => alert("Share is a stub for now")}>
           Share

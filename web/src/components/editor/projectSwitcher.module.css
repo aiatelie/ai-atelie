@@ -20,10 +20,11 @@
 .chev { font-size: 10px; line-height: 1; }
 
 .menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 70;
+  /* Rendered via React Portal into <body> so it can escape the
+   * tabbar's `overflow: hidden` clip. Position is computed from
+   * the trigger's getBoundingClientRect() on open. */
+  position: fixed;
+  z-index: 1000;
   background: var(--surface);
   border: 1px solid var(--ink-10);
   border-radius: var(--radius-lg);
@@ -32,7 +33,6 @@
   padding: 6px;
   display: flex;
   flex-direction: column;
-  margin-top: 6px;
 }
 
 .section {
