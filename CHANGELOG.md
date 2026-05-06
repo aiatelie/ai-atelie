@@ -8,6 +8,20 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.1.5
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.4...v0.1.5)
+
+### Features
+
+- **api:** AppendLog impl + close CUJ race + migrate editor-overrides/drawings to .meta/ ([#66](https://github.com/aiatelie/ai-atelie/pull/66))
+- **web:** Iframe runtime-error overlay ([#37](https://github.com/aiatelie/ai-atelie/pull/37), [#60](https://github.com/aiatelie/ai-atelie/pull/60))
+- **web:** Tab strip UX — kind icons, dirty mark, wheel scroll, drag-reorder, IDE menu ([#34](https://github.com/aiatelie/ai-atelie/pull/34), [#67](https://github.com/aiatelie/ai-atelie/pull/67))
+
+### ❤️ Contributors
+
+- Kadu Maverick ([@whatiskadudoing](https://github.com/whatiskadudoing))
+
 ## v0.1.4
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.3...v0.1.4)
