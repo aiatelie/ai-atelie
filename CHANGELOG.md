@@ -8,6 +8,21 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.1.4
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.3...v0.1.4)
+
+### Features
+
+- **api:** Introduce storage driver + close #11 disk-backed snapshots, #55 fresh-browser project list ([#57](https://github.com/aiatelie/ai-atelie/pull/57), [#11](https://github.com/aiatelie/ai-atelie/issues/11), [#55](https://github.com/aiatelie/ai-atelie/issues/55))
+- **web:** Jump-to-latest pill in chat body ([#61](https://github.com/aiatelie/ai-atelie/pull/61))
+- **web:** Keyboard shortcuts cheat sheet (Cmd+/) — phase A of #44 ([#62](https://github.com/aiatelie/ai-atelie/pull/62), [#44](https://github.com/aiatelie/ai-atelie/issues/44))
+- **web:** Persist folder-collapse state in FileBrowserView per project (#40 Phase 1) ([#63](https://github.com/aiatelie/ai-atelie/pull/63), [#40](https://github.com/aiatelie/ai-atelie/issues/40))
+
+### ❤️ Contributors
+
+- Kadu Maverick ([@whatiskadudoing](https://github.com/whatiskadudoing))
+
 ## v0.1.3
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.2...v0.1.3)
