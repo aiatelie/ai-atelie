@@ -8,6 +8,22 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.1.1
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.0...v0.1.1)
+
+### Docs
+
+- **skills:** Make "evidence must show post-completion state" an explicit rule ([feede31](https://github.com/aiatelie/ai-atelie/commit/feede31))
+
+### Build
+
+- **web:** Exclude *.test.ts from tsc compilation ([0398330](https://github.com/aiatelie/ai-atelie/commit/0398330))
+
+### ❤️ Contributors
+
+- Kadu-maverickk <kadumaverick1314@gmail.com>
+
 ## v0.1.0
 
 First tagged release. AI Atelie is a local-first, MIT-licensed,
