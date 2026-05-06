@@ -83,6 +83,7 @@ import {
   type ElicitRequest,
   type ToolCall,
 } from "../lib/chatStream";
+import { pickBusyPhrase } from "../lib/busyPhrases";
 
 type DisplayMode = "fill" | "frame";
 type Viewport = { w: number; h: number; preset?: ViewportPresetId };
@@ -1078,6 +1079,17 @@ export default function Editor() {
     return !!(last && last.role === "assistant" && last.pending);
   })();
   const isBlocked = lastIsPending || !!pendingElicit;
+
+  // Rotating canvas-busy label. Pick a fresh phrase when a run starts,
+  // swap to a new one every ~5s while it's still going. Keeps the pill
+  // playful on long turns instead of staring at the same line.
+  const [busyPhrase, setBusyPhrase] = useState<string>("");
+  useEffect(() => {
+    if (!lastIsPending) { setBusyPhrase(""); return; }
+    setBusyPhrase(pickBusyPhrase());
+    const t = setInterval(() => setBusyPhrase(pickBusyPhrase()), 5000);
+    return () => clearInterval(t);
+  }, [lastIsPending]);
 
   const queueOrSend = (
     text: string,
@@ -2472,9 +2484,20 @@ export default function Editor() {
           />
         ) : (<>
         <div
-          className={`${s.canvas} ${activeTab.display === "fill" ? s.canvasFill : s.canvasFrame}`}
+          className={`${s.canvas} ${activeTab.display === "fill" ? s.canvasFill : s.canvasFrame} ${lastIsPending ? s.canvasBusy : ""}`}
           style={{ position: "relative" }}
         >
+          {lastIsPending && (
+            <div
+              className={s.busyPill}
+              role="status"
+              aria-live="polite"
+              title="An AI run is editing this canvas. Open another chat carefully."
+            >
+              <span className={s.busyDot} aria-hidden />
+              {busyPhrase || "AI working"}
+            </div>
+          )}
           <CanvasFrame
             ref={canvasFrameRef}
             tab={activeTab}

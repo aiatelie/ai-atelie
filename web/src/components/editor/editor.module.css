@@ -600,6 +600,56 @@
   display: flex;
   background: var(--surface);
 }
+
+/* "Busy" — an agent run is in flight on this canvas. Soft inset glow
+   so the user knows not to start a parallel chat or push conflicting
+   edits while the model is writing files. Does not interfere with
+   pointer-events; outline-only via ::after. */
+.canvasBusy::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--brand);
+  border-radius: inherit;
+  animation: canvasBusyPulse 1.6s ease-in-out infinite;
+  z-index: 5;
+}
+@keyframes canvasBusyPulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.85; }
+}
+
+/* "AI working" pill — top-right of the canvas, anchored to the
+   container so it stays put when the iframe is zoomed/panned. */
+.busyPill {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 8px;
+  background: var(--brand);
+  color: var(--surface);
+  font: var(--weight-semi) var(--text-sm) / 1 var(--font-system);
+  border-radius: 999px;
+  box-shadow: 0 4px 12px var(--ink-12), 0 1px 2px var(--ink-08);
+  pointer-events: none;
+  z-index: 6;
+  user-select: none;
+}
+.busyDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: busyDotPulse 0.9s ease-in-out infinite;
+}
+@keyframes busyDotPulse {
+  0%, 100% { transform: scale(1);   opacity: 1;    }
+  50%      { transform: scale(1.4); opacity: 0.55; }
+}
 /* "fill" — iframe takes the full stage, no chrome or framing.
    Right for interactive tools (/titling, /editor). */
 .canvasFill .frame {

@@ -36,6 +36,8 @@ Skip when:
 - [ ] **Acceptance criteria identified.** From the issue or the user's task description, list the *user-observable* properties that must hold. Example for #1 (live preview): "agent text deltas appear in iframe srcdoc within 500ms of arrival; full reload not required".
 - [ ] **Spec authored.** Write `web/tests/e2e/<slug>.spec.ts`. One scenario per file. Use role-based selectors. Each acceptance criterion → one or more `expect(...)` calls.
 - [ ] **Spec runs.** `bunx playwright test web/tests/e2e/<slug>.spec.ts --reporter=list`.
+- [ ] **Wait for the agent to FULLY COMPLETE before stopping the recording.** This is the rule reviewers care about most — see "Evidence must show the post-completion state" below. A capture that ends mid-stream proves nothing.
+- [ ] **Capture the post-completion state explicitly.** A final screenshot AFTER the busy/loading state clears AND the user-visible result is rendered. The reviewer must be able to see *what the agent actually produced*, not just *that it was working*.
 - [ ] **Evidence bundled.** Copy `test-results/<slug>/video.webm` and any `*.png` into `.evidence/<ISO-timestamp>-<slug>/`.
 - [ ] **(Optional) headed run for video review.** `--headed` for clearer screen recordings on visual changes.
 - [ ] **Cleanup.** Prune `.evidence/` to keep only the last 5 run folders.
@@ -78,6 +80,47 @@ bunx playwright test web/tests/e2e/<slug>.spec.ts --headed
 bunx playwright show-report
 ```
 
+## Evidence MUST show the post-completion state
+
+**Rule**: a capture that ends while the agent is still working (or while the loading/busy/streaming UI is still on screen) is incomplete evidence and should never be submitted to a PR.
+
+The point of evidence is to demonstrate two things, in order:
+
+1. **The change still produces the expected user-visible outcome** — the agent finished, the result rendered, the iframe shows the new content, the file was written, whatever the acceptance criteria called for.
+2. (Optionally, secondarily) **The in-flight UX is correct** — loading spinner appears, busy pill rotates, progress is visible.
+
+If your video stops at step 2, you have *zero* evidence for step 1. Reviewers can't tell whether the feature actually worked or whether the script bailed before anything happened.
+
+### How to wait for completion correctly
+
+Don't sleep a fixed timeout — poll for the *signal* that completion happened:
+
+```ts
+// Wait for the agent's busy state to CLEAR after we know it started.
+// (Make sure we saw it busy at least once first — otherwise we'd race
+// past a fast turn that finished before we started polling.)
+let sawBusy = false;
+const start = Date.now();
+while (Date.now() - start < 6 * 60_000) {
+  const busy = await page.locator("[role=status]").isVisible().catch(() => false);
+  if (busy) sawBusy = true;
+  else if (sawBusy) break;
+  await page.waitForTimeout(2_000);
+}
+expect(sawBusy, "agent run was observed to be in flight at some point").toBe(true);
+```
+
+Then add ONE extra `await page.waitForTimeout(2_000)` after the busy state clears so the iframe re-renders before you screenshot.
+
+### Other valid completion signals
+
+- **Filesystem**: poll `web/projects/<id>/` until a target file is written or modified (use `stat().mtimeMs` against a pre-prompt snapshot — see `cuj.spec.ts` for the pattern).
+- **DOM mutation**: `page.waitForFunction(() => document.querySelector("[data-step-count]")?.textContent !== "0")`
+- **Chat thread**: wait for an "Undo" / "Restore" button to appear (which only renders post-completion in this codebase).
+- **Iframe content**: `await page.frameLocator("iframe").locator("body").innerText()` returns text matching the expected result.
+
+NEVER use `await page.waitForTimeout(60_000)` and assume the agent finished. Some runs are 5 seconds, some are 5 minutes.
+
 ## Bundling evidence
 
 After a successful run, the relevant artifacts live at:
@@ -116,7 +159,15 @@ Once evidence is uploaded to a PR via `bun run upload:evidence` (see `scripts/up
 - **`localhost` vs `127.0.0.1`.** Vite 8.x binds to `localhost` (which resolves to IPv6 `::1` on macOS), not `127.0.0.1`. Always use `localhost:5173`; `curl 127.0.0.1:5173` will fail.
 - **MJS test files masquerading as Playwright specs.** The existing `web/tests/test-*.mjs` are *integration tests*, NOT Playwright specs. Don't put `.spec.ts` files in `web/tests/` root; only under `web/tests/e2e/`.
 - **Bun loader edge cases.** Install Playwright with `bun add`, but **run** with `bunx playwright test` — Playwright's runner doesn't fully support Bun's loader at the time of writing.
-- **Evidence too large.** Keep videos under ~10s. Crop with `ffmpeg` if a run is longer than necessary.
+- **Evidence too large.** A 5-min Playwright recording at native fps is ~20MB. Compress with `ffmpeg -filter:v "setpts=0.25*PTS,scale=1024:-2" -an -c:v libx264 -preset fast -crf 28 -movflags +faststart -y out.mp4` (4× speed, 1024w, no audio, web-tuned). Yields ~300KB / ~13s — small enough that the user-attachments inline player loads fast, fast enough to watch, still shows the entire idle → busy → completion arc.
+- **Stopping the recording mid-stream.** The single most common evidence failure mode. See "Evidence MUST show the post-completion state" above.
+
+## Anti-patterns the skill must refuse
+
+- **Submitting evidence that ends while the agent is still working.** No matter how good the in-flight footage looks, if the recording stops before the post-completion state, the evidence is incomplete and the PR review will (correctly) bounce.
+- **Aborting / cancelling the run** to save time on the capture. The point of evidence is the full flow; if you cancel, you're not proving anything happened.
+- **Sleep-then-screenshot** as a fake completion signal. Use a real signal (busy state cleared, file modified, DOM mutation) — never a fixed timeout.
+- **"It worked when I ran it manually"** — without captured evidence, this doesn't appear in the PR. Re-run with capture before submitting.
 
 ## Reporting back
 
