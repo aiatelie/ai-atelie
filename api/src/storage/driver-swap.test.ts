@@ -155,10 +155,13 @@ describe.each(drivers)("StorageDriver:$name", ({ make }) => {
     const files = driver.project("p_a").files;
     const events: string[] = [];
     const unsub = files.subscribe((e) => events.push(`${e.type}:${e.path}`));
+    // fs.watch starts asynchronously on macOS; give it a moment to attach
+    // before we issue the writes we want it to observe.
+    await new Promise((r) => setTimeout(r, 50));
     await files.write("index.html", "<h1>1</h1>");
     await files.write("index.html", "<h1>2</h1>");
-    // Wait long enough for fs.watch debounce (configured to 30ms above).
-    await new Promise((r) => setTimeout(r, 100));
+    // Wait through the 30ms reload-channel debounce + fs flush.
+    await new Promise((r) => setTimeout(r, 300));
     unsub();
     expect(events.length).toBeGreaterThanOrEqual(1);
     expect(events.every((e) => e.startsWith("put:"))).toBe(true);
