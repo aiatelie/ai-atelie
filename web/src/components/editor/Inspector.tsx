@@ -128,36 +128,6 @@ export function Inspector({ selected, selectionCount, doc, onChange, onApplyColo
   );
 }
 
-function InspectorCloseHeader({ onClose }: { onClose: () => void }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: -8 }}>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close inspector"
-        title="Close inspector"
-        style={{
-          appearance: "none",
-          border: 0,
-          background: "transparent",
-          color: "var(--ink-50)",
-          width: 26,
-          height: 26,
-          borderRadius: 6,
-          cursor: "pointer",
-          fontSize: 16,
-          lineHeight: 1,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
 function AskKimiComposer({ onSubmit }: { onSubmit: (text: string, modelId: string) => void }) {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
