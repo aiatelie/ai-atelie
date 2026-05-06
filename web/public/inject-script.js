@@ -14,6 +14,7 @@
  *   hover         { ref, rect, tag } | { ref: null }
  *   pong          {}
  *   undoDepth     { depth }   — emitted after snapshot/undo
+ *   runtime-error { message, filename?, lineno?, colno?, stack?, source, timestamp }
  *
  * Inbound command types:
  *   ping          {}
@@ -465,6 +466,47 @@
       (document.head || document.documentElement).appendChild(style);
     } catch (e) { /* ignore */ }
   }
+
+  // ─── Runtime-error surfacing ───────────────────────────────────
+  // Same-origin iframe means we can listen for JS throws in the artifact
+  // and forward them to the host UI for an in-canvas error overlay. The
+  // host throttles + dedupes; we keep the iframe-side pure passthrough so
+  // the listener is impossible to misorder against artifact code.
+  function emitRuntimeError(payload) {
+    emit({
+      type: "runtime-error",
+      message: payload.message || "Unknown error",
+      filename: payload.filename || null,
+      lineno: payload.lineno || null,
+      colno: payload.colno || null,
+      stack: payload.stack || null,
+      source: payload.source || "error",
+      timestamp: Date.now(),
+    });
+  }
+  window.addEventListener("error", function(e) {
+    // Resource-load failures (img/script 404) fire `error` on the
+    // element with no `message`. Skip those — they're noisy and the user
+    // can already see the broken element. Only surface real script throws.
+    if (!e.message && !e.error) return;
+    emitRuntimeError({
+      message: e.message || (e.error && e.error.message) || "Script error",
+      filename: e.filename,
+      lineno: e.lineno,
+      colno: e.colno,
+      stack: e.error && e.error.stack,
+      source: "error",
+    });
+  });
+  window.addEventListener("unhandledrejection", function(e) {
+    var reason = e.reason;
+    var msg = (reason && reason.message) ? reason.message : String(reason);
+    emitRuntimeError({
+      message: "Unhandled promise rejection: " + msg,
+      stack: reason && reason.stack,
+      source: "unhandledrejection",
+    });
+  });
 
   function ready() {
     window.addEventListener("scroll", onViewChange, true);

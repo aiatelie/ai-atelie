@@ -1,0 +1,167 @@
+/* IframeErrorOverlay styles — bottom-right card stack on the canvas.
+ * Sits above selection chrome (z above .busyPill at 6) so it's always
+ * visible even mid-flight. Pointer-events default; the cards themselves
+ * are interactive. */
+
+.stack {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column-reverse; /* newest on top of the visual stack */
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 8;
+  pointer-events: none;
+  max-width: min(420px, calc(100% - 24px));
+}
+.stack > * {
+  pointer-events: auto;
+}
+
+.overflow {
+  appearance: none;
+  border: 1px solid var(--ink-12);
+  background: var(--surface);
+  color: var(--ink-72);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font: var(--weight-semi) var(--text-xs) / 1 var(--font-system);
+  cursor: pointer;
+  box-shadow: 0 2px 6px var(--ink-08);
+}
+.overflow:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--ink-12);
+  border-left: 3px solid var(--danger, #d23f3f);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 8px 24px var(--ink-12), 0 1px 2px var(--ink-08);
+  font: var(--weight-reg) var(--text-sm) / 1.4 var(--font-system);
+  color: var(--ink);
+  overflow: hidden;
+  /* Subtle slide-in from the side so a fresh error reads as new. */
+  animation: errorIn 160ms ease-out;
+}
+@keyframes errorIn {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0);   }
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 8px 8px 10px;
+}
+.icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--danger, #d23f3f);
+  color: white;
+  font: var(--weight-bold) 12px / 18px var(--font-system);
+  text-align: center;
+  user-select: none;
+}
+.message {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+}
+.messageText {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.count {
+  flex: 0 0 auto;
+  background: var(--ink-08);
+  color: var(--ink-72);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font: var(--weight-semi) var(--text-xs) / 1.2 var(--font-system);
+}
+.dismiss {
+  flex: 0 0 auto;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ink-72);
+  font: var(--weight-bold) 18px / 1 var(--font-system);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: -2px;
+}
+.dismiss:hover {
+  background: var(--ink-08);
+  color: var(--ink);
+}
+
+.body {
+  padding: 0 10px 10px 10px;
+  border-top: 1px solid var(--ink-08);
+  background: var(--surface-2, var(--surface));
+}
+.where {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
+  color: var(--ink-72);
+  padding: 8px 0 6px 0;
+  word-break: break-all;
+}
+.stackTrace {
+  margin: 0;
+  padding: 8px;
+  background: var(--ink-04);
+  border-radius: var(--radius-xs);
+  max-height: 180px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-72);
+  white-space: pre;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+}
+.sendBtn {
+  appearance: none;
+  border: 1px solid var(--ink-12);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  font: var(--weight-semi) var(--text-xs) / 1.2 var(--font-system);
+  cursor: pointer;
+}
+.sendBtn:hover {
+  background: var(--brand);
+  color: var(--surface);
+  border-color: var(--brand);
+}

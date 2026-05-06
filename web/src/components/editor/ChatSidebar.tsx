@@ -489,6 +489,25 @@ function Composer({
     return () => window.removeEventListener("cc-canvas-file-drop", onCanvasDrop);
   }, []);
 
+  // Canvas-error bridge: IframeErrorOverlay's "Send to chat" button
+  // dispatches `cc-canvas-attach-error` with a pre-formatted markdown
+  // block describing the runtime error. We append it to the composer as
+  // a new paragraph so the user can add their own context above/below
+  // before sending.
+  useEffect(() => {
+    const onAttachError = (e: Event) => {
+      const block = (e as CustomEvent<string>).detail;
+      if (!block) return;
+      setText((prev) => {
+        const trimmed = prev.replace(/\s+$/, "");
+        return trimmed ? `${trimmed}\n\n${block}\n` : `${block}\n`;
+      });
+      requestAnimationFrame(() => ref.current?.focus());
+    };
+    window.addEventListener("cc-canvas-attach-error", onAttachError);
+    return () => window.removeEventListener("cc-canvas-attach-error", onAttachError);
+  }, []);
+
   // Auto-resize textarea up to 4 lines.
   useEffect(() => {
     const el = ref.current;
