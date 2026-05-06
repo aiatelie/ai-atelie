@@ -1,0 +1,136 @@
+.card {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  padding: 10px;
+  border: 1px solid var(--ink-10);
+  border-radius: 10px;
+  background: var(--surface);
+  margin-top: 8px;
+}
+
+.preview {
+  flex: 0 0 96px;
+  width: 96px;
+  height: 96px;
+  border-radius: 6px;
+  overflow: hidden;
+  background:
+    linear-gradient(45deg, var(--ink-04) 25%, transparent 25%, transparent 75%, var(--ink-04) 75%),
+    linear-gradient(45deg, var(--ink-04) 25%, transparent 25%, transparent 75%, var(--ink-04) 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 6px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.previewImg, .previewVideo, .previewLottie {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.previewIcon {
+  color: var(--ink-44);
+  width: 56px;
+  height: 56px;
+}
+.previewIcon svg { width: 100%; height: 100%; }
+
+.info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+}
+
+.filename {
+  font: var(--weight-semi) var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta {
+  font: var(--weight-regular) var(--text-xs) var(--font-system);
+  color: var(--ink-44);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.btn, .btnPrimary {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-92);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1;
+}
+.btn:hover { background: var(--ink-04); border-color: var(--ink-15); }
+.btn svg { width: 12px; height: 12px; }
+.btnPrimary {
+  background: var(--brand);
+  color: var(--surface);
+  border-color: transparent;
+}
+.btnPrimary:hover { background: var(--brand-strong); }
+.btnPrimary svg { width: 12px; height: 12px; }
+
+/* Lightbox: covers the full editor surface, fades in, dismissed by
+   clicking the backdrop, the close button, or pressing Escape. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(8, 8, 8, 0.86);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  animation: lightboxFade 140ms ease-out;
+}
+@keyframes lightboxFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.lightboxClose {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  appearance: none;
+  border: 0;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightboxClose:hover { background: rgba(255,255,255,0.16); }
+
+.lightboxImg, .lightboxVideo {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+}

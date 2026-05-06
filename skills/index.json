@@ -1,0 +1,71 @@
+{
+  "$schema": "./index.schema.json",
+  "captured": "2026-04-27",
+  "skills": [
+    {
+      "name": "frontend-design",
+      "display": "Frontend design",
+      "description": "Aesthetic direction for designs outside an existing brand system",
+      "body_status": "reconstructed",
+      "body_sources": [
+        "https://claude.com/blog/improving-frontend-design-through-skills"
+      ]
+    },
+    {
+      "name": "interactive-prototype",
+      "display": "Interactive prototype",
+      "description": "Working app with real interactions",
+      "body_status": "stub",
+      "body_sources": []
+    },
+    {
+      "name": "make-tweakable",
+      "display": "Make tweakable",
+      "description": "Add in-design tweak controls",
+      "body_status": "verbatim",
+      "body_sources": []
+    },
+    {
+      "name": "create-design-system",
+      "display": "Create design system",
+      "description": "Skill to use if user asks you to create a design system or UI kit",
+      "body_status": "stub",
+      "body_sources": []
+    },
+    {
+      "name": "animated-video",
+      "display": "Animated video",
+      "description": "Timeline-based motion design",
+      "body_status": "stub",
+      "body_sources": []
+    },
+    {
+      "name": "save-as-standalone-html",
+      "display": "Save as standalone HTML",
+      "description": "Single self-contained file that works offline",
+      "body_status": "stub",
+      "body_sources": []
+    },
+    {
+      "name": "send-to-canva",
+      "display": "Send to Canva",
+      "description": "Export as an editable Canva design",
+      "body_status": "stub",
+      "body_sources": []
+    },
+    {
+      "name": "handoff-to-claude-code",
+      "display": "Handoff to Claude Code",
+      "description": "Developer handoff package",
+      "body_status": "stub",
+      "body_sources": []
+    },
+    {
+      "name": "export",
+      "display": "Export",
+      "description": "Export a selected element as PNG / JPEG / OGraf for video editors. Provider-agnostic — the AI calls capabilities by id, the host's adapter (MCP today, OpenAI-tools later) routes the call.",
+      "body_status": "original",
+      "body_sources": []
+    }
+  ]
+}

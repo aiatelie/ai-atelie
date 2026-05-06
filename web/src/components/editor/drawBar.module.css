@@ -1,0 +1,143 @@
+/* drawBar.module.css — floating Draw-mode action bar (Discard / Undo /
+   inline composer / Send). Sits at the bottom-center of the canvas
+   area, above the iframe but inside the editor stage so it doesn't
+   collide with the right sidebar. */
+
+.drawBar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+  /* Wide enough for a comfortable composer, narrow enough to never
+     crowd the sidebar at typical desktop widths. The textarea inside
+     handles longer content via auto-grow. */
+  min-width: 360px;
+  max-width: 560px;
+  font-family: var(--font-system);
+}
+
+.iconBtn {
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-65);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.iconBtn:hover { background: var(--ink-04); color: var(--ink-92); }
+.iconBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.iconBtn svg { width: 14px; height: 14px; }
+
+.sep {
+  width: 1px;
+  height: 20px;
+  background: var(--ink-10);
+  margin: 0 2px;
+}
+
+.paletteWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.swatchBtn {
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.swatchBtn:hover { background: var(--ink-04); border-color: var(--ink-10); }
+.swatchBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.swatchDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
+}
+.palette {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  padding: 6px;
+  display: flex;
+  gap: 6px;
+  z-index: 1;
+}
+.swatch {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.swatch:hover { transform: scale(1.12); }
+.swatchActive {
+  box-shadow: 0 0 0 2px var(--ink-strong) inset, 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
+}
+
+.input {
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  resize: none;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  font: var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  line-height: 1.4;
+  /* Single-line default; auto-grows up to 84px (~3 lines) via JS. */
+  height: 30px;
+  max-height: 84px;
+  overflow-y: auto;
+}
+.input::placeholder { color: var(--ink-44); }
+.input:disabled { opacity: 0.6; }
+
+.sendBtn {
+  appearance: none;
+  border: 0;
+  background: var(--ink-strong);
+  color: var(--surface);
+  font: var(--weight-semi) var(--text-md) var(--font-system);
+  padding: 7px 14px;
+  border-radius: 7px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, opacity 0.12s ease;
+}
+.sendBtn:hover { background: var(--ink-strong-hover); }
+.sendBtn:disabled { opacity: 0.4; cursor: not-allowed; }

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "demo",
+  "name": "AI Atelie demo · LinkedIn banner",
+  "kind": "sandbox",
+  "createdAt": 1778007497882,
+  "updatedAt": 1778007497882,
+  "pages": [
+    {
+      "file": "index.html",
+      "label": "index.html",
+      "title": "AI Atelie — LinkedIn banner directions"
+    }
+  ],
+  "components": [
+    { "file": "design-canvas.jsx", "name": "DesignCanvas" },
+    { "file": "Banner.jsx", "name": "Banner" }
+  ],
+  "entry": "index.html"
+}

@@ -1,0 +1,26 @@
+# Sandbox agent for kimi runs scoped to a single web/projects/<id>/.
+#
+# Inherits everything from kimi's bundled `default` agent (system prompt,
+# tools, subagents) but excludes the Shell tool. This is the kimi
+# equivalent of Claude's `disallowedTools: ["Bash"]` for projectId-scoped
+# runs — static-site sandbox edits don't need a shell, and removing it
+# is the only thing keeping --print/--yolo's bypass-permissions mode from
+# escaping the project directory via shell commands.
+#
+# `extend: default` resolves against kimi-cli's bundled default agent
+# inside its install dir (see kimi_cli/agentspec.py:_load_agent_spec) —
+# we don't have to copy system.md or any other file.
+version: 1
+agent:
+  extend: default
+  name: ai-atelie-sandbox
+  exclude_tools:
+    # Sandbox: no shell access. Mirrors Claude's `disallowedTools: ["Bash"]`.
+    - "kimi_cli.tools.shell:Shell"
+    # Force the model onto our HTTP-bridge MCP `ask_user` (exposed as
+    # mcp__ask-user__ask_user). Kimi's bundled AskUserQuestion auto-
+    # dismisses under --yolo (which --print implies), so leaving it
+    # available means the model picks it, gets "non-interactive mode,
+    # make your own decision", and never touches our bridge — defeating
+    # the whole point. Excluding it makes the MCP tool the only option.
+    - "kimi_cli.tools.ask_user:AskUserQuestion"

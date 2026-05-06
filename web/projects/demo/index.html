@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Atelie — LinkedIn banner directions</title>
+<link rel="stylesheet" href="style.css" />
+
+<!-- Space Grotesk (display) + JetBrains Mono (caption + code) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  rel="stylesheet"
+/>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="Banner.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+  const { DesignCanvas, DCSection, DCArtboard, Banner } = window;
+
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection
+          id="banners"
+          title="AI Atelie · LinkedIn banner"
+          subtitle="1584 × 396 — three directions for a promo banner. Tweak headline, sub-headline, accent, and the center visual from the knobs panel; all three update at once so you can riff."
+        >
+          <DCArtboard id="editorial" label="A · Editorial — paper / ink / burnt" width={1584} height={396}>
+            <Banner variant="editorial" />
+          </DCArtboard>
+          <DCArtboard id="nocturne" label="B · Nocturne — ink / paper / blue glow" width={1584} height={396}>
+            <Banner variant="nocturne" />
+          </DCArtboard>
+          <DCArtboard id="clinical" label="C · Clinical — white / ink / blue, sparse" width={1584} height={396}>
+            <Banner variant="clinical" />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

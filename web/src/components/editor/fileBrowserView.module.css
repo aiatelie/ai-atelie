@@ -1,0 +1,407 @@
+/* FileBrowserView — split layout for the Design Files tab.
+ * Left column: file list. Right column: preview pane. */
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  width: 100%;
+  height: 100%;
+  background: var(--app-bg);
+  font-family: var(--font-system);
+  color: var(--ink-92);
+}
+.shellDrop { background: var(--brand-bg); }
+
+/* ─── File list ────────────────────────────────────────────────── */
+.list {
+  overflow-y: auto;
+  padding-bottom: 32px;
+  border-right: 1px solid var(--ink-08);
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--ink-08);
+  background: var(--app-bg);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.crumbBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-64);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.crumbBtn:hover { background: var(--ink-04); color: var(--ink-92); }
+.crumbPath {
+  color: var(--ink-64);
+  font-size: var(--text-md);
+}
+.search {
+  margin-left: auto;
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-92);
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  width: 200px;
+  outline: none;
+}
+.search::placeholder { color: var(--ink-44); }
+.search:focus { border-color: var(--brand); }
+
+.section {
+  padding-top: 2px;
+}
+.sectionLabel {
+  padding: 12px 24px 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-44);
+  font-weight: var(--weight-semi);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 24px;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  border-left: 3px solid transparent;
+  padding-left: 21px; /* 24 - 3 to keep icon column aligned */
+  min-height: 30px;
+}
+.row:hover { background: var(--ink-04); }
+.rowActive {
+  background: var(--info-alt-bg);
+  border-bottom-color: var(--info-alt-bg);
+  color: var(--info-alt-border);
+}
+.rowActive .name { color: var(--info-strong); }
+.rowActive .sub { color: var(--info-alt-border); }
+.rowActive .modified { color: var(--info-alt-border); }
+.rowActive .icon {
+  background: var(--icon-bg-light);
+  border-color: var(--info-alt-border);
+}
+/* The file matching the editor's currently-focused tab. Brand-colored
+ * left border + bolder name so it pops above mere preview-selection. */
+.rowEditorActive {
+  border-left-color: var(--brand);
+  background: var(--brand-bg);
+}
+.rowEditorActive .name { color: var(--brand-fg); font-weight: var(--weight-semi); }
+.rowEditorActive:hover { background: var(--brand-bg); }
+/* A file open in some other tab — subtle, just informational. */
+.rowOpen .name { color: var(--ink-92); }
+.dotOpen {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--brand);
+  display: inline-block;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.rowIndent { padding-left: 53px; /* 56 - 3 */ }
+.rowPulse { animation: rowPulse 1.4s ease-out; }
+@keyframes rowPulse {
+  0%   { background: var(--brand-bg); box-shadow: inset 3px 0 0 var(--brand); }
+  60%  { background: var(--brand-bg); box-shadow: inset 3px 0 0 var(--brand); }
+  100% { background: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  background: var(--icon-bg-warm);
+  border: 1px solid var(--brand-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-fg);
+  flex-shrink: 0;
+}
+.icon svg { width: 11px; height: 11px; }
+.iconComponent {
+  background: var(--icon-bg-cool);
+  border-color: var(--icon-bg-blue-soft);
+  color: var(--icon-bg-blue-strong);
+}
+.iconAsset {
+  background: var(--ink-04);
+  border-color: var(--ink-10);
+  color: var(--ink-44);
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.name {
+  font-weight: var(--weight-medium);
+  color: var(--ink-92);
+  font-size: var(--text-md);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sub {
+  font-size: var(--text-xs);
+  color: var(--ink-44);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.modified {
+  font-size: var(--text-xs);
+  color: var(--ink-44);
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 8px 24px 12px;
+  color: var(--ink-44);
+  font-size: var(--text-sm);
+}
+
+/* Folder row */
+.folder { display: flex; flex-direction: column; }
+.folderRow {
+  display: grid;
+  grid-template-columns: 12px 20px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 24px;
+  cursor: pointer;
+  min-height: 30px;
+}
+.folderRow:hover { background: var(--ink-04); }
+.chev {
+  color: var(--ink-44);
+  font-size: 9px;
+  width: 14px;
+  text-align: center;
+}
+.folderRow svg { width: 14px; height: 14px; color: var(--ink-64); }
+
+.dropHint {
+  margin: 32px 24px 24px;
+  padding: 18px;
+  border: 1.5px dashed var(--ink-10);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--ink-44);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dropHintLabel {
+  font-weight: var(--weight-semi);
+  letter-spacing: 0.06em;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  color: var(--ink-64);
+}
+.dropHintBody { line-height: 1.45; }
+
+/* ─── Preview pane ─────────────────────────────────────────────── */
+.preview {
+  background: var(--app-bg);
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+.previewEmpty {
+  color: var(--ink-44);
+  font-size: var(--text-sm);
+  padding: 40px 8px;
+  text-align: center;
+}
+
+.previewBody {
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  position: relative;
+  box-shadow: var(--shadow-card);
+  /* Container query unit lets the iframe scale to fit. */
+  container-type: inline-size;
+}
+.previewFrame {
+  /* Render the page at a "design viewport" then visually scale it down,
+   * so we show the full page (no cropping) instead of a tiny mobile
+   * breakpoint inside the actual ~330px-wide preview rectangle. */
+  width: 1280px;
+  height: 800px;
+  border: 0;
+  background: var(--surface);
+  transform: scale(calc(100cqi / 1280));
+  transform-origin: top left;
+  pointer-events: none;
+}
+.previewRefresh {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink-64);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.previewBody:hover .previewRefresh { opacity: 1; }
+.previewRefresh:hover { color: var(--ink-92); background: var(--surface); }
+.previewImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--ink-04);
+}
+.previewPlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 12px;
+  color: var(--ink-44);
+  text-align: center;
+  padding: 24px;
+}
+.previewPlaceholder svg { color: var(--ink-44); width: 22px; height: 22px; }
+.previewPlaceholder p {
+  margin: 0;
+  font-size: var(--text-sm);
+  max-width: 220px;
+  line-height: 1.45;
+}
+
+.previewActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.previewAction,
+.previewActionGhost {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-92);
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.previewAction:hover,
+.previewActionGhost:hover { background: var(--ink-04); }
+.previewActionGhost {
+  border-color: transparent;
+  color: var(--ink-64);
+}
+
+.previewCrumbs {
+  font-size: var(--text-xs);
+  color: var(--ink-44);
+  letter-spacing: 0.02em;
+}
+.previewCrumbSep { color: var(--ink-22, var(--ink-10)); padding: 0 2px; }
+
+.previewNameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.previewName {
+  font-size: 18px;
+  font-weight: var(--weight-semi);
+  color: var(--ink-92);
+  letter-spacing: -0.005em;
+  word-break: break-word;
+}
+.previewPill {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: var(--weight-semi);
+  color: var(--brand-fg);
+  background: var(--brand-bg);
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.previewType {
+  font-size: var(--text-md);
+  color: var(--ink-64);
+  margin-top: -6px;
+}
+.previewMeta {
+  font-size: var(--text-sm);
+  color: var(--ink-44);
+}
+
+/* ─── Context menu ─────────────────────────────────────────────── */
+.menu {
+  position: fixed;
+  z-index: 100;
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  padding: 4px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+}
+.menuItem {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.menuItem:hover { background: var(--ink-04); }

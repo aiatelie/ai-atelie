@@ -1,0 +1,139 @@
+/* Project switcher — compact chevron-only trigger that drops a list of
+ * projects + a "Browse all projects" link to the dashboard. */
+
+.root { position: relative; height: 100%; display: flex; align-items: center; }
+.trigger {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-44);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.trigger:hover { background: var(--ink-04); color: var(--ink-92); }
+.chev { font-size: 10px; line-height: 1; }
+
+.menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 70;
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  min-width: 280px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+
+.section {
+  font: var(--weight-semi) 10px var(--font-system);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-44);
+  padding: 8px 10px 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.row:hover { background: var(--ink-04); }
+.rowActive { background: var(--brand-bg); }
+.rowActive:hover { background: var(--brand-bg); }
+.rowMain {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  border-radius: var(--radius-xs);
+  text-align: left;
+  min-width: 0;
+}
+.check {
+  width: 12px;
+  text-align: center;
+  color: var(--brand);
+  font-weight: var(--weight-semi);
+  flex-shrink: 0;
+}
+.rowName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-44);
+  flex-shrink: 0;
+}
+
+.rowAct {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-44);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-size: 12px;
+}
+.rowAct:hover { background: var(--ink-08); color: var(--ink-92); }
+
+.rowEditing { padding: 4px; }
+.input {
+  appearance: none;
+  width: 100%;
+  border: 1px solid var(--brand-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  outline: none;
+}
+
+.divider { height: 1px; background: var(--ink-08); margin: 6px 4px; }
+
+.action {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-92);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  border-radius: var(--radius-xs);
+  text-decoration: none;
+}
+.action:hover { background: var(--ink-04); }
+.action:disabled { opacity: 0.4; cursor: not-allowed; }
+.icon {
+  font-family: var(--font-mono);
+  width: 16px;
+  text-align: center;
+  color: var(--ink-44);
+}

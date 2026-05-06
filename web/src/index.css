@@ -1,0 +1,330 @@
+/* Global reset + base — per-route styling lives in CSS modules.
+ *
+ * Design tokens below are the SINGLE SOURCE OF TRUTH for editor color.
+ * CSS modules consume `var(--token)` references; the retro override block
+ * at the bottom of this file remaps every token, so the entire chrome
+ * reskins by toggling `data-theme="retro"` on <html>.
+ *
+ * If you find a hardcoded color in a CSS module, that's a bug — pick the
+ * closest token below (or add a new one here, mirrored under :root[data-theme="retro"]). */
+
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Archivo:wght@400;700;900&family=Syne:wght@700;800&family=Noto+Sans+JP:wght@900&family=Antonio:wght@700&family=Instrument+Serif:ital@0;1&display=swap");
+
+:root {
+  /* ─── Surfaces ─────────────────────────────────────────────
+   * app-bg: page / chrome bg
+   * surface: pure cards/popovers (whitest)
+   * surface-2: subtler raised, hover bg
+   * surface-3: warm tinted card (chat composer, dropdown items)
+   * surface-4: faint stripe (zebra rows)
+   * surface-warm: slightly warmer card surface (dialogs, file rows) */
+  --app-bg: #faf9f5;
+  --surface: #ffffff;
+  --surface-2: #f5f2eb;
+  --surface-3: #fffaf3;
+  --surface-4: #fafaf7;
+  --surface-warm: #faf7f0;
+
+  /* ─── Ink — text + tinted overlays on warm surfaces ────────
+   * Base ink (#0f0c08) — never use directly, always via alpha. */
+  --ink: #0f0c08;
+  --ink-02: rgba(15, 12, 8, 0.02);
+  --ink-04: rgba(15, 12, 8, 0.04);
+  --ink-05: rgba(15, 12, 8, 0.05);
+  --ink-06: rgba(15, 12, 8, 0.06);
+  --ink-08: rgba(15, 12, 8, 0.08);
+  --ink-10: rgba(15, 12, 8, 0.10);
+  --ink-12: rgba(15, 12, 8, 0.12);
+  --ink-15: rgba(15, 12, 8, 0.15);
+  --ink-20: rgba(15, 12, 8, 0.20);
+  --ink-25: rgba(15, 12, 8, 0.25);
+  --ink-30: rgba(15, 12, 8, 0.30);
+  --ink-35: rgba(15, 12, 8, 0.35);
+  --ink-40: rgba(15, 12, 8, 0.40);
+  --ink-44: rgba(15, 12, 8, 0.44);
+  --ink-50: rgba(15, 12, 8, 0.50);
+  --ink-55: rgba(15, 12, 8, 0.55);
+  --ink-60: rgba(15, 12, 8, 0.60);
+  --ink-64: rgba(15, 12, 8, 0.64);
+  --ink-65: rgba(15, 12, 8, 0.65);
+  --ink-70: rgba(15, 12, 8, 0.70);
+  --ink-78: rgba(15, 12, 8, 0.78);
+  --ink-85: rgba(15, 12, 8, 0.85);
+  --ink-92: rgba(15, 12, 8, 0.92);
+
+  /* Solid dark variants — primary buttons, dark pills. */
+  --ink-strong: #1a1a1a;
+  --ink-strong-hover: #000000;
+  --ink-deep: #1e1e1e;       /* slightly less black, for raised dark elements */
+
+  /* Inverse text — on dark/brand surfaces.
+   * The on-ink-X family is the alpha scale used for borders, dividers,
+   * and faint overlays drawn on dark/brand backgrounds. In default theme
+   * these are white; in retro they're cream so dark surfaces stay
+   * coordinated with the warm palette. */
+  --on-ink: #ffffff;
+  --on-brand: #ffffff;
+  --on-ink-06: rgba(255, 255, 255, 0.06);
+  --on-ink-08: rgba(255, 255, 255, 0.08);
+  --on-ink-10: rgba(255, 255, 255, 0.10);
+  --on-ink-12: rgba(255, 255, 255, 0.12);
+  --on-ink-15: rgba(255, 255, 255, 0.15);
+  --on-ink-18: rgba(255, 255, 255, 0.18);
+  --on-ink-20: rgba(255, 255, 255, 0.20);
+  --on-ink-25: rgba(255, 255, 255, 0.25);
+  --on-ink-30: rgba(255, 255, 255, 0.30);
+  --on-ink-40: rgba(255, 255, 255, 0.40);
+  --on-ink-50: rgba(255, 255, 255, 0.50);
+  --on-ink-55: rgba(255, 255, 255, 0.55);
+  --on-ink-60: rgba(255, 255, 255, 0.60);
+  --on-ink-65: rgba(255, 255, 255, 0.65);
+  --on-ink-70: rgba(255, 255, 255, 0.70);
+  --on-ink-80: rgba(255, 255, 255, 0.80);
+  --on-ink-85: rgba(255, 255, 255, 0.85);
+  --on-ink-90: rgba(255, 255, 255, 0.90);
+
+  /* Soft cream variants — used where text on dark surfaces wants to be
+   * just-shy-of-pure-white (status panels, syntax highlighting). */
+  --on-ink-soft-65: rgba(245, 245, 240, 0.65);
+  --on-ink-soft-80: rgba(245, 245, 240, 0.80);
+  --on-ink-soft-90: rgba(245, 245, 240, 0.90);
+
+  /* Muted neutrals — placeholders, faint hints. */
+  --placeholder: #888;
+  --placeholder-strong: #aaa;
+
+  /* ─── Brand — Anthropic / Claude orange ────────────────────
+   * fg: deeper variant for text on tinted bg
+   * strong-fg: even deeper for high-emphasis text
+   * bg/border/strong: progressive alphas of brand on white */
+  --brand: #d97757;
+  --brand-fg: #b14a30;
+  --brand-strong-fg: #c46a4d;
+  --brand-faint: rgba(217, 119, 87, 0.04);
+  --brand-soft: rgba(217, 119, 87, 0.06);
+  --brand-bg: rgba(217, 119, 87, 0.10);
+  --brand-border: rgba(217, 119, 87, 0.18);
+  --brand-hover: rgba(217, 119, 87, 0.18);
+  --brand-strong: rgba(217, 119, 87, 0.45);
+
+  /* Light orange variants — tags, accents. */
+  --brand-light: #f7c89a;
+  --brand-warm: #ff8a80;
+  --brand-warm-strong: #ff5a4f;
+
+  /* ─── Semantic ─────────────────────────────────────────────
+   * danger / success / info — same hue across themes (semantic). */
+  --danger: #c53030;
+  --danger-fg: #7a2222;
+  --danger-bg: rgba(197, 48, 48, 0.08);
+  --danger-bg-strong: rgba(211, 47, 47, 0.06);
+  --danger-border: rgba(211, 47, 47, 0.22);
+
+  --success: #34c759;
+  --success-fg: #1a4d2e;
+  --success-alt: #2ea043;
+  --success-alt-bg: rgba(46, 160, 67, 0.10);
+  --success-alt-border: rgba(46, 160, 67, 0.25);
+
+  --info: #2563eb;
+  --info-strong: rgba(20, 60, 160, 1);
+  --info-alt: #3677e2;
+  --info-alt-bg: rgba(54, 119, 226, 0.10);
+  --info-alt-border: rgba(54, 119, 226, 0.25);
+  --info-alt-soft: rgba(54, 119, 226, 0.06);
+
+  --brand-warm-soft: rgba(255, 90, 79, 0.08);
+  --brand-warm-bg: rgba(255, 90, 79, 0.12);
+  --brand-stronger: rgba(217, 119, 87, 0.85);
+
+  --icon-bg-warm: rgba(255, 230, 220, 0.6);
+  --icon-bg-cool: rgba(220, 220, 240, 0.6);
+  --icon-bg-blue-soft: rgba(80, 80, 200, 0.18);
+  --icon-bg-blue-strong: rgba(80, 80, 200, 0.78);
+  --icon-bg-light: rgba(255, 255, 255, 0.6);
+
+  /* ─── Surfaces over content (modals, drawers) ──────────────*/
+  --backdrop: rgba(20, 16, 12, 0.45);
+
+  /* ─── Shadows ───────────────────────────────────────────── */
+  --shadow-card: 0 1px 2px 0 rgba(20, 20, 19, 0.04);
+  --shadow-pop:  0 8px 24px rgba(20, 20, 19, 0.10), 0 1px 2px rgba(20, 20, 19, 0.06);
+  --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.35);
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md:   0 8px 24px rgba(0, 0, 0, 0.12);
+
+  /* ─── Type ─────────────────────────────────────────────── */
+  --font-system: -apple-system, "system-ui", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semi: 600;
+
+  /* ─── Geometry ─────────────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  --pad-xs: 4px;
+  --pad-sm: 6px;
+  --pad-md: 8px;
+  --pad-lg: 10px;
+  --pad-xl: 14px;
+}
+
+/* ─── Retro theme — navy + cream + orange ─────────────────────
+ * Activated by setting `data-theme="retro"` on <html>. Token
+ * names are unchanged; only values shift.
+ * Palette: #1C223A navy · #E5D4B6 cream · #F44E1C orange. */
+:root[data-theme="retro"] {
+  --app-bg: #E5D4B6;
+  --surface: #fffaf0;
+  --surface-2: #d8c5a3;
+  --surface-3: #f5e8c8;
+  --surface-4: #efdfba;
+  --surface-warm: #ecd9b5;
+
+  --ink: #1C223A;
+  --ink-02: rgba(28, 34, 58, 0.025);
+  --ink-04: rgba(28, 34, 58, 0.05);
+  --ink-05: rgba(28, 34, 58, 0.06);
+  --ink-06: rgba(28, 34, 58, 0.07);
+  --ink-08: rgba(28, 34, 58, 0.10);
+  --ink-10: rgba(28, 34, 58, 0.12);
+  --ink-12: rgba(28, 34, 58, 0.14);
+  --ink-15: rgba(28, 34, 58, 0.18);
+  --ink-20: rgba(28, 34, 58, 0.22);
+  --ink-25: rgba(28, 34, 58, 0.28);
+  --ink-30: rgba(28, 34, 58, 0.34);
+  --ink-35: rgba(28, 34, 58, 0.38);
+  --ink-40: rgba(28, 34, 58, 0.44);
+  --ink-44: rgba(28, 34, 58, 0.48);
+  --ink-50: rgba(28, 34, 58, 0.54);
+  --ink-55: rgba(28, 34, 58, 0.58);
+  --ink-60: rgba(28, 34, 58, 0.62);
+  --ink-64: rgba(28, 34, 58, 0.66);
+  --ink-65: rgba(28, 34, 58, 0.68);
+  --ink-70: rgba(28, 34, 58, 0.72);
+  --ink-78: rgba(28, 34, 58, 0.80);
+  --ink-85: rgba(28, 34, 58, 0.86);
+  --ink-92: rgba(28, 34, 58, 0.92);
+
+  --ink-strong: #1C223A;
+  --ink-strong-hover: #0f1426;
+  --ink-deep: #14193a;
+
+  --on-ink: #E5D4B6;
+  --on-brand: #ffffff;
+  --on-ink-06: rgba(229, 212, 182, 0.08);
+  --on-ink-08: rgba(229, 212, 182, 0.10);
+  --on-ink-10: rgba(229, 212, 182, 0.12);
+  --on-ink-12: rgba(229, 212, 182, 0.15);
+  --on-ink-15: rgba(229, 212, 182, 0.18);
+  --on-ink-18: rgba(229, 212, 182, 0.22);
+  --on-ink-20: rgba(229, 212, 182, 0.24);
+  --on-ink-25: rgba(229, 212, 182, 0.30);
+  --on-ink-30: rgba(229, 212, 182, 0.36);
+  --on-ink-40: rgba(229, 212, 182, 0.46);
+  --on-ink-50: rgba(229, 212, 182, 0.56);
+  --on-ink-55: rgba(229, 212, 182, 0.62);
+  --on-ink-60: rgba(229, 212, 182, 0.66);
+  --on-ink-65: rgba(229, 212, 182, 0.70);
+  --on-ink-70: rgba(229, 212, 182, 0.76);
+  --on-ink-80: rgba(229, 212, 182, 0.86);
+  --on-ink-85: rgba(229, 212, 182, 0.90);
+  --on-ink-90: rgba(229, 212, 182, 0.94);
+
+  --on-ink-soft-65: rgba(229, 212, 182, 0.70);
+  --on-ink-soft-80: rgba(229, 212, 182, 0.86);
+  --on-ink-soft-90: rgba(229, 212, 182, 0.94);
+
+  --placeholder: rgba(28, 34, 58, 0.40);
+  --placeholder-strong: rgba(28, 34, 58, 0.55);
+
+  --brand: #F44E1C;
+  --brand-fg: #c83812;
+  --brand-strong-fg: #b13310;
+  --brand-faint: rgba(244, 78, 28, 0.05);
+  --brand-soft: rgba(244, 78, 28, 0.08);
+  --brand-bg: rgba(244, 78, 28, 0.12);
+  --brand-border: rgba(244, 78, 28, 0.22);
+  --brand-hover: rgba(244, 78, 28, 0.18);
+  --brand-strong: rgba(244, 78, 28, 0.50);
+
+  --brand-light: #f7a878;
+  --brand-warm: #ff8a80;
+  --brand-warm-strong: #ff5a4f;
+
+  --danger: #c53030;
+  --danger-fg: #7a2222;
+  --danger-bg: rgba(197, 48, 48, 0.10);
+  --danger-bg-strong: rgba(211, 47, 47, 0.08);
+  --danger-border: rgba(211, 47, 47, 0.25);
+
+  --success: #34c759;
+  --success-fg: #1a4d2e;
+  --success-alt: #2ea043;
+  --success-alt-bg: rgba(46, 160, 67, 0.14);
+  --success-alt-border: rgba(46, 160, 67, 0.30);
+
+  --info: #2563eb;
+  --info-strong: rgba(20, 60, 160, 1);
+  --info-alt: #3677e2;
+  --info-alt-bg: rgba(54, 119, 226, 0.14);
+  --info-alt-border: rgba(54, 119, 226, 0.30);
+  --info-alt-soft: rgba(54, 119, 226, 0.08);
+
+  /* In retro the warm accents fold into the orange family. */
+  --brand-warm-soft: rgba(244, 78, 28, 0.08);
+  --brand-warm-bg: rgba(244, 78, 28, 0.14);
+  --brand-stronger: rgba(244, 78, 28, 0.85);
+
+  /* Icon tints — keep peach/lavender hues but desaturate against cream bg. */
+  --icon-bg-warm: rgba(255, 215, 195, 0.7);
+  --icon-bg-cool: rgba(210, 210, 235, 0.7);
+  --icon-bg-blue-soft: rgba(60, 70, 160, 0.22);
+  --icon-bg-blue-strong: rgba(60, 70, 160, 0.78);
+  --icon-bg-light: rgba(255, 250, 240, 0.7);
+
+  --backdrop: rgba(28, 34, 58, 0.55);
+
+  --shadow-card: 0 1px 2px 0 rgba(28, 34, 58, 0.06);
+  --shadow-pop:  0 8px 24px rgba(28, 34, 58, 0.14), 0 1px 2px rgba(28, 34, 58, 0.08);
+  --shadow-deep: 0 24px 64px rgba(28, 34, 58, 0.40);
+  --shadow-sm:   0 1px 2px rgba(28, 34, 58, 0.08);
+  --shadow-md:   0 8px 24px rgba(28, 34, 58, 0.16);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: var(--app-bg);
+  color: var(--ink-92);
+  font-family: var(--font-system);
+  font-size: var(--text-md);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+}

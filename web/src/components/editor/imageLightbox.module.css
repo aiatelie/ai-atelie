@@ -1,0 +1,47 @@
+/* imageLightbox.module.css — full-screen image preview overlay. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  cursor: zoom-out;
+}
+
+.img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.4);
+  cursor: default;
+  /* Pixel-art friendliness for stroke-heavy composites. */
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.closeBtn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  appearance: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease;
+}
+.closeBtn:hover { background: rgba(255, 255, 255, 0.2); }

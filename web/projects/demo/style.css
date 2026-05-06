@@ -1,0 +1,31 @@
+/* AI Atelie — LinkedIn banner exploration. Canvas-driven; the actual
+ * banner work lives inside Banner.jsx. This file only sets the
+ * document chrome and disables default scroll so the pan/zoom canvas
+ * owns the viewport.
+ *
+ * Palette is the brief's confident-technical set — Linear/Stripe/Vercel
+ * register, not parchment/editorial. */
+
+:root {
+  --ink:          #0E1116;   /* near-black primary text */
+  --paper:        #FBF7EE;   /* warm off-white background */
+  --accent-blue:  #2657FF;   /* primary CTA / link */
+  --accent-burnt: #D97757;   /* warm accent for emphasis */
+  --ink-soft:     #5A6470;   /* secondary text */
+  --rule:         #E8E0CD;   /* hairline dividers on paper */
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Inter", "InterVariable", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", system-ui, sans-serif;
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root { height: 100%; }

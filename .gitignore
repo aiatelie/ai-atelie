@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Local Claude settings
+.claude/settings.local.json
+
+# Per-user projects under web/projects/ are runtime data and not tracked,
+# EXCEPT the bundled demo project. .meta/ (chat history) inside the demo
+# is still per-user and stays ignored.
+/web/projects/*
+!/web/projects/demo/
+/web/projects/demo/.meta/
+/uploads/
+# Elicit form attachments (runtime user uploads served to iframes)
+web/public/uploads/
+
+# Old / scratch / generated
+_legacy/
+scrap/
+screenshots/
+/export/
+
+# Internal design / handoff notes (kept locally, not shipped)
+NOTES-claude-design.txt
+HANDOFF.txt
+BACKEND-ARCH-CLAUDE-DESIGN.txt
+MULTI-TENANT-CLAUDE-DESIGN.txt
+_internal/
+
+# Internal inspection scripts (not shipped)
+playwright-tools/
+
+# Personal user content — designs, templates, assets the maintainer
+# created for their own use. The OSS repo ships only the framework.
+# Local files in these paths stay on disk; they're just untracked.
+bg/
+content/
+editor/
+pages/
+globe-lottie.json
+vite.config.js
+web/.data/
+web/src/assets/hero.png
+
+# Local tooling caches
+.cache/
+.turbo/
+.parcel-cache/

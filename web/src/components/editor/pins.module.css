@@ -1,0 +1,45 @@
+/* Comment pin overlay — sits on top of the iframe stage, positioned
+   relative to the .frame wrapper. */
+
+.pinsLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.pin {
+  position: absolute;
+  appearance: none;
+  border: 2px solid var(--surface);
+  background: var(--brand);
+  color: var(--surface);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font: 700 11px var(--font-system);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 6px var(--ink-25), 0 0 0 1px var(--ink-05);
+  transition: transform 0.12s, background-color 0.12s;
+}
+.pin:hover { transform: translate(-50%, -50%) scale(1.15); }
+.pinSelected {
+  background: var(--ink-strong);
+  outline: 3px solid var(--brand-strong);
+}
+.pinPromoted {
+  /* In-flight: comment was bundled into a chat turn but not yet resolved.
+     Cool/neutral fill so the pin reads as "out for review" rather than
+     "still actionable". */
+  background: var(--ink-strong);
+  color: var(--surface);
+}
+.pinResolved {
+  /* Terminal: nothing to do here anymore. Muted brand to keep the row
+     visible but de-emphasised. */
+  background: var(--brand-strong);
+}

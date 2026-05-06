@@ -1,0 +1,107 @@
+/* Model picker — shared across ChatSidebar, CommentBubble, Inspector. */
+
+.modelPicker { position: relative; flex: 1; min-width: 0; }
+.modelPickerButton {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-92);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: 500 11.5px var(--font-system);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modelPickerButton:hover { background: var(--surface-4); }
+.modelChev { color: var(--ink-40); margin-left: 4px; font-size: 9px; }
+.modelDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.modelDot[data-provider="kimi"] { background: var(--info); }
+
+.modelMenu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 80;
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px var(--ink-15), 0 1px 3px var(--ink-06);
+  min-width: 280px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.modelGroup { display: flex; flex-direction: column; }
+.modelGroupLabel {
+  font: 600 10px var(--font-system);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-40);
+  padding: 6px 8px 4px;
+}
+.modelItem {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font: inherit;
+  color: var(--ink-92);
+}
+.modelItem:hover { background: var(--ink-04); }
+.modelItem[aria-pressed="true"] {
+  background: var(--brand-bg);
+  color: var(--brand-fg);
+}
+.modelLabelCol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.modelItemLabel {
+  font: 600 12.5px var(--font-system);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.modelBadge {
+  font-size: 9.5px;
+  font-weight: 500;
+  background: var(--ink-06);
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--ink-55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.modelItemDesc {
+  font-size: 11.5px;
+  color: var(--ink-50);
+}
+.modelLegacyToggle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-50);
+  font: 500 11px var(--font-system);
+  text-align: left;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.modelLegacyToggle:hover { background: var(--ink-04); }

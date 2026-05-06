@@ -1,0 +1,2315 @@
+/* Chat sidebar (right of the canvas / inspector). Conversational view of
+   one thread with the in-flight assistant message streamed in place. */
+
+.sidebar {
+  width: 380px;
+  background: var(--app-bg);
+  border-left: 1px solid var(--ink-08);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-system);
+  font-size: var(--text-md);
+  color: var(--ink-92);
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--ink-08);
+  background: var(--surface);
+}
+.tabBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-64);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tabBtn:hover { background: var(--ink-04); color: var(--ink-92); }
+.tabBtnActive { background: var(--ink-08); color: var(--ink-92); }
+.tabBadge {
+  background: var(--brand-bg);
+  color: var(--brand-fg);
+  font: var(--weight-semi) 10px var(--font-system);
+  border-radius: 999px;
+  padding: 1px 6px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.4;
+}
+.tabsSpacer { flex: 1; }
+.threadHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid var(--ink-08);
+  background: var(--surface);
+}
+.threadTabBar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--ink-08);
+  background: var(--app-bg);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-10) transparent;
+  min-height: 36px;
+  flex-shrink: 0;
+}
+.threadTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 9px;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  max-width: 160px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--ink-64);
+}
+.threadTab:hover { color: var(--ink-92); }
+.threadTabActive {
+  color: var(--ink-92);
+  border-bottom-color: var(--brand);
+}
+.threadTabTitle {
+  font: var(--weight-semi) var(--text-md) var(--font-system);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+.threadTabClose {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-44);
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+  flex-shrink: 0;
+}
+.threadTab:hover .threadTabClose,
+.threadTabActive .threadTabClose { visibility: visible; }
+.threadTabClose:hover { background: var(--ink-08); color: var(--ink-92); }
+
+.threadTabAdd {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-44);
+  width: 28px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  margin: 4px 2px;
+  flex-shrink: 0;
+}
+.threadTabAdd:hover { background: var(--ink-04); color: var(--ink-92); }
+
+.threadTabInput {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-92);
+  font: var(--weight-semi) var(--text-md) var(--font-system);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  margin: 4px 4px;
+  min-width: 120px;
+  max-width: 200px;
+}
+.threadTabInput:focus { border-color: var(--brand); }
+.threadTitle { font: var(--weight-semi) var(--text-sm) var(--font-system); color: var(--ink-92); }
+.threadTitleDim { font: var(--weight-medium) var(--text-sm) var(--font-system); color: var(--ink-44); font-style: italic; }
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ink-08);
+  background: var(--surface);
+}
+.headInfo { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.headText { display: flex; flex-direction: column; min-width: 0; }
+.headText b { font-size: var(--text-md); font-weight: var(--weight-semi); letter-spacing: 0.01em; }
+.meta { font-size: 11px; color: var(--ink-44); }
+.dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--placeholder-strong); flex-shrink: 0;
+}
+.dot[data-state="run"] { background: var(--brand); animation: chatPulse 1.4s ease-out infinite; }
+.dot[data-state="ok"] { background: var(--success); }
+.dot[data-state="err"] { background: var(--brand-warm-strong); }
+@keyframes chatPulse {
+  0% { box-shadow: 0 0 0 0 var(--brand-strong); }
+  100% { box-shadow: 0 0 0 8px transparent; }
+}
+
+.iconBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-55);
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.iconBtn:hover { background: var(--ink-06); color: var(--ink-92); }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-15) transparent;
+}
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--ink-44);
+}
+.emptyIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--ink-04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-30);
+}
+.emptyTitle {
+  font: 600 14px var(--font-system);
+  color: var(--ink-92);
+}
+.emptyText {
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-width: 260px;
+}
+
+.starterGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 18px;
+  width: 100%;
+  max-width: 320px;
+}
+.starterChip {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-92);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.3;
+  transition: border-color 0.12s ease, background 0.12s ease;
+  box-shadow: var(--shadow-card);
+}
+.starterChip:hover {
+  border-color: var(--brand-strong);
+  background: var(--surface);
+}
+
+.contextRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.contextPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  max-width: 100%;
+  font-size: var(--text-xs);
+  color: var(--ink-64);
+  background: var(--ink-04);
+  border: 1px solid var(--ink-08);
+  border-radius: 999px;
+}
+.contextPillRemove {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0 0 0 2px;
+  margin: 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-44);
+  cursor: pointer;
+}
+.contextPillRemove:hover { color: var(--ink-92); }
+.contextPillAdd {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  max-width: 100%;
+  font: inherit;
+  font-size: var(--text-xs);
+  color: var(--ink-44);
+  background: transparent;
+  border: 1px dashed var(--ink-15);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.contextPillAdd:hover { color: var(--ink-92); border-color: var(--ink-30); }
+.contextPillAdd svg { color: var(--ink-44); flex-shrink: 0; }
+.contextPill svg { color: var(--ink-44); flex-shrink: 0; }
+.contextPill span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.slashMenu {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  padding: 4px;
+  margin-bottom: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.slashItem {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.slashItem:hover,
+.slashItemActive { background: var(--ink-04); }
+.slashName {
+  font: var(--weight-semi) var(--text-md) var(--font-mono);
+  color: var(--ink-92);
+}
+.slashDesc {
+  font-size: var(--text-xs);
+  color: var(--ink-64);
+}
+
+.row { display: flex; flex-direction: column; }
+.rowUser { align-items: flex-end; }
+.rowAssistant { align-items: flex-start; }
+
+.assistantMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding-left: 2px;
+}
+.assistantAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand-bg);
+  color: var(--brand-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.assistantLabel {
+  font: 600 11.5px var(--font-system);
+  color: var(--ink-50);
+}
+
+.bubbleUser {
+  background: var(--ink-strong);
+  color: var(--surface-4);
+  border-radius: 14px 14px 4px 14px;
+  padding: 10px 14px;
+  max-width: 88%;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.bubbleAssistant {
+  background: var(--surface);
+  color: var(--ink-92);
+  border: 1px solid var(--ink-08);
+  border-radius: 14px 14px 14px 4px;
+  padding: 12px 14px;
+  max-width: 92%;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.refRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  color: var(--on-ink-soft-65);
+}
+.refThumb {
+  width: 56px;
+  height: 36px;
+  object-fit: cover;
+  object-position: top left;
+  border-radius: 5px;
+  border: 1px solid var(--on-ink-08);
+  background: var(--on-ink-06);
+  flex-shrink: 0;
+  display: block;
+}
+.refThumbBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: zoom-in;
+  flex-shrink: 0;
+  border-radius: 5px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.refThumbBtn:hover { transform: scale(1.05); box-shadow: 0 0 0 1px var(--brand); }
+.refThumbBtn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand); }
+.refLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.refTag {
+  font-family: var(--font-mono);
+  background: var(--on-ink-10);
+  padding: 1px 6px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+.refSnippet {
+  font-family: var(--font-system);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--on-ink-soft-80);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.refPath {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  opacity: 0.7;
+}
+
+.bubbleActionsRight {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.restoreBtn {
+  appearance: none;
+  border: 1px solid var(--on-ink-18);
+  background: transparent;
+  color: var(--on-ink-soft-90);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font: 500 11px var(--font-system);
+  cursor: pointer;
+}
+.restoreBtn:hover { background: var(--on-ink-08); color: var(--surface); }
+
+.text {
+  /* Conversational prose styling. INHERIT color from the parent bubble
+   *  (.bubbleAssistant uses --ink-92, .bubbleUser uses --surface-4 on
+   *  dark) so the same class works for both sides. The previous explicit
+   *  `color: var(--ink)` here forced dark text on the user bubble's dark
+   *  background — invisible. Don't add color back unless you scope it. */
+  word-break: break-word;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+/* Live-status row — shown inside .text while the assistant is pending
+ *  and no prose has streamed yet. Tells the user what the model is
+ *  doing right now (Reading X, Editing Y) so the bubble never looks
+ *  frozen. The streaming dots animate; the label updates as new tool
+ *  calls arrive. */
+.liveStatus {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--ink-60);
+  font-style: italic;
+}
+.liveStatusLabel {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.text > p:first-child { margin-top: 0; }
+.text > p:last-child { margin-bottom: 0; }
+.dim { color: var(--ink-40); font-style: italic; }
+.errText {
+  color: var(--brand-fg);
+  background: var(--brand-warm-soft);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--brand);
+  vertical-align: -2px;
+  margin-left: 2px;
+  animation: caret 1s steps(2) infinite;
+}
+@keyframes caret { 50% { opacity: 0.2; } }
+
+.streamingDots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 2px;
+}
+.streamingDots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: streamBounce 1.4s ease-in-out infinite both;
+}
+.streamingDots span:nth-child(1) { animation-delay: -0.32s; }
+.streamingDots span:nth-child(2) { animation-delay: -0.16s; }
+@keyframes streamBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  /* Tools are subordinate to the AI's prose now; sit BELOW the text
+   *  (margin-top instead of margin-bottom) and pull less attention. */
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+/* Compact mode (1-2 tool calls): pills line up horizontally and stay
+ *  small so they read as a footer rather than the headline. */
+.tools[data-compact="true"] {
+  flex-direction: row;
+  flex-wrap: wrap;
+  opacity: 0.78;
+}
+.tools[data-compact="true"] .toolChip {
+  font-size: 10px;
+  padding: 1px 7px;
+  width: auto;
+  justify-content: flex-start;
+}
+
+/* Collapsed footer for 3+ tool calls — single click-to-expand summary
+ *  so a many-step turn doesn't drown the prose. */
+.toolFooter {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.toolFooterToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px dashed var(--brand-border);
+  color: var(--brand-fg);
+  opacity: 0.7;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  appearance: none;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.toolFooterToggle:hover {
+  opacity: 1;
+  background: var(--brand-soft);
+}
+.toolFooterChev {
+  font-size: 9px;
+  opacity: 0.7;
+}
+.toolChipWrap {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 100%;
+}
+.toolChipWrap.toolChipOpen {
+  flex-basis: 100%;
+}
+.toolChip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  background: var(--brand-bg);
+  border: 1px solid var(--brand-border);
+  color: var(--brand-fg);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  appearance: none;
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.toolChip:hover:not(:disabled) {
+  background: var(--brand-hover);
+  border-color: var(--brand-strong);
+}
+.toolChip:disabled {
+  cursor: default;
+}
+.toolChipChev {
+  font-size: 9px;
+  opacity: 0.85;
+  transition: transform 140ms ease;
+}
+.toolChipOpen .toolChipChev {
+  transform: rotate(180deg);
+}
+
+.toolDetail {
+  margin-top: 4px;
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ink-78);
+  max-width: 100%;
+}
+.toolDetailRow {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  min-width: 0;
+}
+.toolDetailLabel {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-44);
+  font-weight: 600;
+}
+.toolDetailValue {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-all;
+}
+.toolDetailMono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.toolCodeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.toolCodeBlockLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.toolCodeBlockAction {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--ink-12);
+  border-radius: 4px;
+  padding: 1px 8px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--ink-60);
+  cursor: pointer;
+}
+.toolCodeBlockAction:hover {
+  border-color: var(--ink-30);
+  color: var(--ink-90);
+}
+.toolCode {
+  margin: 0;
+  background: var(--ink-04);
+  border: 1px solid var(--ink-06);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-78);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}
+.toolCodeMono {
+  font-family: var(--font-mono);
+}
+.toolCodeAdd {
+  background: var(--success-alt-bg);
+  border-color: var(--success-alt-border);
+  color: var(--success-fg);
+}
+.toolCodeDel {
+  background: var(--danger-bg-strong);
+  border-color: var(--danger-border);
+  color: var(--danger-fg);
+}
+
+.toolImageWrap {
+  margin-top: 2px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ink-04);
+  border: 1px solid var(--ink-06);
+  max-width: 100%;
+}
+.toolImage {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  background: var(--surface-4);
+}
+.toolImageMissing {
+  padding: 12px;
+  font-size: 11px;
+  color: var(--ink-50);
+  font-style: italic;
+  text-align: center;
+}
+
+.attachThumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.attachThumbs img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--on-ink-10);
+  cursor: pointer;
+}
+
+.bubbleActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+  gap: 6px;
+  align-items: center;
+}
+.undoBtn {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: transparent;
+  color: var(--ink-55);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: 500 11px var(--font-system);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.undoBtn:hover { background: var(--ink-04); color: var(--ink-92); }
+.copyBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-40);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.copyBtn:hover { background: var(--ink-06); color: var(--ink-92); }
+.revertedTag {
+  font-size: 10.5px;
+  color: var(--ink-40);
+  font-style: italic;
+}
+
+.bubbleMetaRight {
+  /* Renders INSIDE the dark .bubbleUser (see ChatSidebar.tsx) — needs an
+   *  on-ink token, not --ink-35 (dark ink on dark bg = invisible). */
+  font-size: 10.5px;
+  color: var(--on-ink-soft-65);
+  margin-top: 4px;
+  padding-right: 4px;
+}
+.bubbleMetaLeft {
+  font-size: 10.5px;
+  color: var(--ink-35);
+  margin-top: 4px;
+  padding-left: 4px;
+}
+
+/* Per-turn telemetry badge under the assistant timestamp. Subtle —
+ * monospace, secondary text, slightly smaller than the time itself so
+ * the eye treats it as metadata rather than chat content. */
+.costBadge {
+  display: block;
+  margin-top: 2px;
+  font: 400 10px var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  color: var(--ink-35);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Onboarding (full-page intake chat) ───────────────────── */
+.onboardShell {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  font-family: var(--font-system);
+}
+.onboardHeader {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--ink-06);
+  background: var(--surface);
+}
+.onboardBack {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-55);
+  font: 500 12px var(--font-system);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.onboardBack:hover { background: var(--ink-05); color: var(--ink-92); }
+.onboardTitle {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-92);
+  letter-spacing: -0.1px;
+}
+.onboardMain {
+  flex: 1;
+  overflow: hidden;
+  display: grid;
+  place-items: stretch center;
+}
+.onboardChat {
+  width: min(720px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+/* Inside the centered column, the borrowed ChatBody/Composer use the
+   sidebar's existing classes — they already work. We just need to
+   make the body grow and the composer pin to the bottom. */
+.onboardChat > .body { flex: 1; }
+
+/* Wizard-shaped onboarding: focused single-question view, no chat
+   history. One of: starting / thinking / question / form / ready. */
+.onboardWizard {
+  width: min(640px, 100%);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  padding: 32px 24px;
+  gap: 20px;
+}
+.wizardLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--ink-55);
+}
+.wizardLoadingTitle {
+  font: 600 15px var(--font-system);
+  color: var(--ink-92);
+}
+.wizardLoadingSub {
+  font-size: 12.5px;
+  max-width: 320px;
+  line-height: 1.5;
+}
+.wizardQuestion {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 24px;
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: 12px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink-92);
+}
+.wizardDot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+  margin-top: 7px;
+  box-shadow: 0 0 0 4px var(--brand-border);
+}
+.wizardQuestionText {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wizardReady {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 60px 20px;
+  text-align: center;
+}
+.wizardReadyMark {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--success);
+  color: var(--surface);
+  font-size: 28px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.wizardReadyTitle {
+  font: 600 18px var(--font-system);
+  color: var(--ink-92);
+}
+.wizardReadySub {
+  font-size: 13px;
+  color: var(--ink-60);
+  max-width: 480px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.wizardComposer {
+  margin-top: auto;
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.wizardComposerHint {
+  padding: 8px 12px 0;
+  font: var(--weight-medium) 11px var(--font-system);
+  color: var(--ink-44);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ─── Thinking block (Claude's extended reasoning, collapsible) ─── */
+.thinkingBlock {
+  margin-bottom: 8px;
+  border: 1px solid var(--ink-06);
+  border-radius: 6px;
+  background: var(--ink-02);
+  overflow: hidden;
+}
+.thinkingSummary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-50);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.thinkingSummary::-webkit-details-marker { display: none; }
+.thinkingSummary::before {
+  content: "▸";
+  font-size: 9px;
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.thinkingBlock[open] > .thinkingSummary::before {
+  transform: rotate(90deg);
+}
+.thinkingBody {
+  padding: 0 12px 10px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--ink-55);
+  white-space: pre-wrap;
+  line-height: 1.5;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* ─── Elicitation form (Claude asks a structured question) ─── */
+.elicitCard {
+  margin: 12px;
+  padding: 14px 14px 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--brand-strong);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 var(--ink-02), 0 4px 14px var(--brand-soft);
+}
+.elicitHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.elicitDot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-border);
+  flex-shrink: 0;
+}
+.elicitTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-85);
+  line-height: 1.35;
+}
+.elicitBody {
+  margin-bottom: 10px;
+}
+.elicitOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.elicitOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--ink-10);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.elicitOption:hover { background: var(--surface-4); }
+.elicitOptionOn {
+  background: var(--brand-bg);
+  border-color: var(--brand-strong);
+}
+.elicitOption input { accent-color: var(--brand); }
+.elicitInput, .elicitTextarea {
+  width: 100%;
+  border: 1px solid var(--ink-15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--surface);
+  outline: none;
+}
+.elicitInput:focus, .elicitTextarea:focus { border-color: var(--brand); }
+.elicitTextarea {
+  resize: none;
+  min-height: 60px;
+  line-height: 1.45;
+  overflow-y: auto;
+}
+.elicitTextareaWrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 8px;
+  padding: 2px;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.elicitTextareaDrag {
+  background: var(--brand-bg);
+  box-shadow: 0 0 0 2px var(--brand-strong);
+}
+.elicitTextareaHint {
+  font-size: 10.5px;
+  color: var(--ink-40);
+  padding-left: 4px;
+}
+.elicitNumberRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.elicitSlider { flex: 1; accent-color: var(--brand); }
+.elicitNumber {
+  width: 80px;
+  border: 1px solid var(--ink-15);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  text-align: right;
+}
+.elicitDropzone {
+  border: 1.5px dashed var(--ink-20);
+  border-radius: 8px;
+  padding: 18px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-55);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.elicitDropzone:hover { background: var(--surface-4); }
+.elicitDropzoneActive { background: var(--brand-bg); border-color: var(--brand); }
+.elicitDropzonePath {
+  font-size: 12px;
+  color: var(--ink-70);
+  word-break: break-all;
+}
+.elicitError {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--danger);
+}
+.elicitActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.elicitActionsSpacer { flex: 1; }
+.elicitTextToggle {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-50);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-20);
+  text-underline-offset: 2px;
+}
+.elicitTextToggle:hover { color: var(--brand); text-decoration-color: var(--brand); }
+.elicitTextToggle:disabled { opacity: 0.4; cursor: not-allowed; }
+.elicitBtn {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--ink-12);
+  background: var(--surface);
+  cursor: pointer;
+}
+.elicitBtn:hover { background: var(--surface-4); }
+.elicitBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.elicitPrimary {
+  background: var(--brand);
+  color: var(--surface);
+  border-color: var(--brand);
+}
+.elicitPrimary:hover:not(:disabled) { background: var(--brand-strong-fg); }
+
+/* ─── Composer (bottom of sidebar) ──────────────────────────── */
+.composer {
+  border-top: 1px solid var(--ink-08);
+  background: var(--surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.composerDrag { outline: 2px dashed var(--brand); outline-offset: -4px; }
+.composerField {
+  width: 100%;
+  border: 1px solid var(--ink-12);
+  border-radius: 8px;
+  padding: 8px 36px 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  background: var(--surface-4);
+  color: var(--ink-92);
+  outline: none;
+  resize: none;
+  min-height: 36px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.composerField:focus {
+  border-color: var(--brand-strong);
+  background: var(--surface);
+}
+.composerField::placeholder { color: var(--ink-35); }
+.composerActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.composerLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.composerAttachBtn {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--ink-15);
+  background: transparent;
+  color: var(--ink-65);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.composerAttachBtn:hover {
+  background: var(--surface);
+  color: var(--ink-strong);
+  border-color: var(--ink-35);
+}
+.composerSend {
+  appearance: none;
+  border: 0;
+  background: var(--ink-strong);
+  color: var(--surface);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.composerSend:hover { background: var(--ink-strong-hover); }
+.composerSend:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.composerStop {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--brand-strong);
+  background: var(--surface);
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.composerStop:hover {
+  background: var(--brand);
+  color: var(--surface);
+  border-color: var(--brand);
+}
+
+/* Comments panel — list of saved annotations */
+.commentItem {
+  border: 1px solid var(--ink-08);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.commentItem:hover { border-color: var(--brand-strong); }
+.commentItemSelected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-border);
+}
+.commentItemResolved { opacity: 0.55; }
+.commentItemResolved .commentBody { text-decoration: line-through; }
+
+.commentRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.commentPin {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: var(--surface);
+  font: 700 11px var(--font-system);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.commentThumb {
+  width: 56px;
+  height: 36px;
+  object-fit: cover;
+  object-position: top left;
+  border-radius: 5px;
+  border: 1px solid var(--ink-08);
+  flex-shrink: 0;
+}
+.commentRef {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--ink-44);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.commentRef .refTag {
+  background: var(--ink-06);
+  color: var(--ink-55);
+}
+.commentSnippet {
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.commentBody {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-92);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.commentActions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.commentLinkBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-50);
+  padding: 3px 7px;
+  font: 500 11px var(--font-system);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.commentLinkBtn:hover { background: var(--ink-06); color: var(--ink-92); }
+
+.promoteSplit {
+  display: inline-flex;
+  align-items: stretch;
+  position: relative;
+  border-radius: 5px;
+}
+.promoteSplit:hover { background: var(--ink-04); }
+.promoteSplit > .commentLinkBtn { background: transparent; }
+.promoteSplit > .commentLinkBtn:hover { background: transparent; color: var(--ink-92); }
+.promoteChevron {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-44);
+  padding: 3px 6px 3px 4px;
+  font: 500 10px var(--font-system);
+  cursor: pointer;
+  border-left: 1px solid var(--ink-08);
+}
+.promoteChevron:hover { color: var(--ink-92); }
+.promoteMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px var(--ink-08);
+  min-width: 180px;
+  z-index: 5;
+  overflow: hidden;
+}
+.promoteMenuItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: 500 12px var(--font-system);
+  color: var(--ink-92);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.promoteMenuItem:hover { background: var(--brand-bg); color: var(--brand); }
+
+.commentComposer {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--ink-08);
+  background: var(--surface);
+  margin-top: auto;
+}
+.commentComposer .composerField {
+  padding-right: 10px;
+}
+
+.composerAttaches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.composerAttachItem {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--ink-10);
+}
+.composerAttachItem img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.composerAttachRemove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  appearance: none;
+  border: 0;
+  background: var(--ink-70);
+  color: var(--surface);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.composerAttachRemove:hover { background: var(--ink-strong-hover); }
+
+/* User-bubble attachment thumbnails — shown above the message text so the
+   user can verify what they sent. Clicking opens the data URL full-size. */
+.bubbleAttaches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.bubbleAttachItem {
+  display: block;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--ink-15);
+  background: var(--ink-04);
+}
+.bubbleAttachItem img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ─── Queued message bubble (one-slot composer queue) ──────── */
+
+.queuedBubble {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 12px 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--ink-15);
+  border-radius: 10px;
+  background: var(--surface-4);
+  color: var(--ink-65);
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+.queuedTag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--ink-12);
+  color: var(--ink-65);
+}
+.queuedText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.queuedCancel {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-50);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.queuedCancel:hover {
+  background: var(--ink-08);
+  color: var(--ink-strong);
+}
+
+/* ─── Markdown rendering ───────────────────────────────────── */
+
+.markdownParagraph {
+  margin: 0 0 10px;
+  line-height: 1.55;
+}
+.markdownParagraph:last-child {
+  margin-bottom: 0;
+}
+
+.inlineCode {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--ink-06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--brand-fg);
+}
+
+.markdownLink {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdownLink:hover {
+  color: var(--brand-fg);
+}
+
+.markdownUl,
+.markdownOl {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  line-height: 1.55;
+}
+.markdownUl li,
+.markdownOl li {
+  margin-bottom: 3px;
+}
+.markdownUl:last-child,
+.markdownOl:last-child {
+  margin-bottom: 0;
+}
+
+.codeBlock {
+  margin: 10px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ink-10);
+  background: var(--surface-3);
+}
+.codeBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--surface-warm);
+  border-bottom: 1px solid var(--ink-06);
+}
+.codeBlockLang {
+  font: 500 10.5px var(--font-mono);
+  color: var(--ink-55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.codeBlockCopy {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-55);
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.codeBlockCopy:hover {
+  background: var(--ink-08);
+  color: var(--ink-85);
+}
+.codeBlockPre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-85);
+}
+.codeBlockPre code {
+  font-family: var(--font-mono);
+  white-space: pre;
+}
+
+/* Shiki-rendered fenced block.
+ * Shiki injects its own <pre><code> with inline `style="background:…"`
+ * and per-token `<span style="color:…">`. We override the outer chrome
+ * (margin/padding/font) here; the token colors come from the theme. */
+.codeBlockShiki {
+  overflow-x: auto;
+}
+.codeBlockShiki :global(pre.shiki) {
+  margin: 0;
+  padding: 10px 12px;
+  font: 12px/1.5 var(--font-mono);
+  background: transparent !important;
+}
+.codeBlockShiki :global(pre.shiki code) {
+  font-family: var(--font-mono);
+  white-space: pre;
+  display: block;
+}
+
+/* ─── Unified diff renderer (DiffBlock) ────────────────────────
+ * GitHub/Cursor-style: line numbers in a pair of gutters, +/- sign
+ * column, color-coded rows. Used for tool-call edit displays. */
+
+.diffBlock {
+  margin: 10px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.diffBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-warm);
+  border-bottom: 1px solid var(--ink-06);
+}
+.diffBlockFilename {
+  font: 500 11px var(--font-mono);
+  color: var(--ink-78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.diffBlockHeaderRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.diffBlockStat {
+  font: 500 10.5px var(--font-mono);
+  color: var(--ink-55);
+}
+.diffStatAdd {
+  font: 600 10.5px var(--font-mono);
+  color: var(--success-fg);
+}
+.diffStatDel {
+  font: 600 10.5px var(--font-mono);
+  color: var(--danger-fg);
+}
+.diffBlockBody {
+  max-height: 360px;
+  overflow: auto;
+}
+.diffRow,
+.diffHunkHeader {
+  display: flex;
+  align-items: flex-start;
+  white-space: pre;
+}
+.diffHunkHeader {
+  background: var(--ink-04);
+  color: var(--ink-55);
+  border-top: 1px solid var(--ink-06);
+  border-bottom: 1px solid var(--ink-06);
+}
+.diffHunkText {
+  padding: 2px 8px;
+  font: 500 11px var(--font-mono);
+}
+.diffGutter {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  text-align: right;
+  color: var(--ink-40);
+  user-select: none;
+  border-right: 1px solid var(--ink-06);
+}
+.diffSign {
+  flex: 0 0 auto;
+  width: 1.4ch;
+  text-align: center;
+  padding: 0 4px;
+  color: var(--ink-44);
+  user-select: none;
+}
+.diffLineText {
+  flex: 1 1 auto;
+  padding: 0 8px 0 4px;
+  white-space: pre;
+  color: var(--ink-85);
+}
+.diffRowCtx {
+  background: var(--surface);
+}
+.diffRowAdd {
+  background: var(--success-alt-bg);
+}
+.diffRowAdd .diffSign,
+.diffRowAdd .diffLineText {
+  color: var(--success-fg);
+}
+.diffRowDel {
+  background: var(--danger-bg-strong);
+}
+.diffRowDel .diffSign,
+.diffRowDel .diffLineText {
+  color: var(--danger-fg);
+}
+
+/* ─── Thread switcher ──────────────────────────────────────── */
+
+.threadSwitcher {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.threadSwitcherBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+.threadSwitcherBtn:hover { background: var(--ink-04); }
+.threadChev {
+  font-size: 9px;
+  color: var(--ink-40);
+  flex-shrink: 0;
+}
+.threadMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 80;
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px var(--ink-15), 0 1px 3px var(--ink-06);
+  min-width: 260px;
+  max-width: 320px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.threadItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+}
+.threadItem:hover { background: var(--ink-04); }
+.threadItemActive { background: var(--brand-bg); }
+.threadItemTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.threadItemTitle {
+  font: 500 12.5px var(--font-system);
+  color: var(--ink-92);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.threadItemCount {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-40);
+  background: var(--ink-06);
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.threadItemDate {
+  font-size: 11px;
+  color: var(--ink-40);
+}
+.threadItemDelete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-35);
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.threadItem:hover .threadItemDelete { display: inline-flex; }
+.threadItemDelete:hover { background: var(--ink-08); color: var(--brand-fg); }
+
+/* ─── Comment promoted badge & model picker ────────────────── */
+
+.promotedBadge {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--brand-bg);
+  color: var(--brand-fg);
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.commentModelPicker {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ─── Thread title inline edit ─────────────────────────────── */
+
+.threadTitleInput {
+  font: 600 12px var(--font-system);
+  color: var(--ink-92);
+  border: 1px solid var(--brand-strong);
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: var(--surface);
+  outline: none;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Delete message button (user bubbles) ─────────────────── */
+
+.deleteMsgBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  /* Bumped from --on-ink-50 → --on-ink-soft-65 so the icons are
+   *  visibly clickable on the dark bubble without being noisy. */
+  color: var(--on-ink-soft-65);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.deleteMsgBtn:hover { background: var(--on-ink-10); color: var(--surface); }
+
+/* ─── Retry button (assistant error bubbles) ───────────────── */
+
+.retryBtn {
+  appearance: none;
+  border: 1px solid var(--brand-strong);
+  background: var(--brand-bg);
+  color: var(--brand-fg);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: 500 11px var(--font-system);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.retryBtn:hover { background: var(--brand-border); }
+
+/* ─── Comments panel: filter chips + selection bar + multi-select
+       per-row (PR-review-style multi-select promotion) ───── */
+
+.cpFilterRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--ink-08);
+  margin-bottom: 8px;
+  position: sticky;
+  top: 0;
+  background: var(--app-bg);
+  z-index: 3;
+  flex-wrap: wrap;
+}
+.cpFilterChip {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: transparent;
+  color: var(--ink-65);
+  font: 500 11.5px var(--font-system);
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.cpFilterChip:hover {
+  border-color: var(--ink-20);
+  color: var(--ink-92);
+}
+.cpFilterChipActive {
+  background: var(--brand-bg);
+  border-color: var(--brand-strong);
+  color: var(--brand-fg);
+}
+.cpFilterChipCount {
+  font-size: 10px;
+  font-weight: 600;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.cpSelectionBar {
+  position: sticky;
+  top: 36px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: var(--brand-bg);
+  border: 1px solid var(--brand-strong);
+  box-shadow: var(--shadow-card);
+}
+/* Top row: count on the left, Clear on the right. Action buttons live
+   in cpSelectionRow below so they wrap independently of the count. */
+.cpSelectionHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cpSelectionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cpSelectionCount {
+  font: 600 12px var(--font-system);
+  color: var(--brand-fg);
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cpSelectionBtn {
+  appearance: none;
+  border: 1px solid var(--brand-strong);
+  background: var(--surface);
+  color: var(--brand-fg);
+  font: 500 11.5px var(--font-system);
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cpSelectionBtn:hover { background: var(--brand-border); }
+/* "Clear" sits in the head row — make it visually quieter so the
+   destructive/primary actions below dominate. */
+.cpSelectionBtnGhost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--brand-fg);
+  padding: 2px 6px;
+}
+.cpSelectionBtnGhost:hover {
+  background: var(--brand-border);
+  border-color: transparent;
+}
+.cpSelectionBtnPrimary {
+  background: var(--brand);
+  color: var(--surface);
+  border-color: var(--brand);
+}
+.cpSelectionBtnPrimary:hover {
+  filter: brightness(0.95);
+}
+.cpSelectionMenuWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.cpSelectionSplitChev {
+  appearance: none;
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: var(--surface);
+  cursor: pointer;
+  padding: 0 8px;
+  font-size: 10px;
+  border-radius: 0 6px 6px 0;
+  margin-left: -1px;
+}
+.cpSelectionSplitChev:hover { filter: brightness(0.95); }
+.cpSelectionMenuWrap > .cpSelectionBtnPrimary { border-radius: 6px 0 0 6px; }
+.cpSelectionMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: 8px;
+  box-shadow: var(--shadow-pop);
+  min-width: 240px;
+  padding: 4px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cpSelectionMenuItem {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--ink-92);
+  font: 500 12px var(--font-system);
+  gap: 2px;
+}
+.cpSelectionMenuItem:hover { background: var(--ink-04); }
+.cpSelectionMenuItemDesc {
+  font-size: 10.5px;
+  color: var(--ink-50);
+  font-weight: 400;
+}
+
+.cpRowCheckbox {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--ink-20);
+  border-radius: 4px;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  background: var(--surface);
+  margin: 0;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cpRowCheckbox:hover { border-color: var(--brand-strong); }
+.cpRowCheckbox:checked {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.cpRowCheckbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--surface);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.cpRowMenu {
+  position: relative;
+  margin-left: auto;
+}
+.cpRowMenuBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-44);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.cpRowMenuBtn:hover { background: var(--ink-06); color: var(--ink-92); }
+.cpRowMenuPopup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 2px;
+  background: var(--surface);
+  border: 1px solid var(--ink-10);
+  border-radius: 8px;
+  box-shadow: var(--shadow-pop);
+  min-width: 160px;
+  padding: 4px;
+  z-index: 5;
+}
+.cpRowMenuItem {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font: 500 12px var(--font-system);
+  color: var(--ink-92);
+}
+.cpRowMenuItem:hover { background: var(--ink-04); }
+
+/* Item state badges (Promoted / Resolved) — rendered inline next to
+   the snippet. */
+.cpStateBadge {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.cpStateBadgePromoted {
+  background: var(--ink-08);
+  color: var(--ink-65);
+}
+.cpStateBadgeResolved {
+  background: var(--success-alt-bg, var(--ink-08));
+  color: var(--success-fg, var(--ink-65));
+}
+
+/* Auto-resolve confirm strip — shown right after a promotion's stream
+   finishes. One-click confirm so the user doesn't have to dig. */
+.cpAutoResolveStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: var(--success-alt-bg, var(--brand-bg));
+  border: 1px solid var(--success-alt-border, var(--brand-strong));
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--ink-92);
+}
+.cpAutoResolveStripText { flex: 1; }
+.cpAutoResolveStripBtn {
+  appearance: none;
+  border: 1px solid var(--brand-strong);
+  background: var(--brand);
+  color: var(--surface);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font: 600 11.5px var(--font-system);
+  cursor: pointer;
+}
+.cpAutoResolveStripDismiss {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ink-50);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+.cpAutoResolveStripDismiss:hover { color: var(--ink-92); }
+
+/* Drag affordance (a future re-order ships behind a sibling agent's
+   PR — class is reserved so layout is stable when it lands). */
+.cpRowDragHandle {
+  width: 8px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: grab;
+  opacity: 0;
+  background-image:
+    radial-gradient(circle, var(--ink-20) 1px, transparent 1px);
+  background-size: 4px 4px;
+  background-position: 0 0;
+  transition: opacity 0.12s ease;
+}
+.commentItem:hover .cpRowDragHandle { opacity: 0.6; }
+
+/* Composer attach button for the file-level free-form composer. */
+.cpComposerAttachBtn {
+  appearance: none;
+  border: 1px solid var(--ink-12);
+  background: transparent;
+  color: var(--ink-55);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.cpComposerAttachBtn:hover { background: var(--ink-06); color: var(--ink-92); }
+
+/* ─── Collapsible code blocks ──────────────────────────────── */
+
+.codeBlockActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.codeBlockToggle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--on-ink-50);
+  font: 500 11px var(--font-system);
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+.codeBlockToggle:hover {
+  background: var(--on-ink-10);
+  color: var(--surface);
+}
