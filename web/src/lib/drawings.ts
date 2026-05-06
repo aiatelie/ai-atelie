@@ -1,13 +1,28 @@
-/* drawings.ts — per-route freehand strokes drawn on top of the iframe.
+/* drawings.ts — per-project, per-route freehand strokes on the iframe.
  *
  * Coordinates are stored in iframe-content px (zoom-invariant), like
  * comment pins, so strokes survive zoom changes and viewport switches.
  *
- * Storage key: "drawings.v1"
- *   Record<route, Stroke[]>
+ * Storage layers (same pattern as editorOverrides):
+ *
+ *   memory cache  — per-process Map keyed by projectId. Render hot
+ *                   path (the SVG overlay) reads from here, sync.
+ *   localStorage  — `drawings.v1:<projectId>`. Survives a tab reload.
+ *   /api/projects/:id/meta/drawings — cross-browser source of truth.
+ *                   Pushed with a 250ms debounce; pulled on first
+ *                   read of each project.
+ *
+ * Legacy migration: previous shape was a single workspace-wide
+ * `drawings.v1` key. On first read we attribute its contents to the
+ * active project, write to the per-project key, and drop the legacy
+ * key. Cross-project route-name collisions get absorbed into the
+ * active project — known one-time loss; the legacy key already had
+ * this bug.
  */
 
 import { useEffect, useState } from "react";
+import { getActiveProject } from "./projects";
+import { pullMeta, pushMetaSoon } from "./projectMetaSync";
 
 export type Point = { x: number; y: number };
 
@@ -19,22 +34,84 @@ export type Stroke = {
   ts: number;
 };
 
-const KEY = "drawings.v1";
+const LS_PREFIX = "drawings.v1:";
+const LEGACY_KEY = "drawings.v1";
+const META_KEY = "drawings";
+
+const cache = new Map<string, Record<string, Stroke[]>>();
+const hydrated = new Set<string>();
 
 function uuid(): string {
   return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
 }
 
-function readAll(): Record<string, Stroke[]> {
+function lsKey(projectId: string): string {
+  return LS_PREFIX + projectId;
+}
+
+function readLocalStorageFor(projectId: string): Record<string, Stroke[]> {
   if (typeof window === "undefined") return {};
   try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as Record<string, Stroke[]>) : {};
-  } catch { return {}; }
+    const raw = localStorage.getItem(lsKey(projectId));
+    if (raw) return JSON.parse(raw) as Record<string, Stroke[]>;
+  } catch { /* ignore */ }
+  // Legacy migration
+  try {
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy) {
+      const data = JSON.parse(legacy) as Record<string, Stroke[]>;
+      try {
+        localStorage.setItem(lsKey(projectId), legacy);
+        localStorage.removeItem(LEGACY_KEY);
+      } catch { /* ignore */ }
+      return data;
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
+function writeLocalStorageFor(projectId: string, all: Record<string, Stroke[]>): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(lsKey(projectId), JSON.stringify(all)); }
+  catch { /* ignore */ }
+}
+
+function getProjectId(): string {
+  return getActiveProject()?.id ?? "";
+}
+
+function hydrateFromDisk(projectId: string): void {
+  if (!projectId) return;
+  if (hydrated.has(projectId)) return;
+  hydrated.add(projectId);
+  if (typeof window === "undefined") return;
+  void pullMeta<Record<string, Stroke[]>>(projectId, META_KEY).then((data) => {
+    if (!data || typeof data !== "object") return;
+    cache.set(projectId, data);
+    writeLocalStorageFor(projectId, data);
+    try { window.dispatchEvent(new CustomEvent("drawings:change")); }
+    catch { /* ignore */ }
+  });
+}
+
+function readAll(): Record<string, Stroke[]> {
+  const projectId = getProjectId();
+  if (!projectId) return {};
+  let data = cache.get(projectId);
+  if (!data) {
+    data = readLocalStorageFor(projectId);
+    cache.set(projectId, data);
+    hydrateFromDisk(projectId);
+  }
+  return data;
 }
 
 function writeAll(all: Record<string, Stroke[]>) {
-  try { localStorage.setItem(KEY, JSON.stringify(all)); } catch { /* ignore */ }
+  const projectId = getProjectId();
+  if (!projectId) return;
+  cache.set(projectId, all);
+  writeLocalStorageFor(projectId, all);
+  pushMetaSoon(projectId, META_KEY, all);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("drawings:change"));
   }
