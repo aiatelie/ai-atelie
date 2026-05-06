@@ -21,19 +21,25 @@ You'll need one agent CLI on your `PATH`:
 
 These are the areas where a PR is most likely to land:
 
-- **Add a skill.** Drop a new `skills/<your-skill>/SKILL.md` with frontmatter + body, and add an entry to `skills/index.json`. See existing skills for the shape.
+- **Add a product skill.** Drop a new `skills/<your-skill>/SKILL.md` with frontmatter + body, and add an entry to `skills/index.json`. End-user-facing playbook the agent can call mid-conversation. See `skills/README.md`.
+- **Add an MCP server.** Drop a new `mcp/<your-server>.mjs` and wire it into the adapter spawn block in `api/src/services/claude.ts`. Exposes a tool to the model (e.g. `ask_user`, `copy_starter`). See `mcp/README.md`.
 - **Add a starter scaffold.** New `mcp/starters/<Component>.jsx` files become available via `copy_starter`. Keep them small and broadly useful.
+- **Add a dev-time skill.** Drop a new `.claude/skills/<your-skill>/SKILL.md`. Contributor workflow that loads when *you* (not end users) open Claude Code in this repo. See `.claude/skills/README.md`.
 - **Wire a new agent CLI.** Adapters live under `api/src/agents/<name>/`. The opencode adapter is a good reference.
 - **Fix a real bug.** Reproduce locally first; PR with a one-line description of the symptom and the fix.
 
-## Dev-time vs. product-runtime config
+## Where does my contribution belong? (decision matrix)
 
-The repo intentionally separates two namespaces:
+The repo deliberately keeps three namespaces separate. Pick the one that matches *who* uses what you're adding:
 
-- **`/skills/`** — product skills shipped to end users. Adapters (`api/src/services/claude.ts`, `kimi.ts`, etc.) load them into spawned sessions via `ENV.SKILLS_DIR`. Never auto-loaded into your dev session.
-- **`/.claude/`** — dev-time harness config that loads when you open Claude Code in this repo to work *on* AI Atelie. Skills here (`/.claude/skills/`) are contributor workflows, not user features.
+| If your contribution is for… | It goes under | Loaded by | Auto-loaded in your dev session? |
+|---|---|---|---|
+| **End users invoking the editor** — a designer-facing playbook | `/skills/<name>/SKILL.md` | Adapters spawn the agent CLI with `additionalDirectories: [ENV.SKILLS_DIR]` (see `api/src/services/claude.ts`) | ❌ No |
+| **End users**, but exposes a *tool call* (not just text) — e.g. file ops, "ask the user" prompts, web fetch | `/mcp/<server>.mjs` + wired in `api/src/services/claude.ts` `mcpServers` | The agent CLI loads it as an MCP server, exposed as `mcp__<server>__<tool>` to the model | ❌ No |
+| **Contributors working ON the repo** — workflow you want Claude Code to follow when you ask *it* to ship | `/.claude/skills/<name>/SKILL.md` | Claude Code's native skill auto-discovery when you open the repo | ✅ Yes |
+| **Contributors**, but a one-off task script (release, evidence upload, dev-server probes) | `/scripts/<name>.mjs` + a `bun run <name>` entry in `package.json` | You run it manually | n/a |
 
-If you're adding something for end users, it belongs under `/skills/` with an entry in `skills/index.json`. If you're adding something to make contributing easier, it belongs under `/.claude/skills/`.
+Mixing these up is the most common review-blocker on this repo. End-user features should never auto-load into a dev session (that's why `/skills/` is *not* symlinked into `.claude/skills/` — see #46). Contributor workflows should never reach end-user adapter sessions (the `additionalDirectories` and `settingSources: []` boundary in `claude.ts` enforces this).
 
 ## Bar for merging
 
