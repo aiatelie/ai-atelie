@@ -91,11 +91,11 @@ export interface BlobStore {
 
 /* ─── AppendLog: append-only event sequence ─────────────────────────
  *
- * Sketched here so PR 2 (snapshots → AppendLog, fixes the in-memory
- * comment-undo bug) doesn't perturb the interface. Not implemented in
- * either driver yet; methods throw if called. The shape is what
- * `/api/comment-undo` and a future Last-Event-ID-resumable run-events
- * SSE will both need.
+ * Per-project monotonic seq log. FS driver writes one JSON entry per
+ * line to `<projectDir>/.meta/history.jsonl`; memory driver holds an
+ * array. Subscribe with `sinceSeq` replays past entries then attaches
+ * for live ones — the shape a Last-Event-ID-resumable run-events SSE
+ * (issue #12) will plug into directly.
  */
 
 export type LogEntry<T = unknown> = {
@@ -130,8 +130,9 @@ export type ProjectScope = {
   meta: JsonKv;
   /** Project source files and uploads. Excludes `.meta/`. */
   files: BlobStore;
-  /** Append-only history (.meta/history.jsonl in PR 2). Defined but
-   *  not implemented in either driver yet — calls throw. */
+  /** Append-only history. FS impl: `.meta/history.jsonl`. Used by
+   *  the Last-Event-ID-resumable run-events SSE (issue #12) and any
+   *  future replayable edit log. */
   history: AppendLog;
 };
 
