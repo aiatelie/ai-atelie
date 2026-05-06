@@ -8,6 +8,23 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.1.2
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.1...v0.1.2)
+
+### Features
+
+- **web:** Tool-call kinds — colored chips with isError + DRY shared categorization ([#14](https://github.com/aiatelie/ai-atelie/pull/14))
+
+### Docs
+
+- **repo:** Backfill v0.1.1 release notes with the canvas-pulse feature ([5cd04cc](https://github.com/aiatelie/ai-atelie/commit/5cd04cc))
+- **skills:** Evidence must show the canvas/result + use Sonnet for runs (#14 review) ([#14](https://github.com/aiatelie/ai-atelie/issues/14))
+
+### ❤️ Contributors
+
+- Kadu-maverickk <kadumaverick1314@gmail.com>
+
 ## v0.1.1
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.0...v0.1.1)
