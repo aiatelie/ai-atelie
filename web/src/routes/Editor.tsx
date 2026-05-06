@@ -48,7 +48,6 @@ const QuickSwitcher = lazy(() => import("../components/editor/QuickSwitcher").th
 const DrawOverlay = lazy(() => import("../components/editor/DrawOverlay").then((m) => ({ default: m.DrawOverlay })));
 const DrawActionBar = lazy(() => import("../components/editor/DrawActionBar").then((m) => ({ default: m.DrawActionBar })));
 import { clearStrokes, useStrokes, compositeStrokesOnto } from "../lib/drawings";
-import { kindOf } from "../lib/toolKind";
 import { useProjects, updateProject, setActiveProject, hydrateProjectFromServer } from "../lib/projects";
 import { applySharedAssetsToDoc } from "../lib/sharedAssets";
 import {
@@ -68,7 +67,6 @@ import { useTweakBridge } from "../lib/tweakBridge";
 import type { ChatMessage, ChatThread, ThreadArchive, QueuedMessage } from "../components/editor/ChatSidebar";
 import { loadThreads as libLoadThreads, saveThreads, subscribeThreads, releaseProject as releaseThreadsProject } from "../lib/threads";
 import { attachStreamToThread, detachStream, isThreadShadowed } from "../lib/streamPersistence";
-import { loadModelId } from "../components/editor/ModelPicker";
 import { cssPath, resolveCssPath, buildDescriptor } from "../lib/cssPath";
 import { applyOverrides, setOverride, clearRoute, readRoute, useOverrideCount } from "../lib/editorOverrides";
 import { getTheme, setTheme, themes, type ThemeName } from "../lib/theme";
@@ -326,30 +324,9 @@ function ProjectTitle({ value, onChange }: { value: string; onChange: (v: string
   );
 }
 
-/** Read a CSS custom property from :root at runtime, with optional fallback.
- *  Re-reads on the editor-theme-change event so consumers always reflect
- *  the active theme. Use for places that can't resolve var() — e.g. SVG
- *  attributes (stroke=) or canvas APIs. */
-function useCssVar(name: string, fallback: string): string {
-  const read = () => {
-    if (typeof document === "undefined") return fallback;
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
-  };
-  const [value, setValue] = useState<string>(read);
-  useEffect(() => {
-    const refresh = () => setValue(read());
-    window.addEventListener("editor-theme-change", refresh);
-    return () => window.removeEventListener("editor-theme-change", refresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, fallback]);
-  return value;
-}
-
 export default function Editor() {
   const [params, setParams] = useSearchParams();
   const { active: activeProject } = useProjects();
-  const brandColor = useCssVar("--brand", "#d97757");
 
   // No active project (first run, or last project deleted) → bounce to
   // the Projects dashboard so the user can pick or create one. The
@@ -1492,23 +1469,6 @@ export default function Editor() {
   }, [activeProject.id]);
 
   const isDesignFiles = activeTabId === DESIGN_FILES_TAB_ID;
-  // "Empty project" mode — no real artifact has been built yet, so the
-  // canvas would just be a blank starter `index.html`. We collapse the
-  // editor chrome (toolbar, canvas, inspector) into a centered chat
-  // layout so the user can have a focused conversation while Claude
-  // figures out what to build. As soon as Claude writes the first real
-  // file, this flips false and the regular editor returns. Reactive on
-  // chat state — no fetch needed; Editor/MultiEdit/Write/NotebookEdit
-  // tool calls are the signal that a real file exists.
-  const isEmptyProject = useMemo(() => {
-    for (const t of threads) {
-      for (const m of t.messages) {
-        if (m.role !== "assistant") continue;
-        if (m.tools?.some((tool) => kindOf(tool.name) === "edit")) return false;
-      }
-    }
-    return true;
-  }, [threads]);
   // When the synthetic Design Files tab is active, fall back to the first
   // real tab so downstream handlers (toolbar callbacks, applyToSelection)
   // still resolve a route without null-checking everywhere. The toolbar +
@@ -2091,7 +2051,6 @@ export default function Editor() {
         }}
         zoom={zoom}
         onZoom={setZoom}
-        route={activeTab.route}
         showZoom={activeTab.display === "frame"}
         display={activeTab.display}
         onDisplay={(d) =>
@@ -3088,7 +3047,6 @@ function Toolbar({
   onMode,
   zoom,
   onZoom,
-  route,
   showZoom,
   display,
   onDisplay,
@@ -3099,6 +3057,7 @@ function Toolbar({
   overrideCount,
   onSaveInspectorEdits,
   onBakeToSource,
+  onReset,
   onClearStrokes,
   exportScale,
   onExportScale,
@@ -3125,7 +3084,6 @@ function Toolbar({
   onMode: (m: Mode) => void;
   zoom: number;
   onZoom: (z: number) => void;
-  route: string;
   showZoom: boolean;
   display: DisplayMode;
   onDisplay: (d: DisplayMode) => void;
