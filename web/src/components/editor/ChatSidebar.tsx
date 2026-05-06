@@ -857,6 +857,11 @@ function ChatBody({
   const bodyRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  // True when the user has scrolled up far enough that auto-scroll has
+  // disengaged AND the bottom is meaningfully off-screen — that's when
+  // a "Jump to latest" affordance helps. Threshold (120px) is the same
+  // used by the open-design `chat-jump-btn` so the muscle memory matches.
+  const [showJumpBtn, setShowJumpBtn] = useState(false);
 
   // Scroll to bottom when new messages arrive or content changes (streaming).
   useEffect(() => {
@@ -868,8 +873,15 @@ function ChatBody({
   const onScroll = () => {
     const el = bodyRef.current;
     if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    setAutoScroll(nearBottom);
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setAutoScroll(distanceFromBottom < 40);
+    setShowJumpBtn(distanceFromBottom > 120);
+  };
+
+  const jumpToLatest = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    setAutoScroll(true);
+    setShowJumpBtn(false);
   };
 
   // Filter out hidden messages (e.g. the onboarding intake prompt — it's
@@ -893,6 +905,7 @@ function ChatBody({
     visible[0].m.tools.length === 0;
 
   return (
+    <div className={s.bodyWrap}>
     <div className={s.body} ref={bodyRef} onScroll={onScroll}>
       {!thread || visible.length === 0 ? (
         <div className={s.empty}>
@@ -948,6 +961,22 @@ function ChatBody({
         ))
       )}
       <div ref={bottomRef} />
+    </div>
+    {showJumpBtn && (
+      <button
+        type="button"
+        className={s.jumpBtn}
+        onClick={jumpToLatest}
+        aria-label="Jump to latest message"
+        title="Jump to latest"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 5v14" />
+          <path d="m19 12-7 7-7-7" />
+        </svg>
+        <span>Jump to latest</span>
+      </button>
+    )}
     </div>
   );
 }
