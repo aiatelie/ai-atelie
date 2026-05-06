@@ -43,6 +43,7 @@ import { ProjectSwitcher } from "../components/editor/ProjectSwitcher";
 const Inspector = lazy(() => import("../components/editor/Inspector").then((m) => ({ default: m.Inspector })));
 const AssetsDialog = lazy(() => import("../components/editor/AssetsDialog").then((m) => ({ default: m.AssetsDialog })));
 const TemplatesDialog = lazy(() => import("../components/editor/TemplatesDialog").then((m) => ({ default: m.TemplatesDialog })));
+const SettingsDialog = lazy(() => import("../components/editor/SettingsDialog").then((m) => ({ default: m.SettingsDialog })));
 const TweaksPreviewDialog = lazy(() => import("../components/editor/TweaksPreviewDialog").then((m) => ({ default: m.TweaksPreviewDialog })));
 const QuickSwitcher = lazy(() => import("../components/editor/QuickSwitcher").then((m) => ({ default: m.QuickSwitcher })));
 const DrawOverlay = lazy(() => import("../components/editor/DrawOverlay").then((m) => ({ default: m.DrawOverlay })));
@@ -69,7 +70,6 @@ import { loadThreads as libLoadThreads, saveThreads, subscribeThreads, releasePr
 import { attachStreamToThread, detachStream, isThreadShadowed } from "../lib/streamPersistence";
 import { cssPath, resolveCssPath, buildDescriptor } from "../lib/cssPath";
 import { applyOverrides, setOverride, clearRoute, readRoute, useOverrideCount } from "../lib/editorOverrides";
-import { getTheme, setTheme, themes, type ThemeName } from "../lib/theme";
 import { trackEvent } from "../lib/telemetry";
 import {
   startStream,
@@ -424,6 +424,7 @@ export default function Editor() {
   const [autoResolvePromptIds, setAutoResolvePromptIds] = useState<string[]>([]);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [tweaksPreviewPrompt, setTweaksPreviewPrompt] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const dmRef = useRef<DmBridge | null>(null);
@@ -2038,6 +2039,7 @@ export default function Editor() {
         onSetPinned={setTabPinned}
         onRename={setTabLabel}
         onAdd={() => setTemplatesOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       {!isDesignFiles && <Toolbar
@@ -2715,6 +2717,12 @@ export default function Editor() {
         </Suspense>
       )}
 
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        </Suspense>
+      )}
+
       {templatesOpen && (
         <Suspense fallback={null}>
           <TemplatesDialog
@@ -2753,6 +2761,7 @@ function TabBar({
   onSetPinned,
   onRename,
   onAdd,
+  onOpenSettings,
 }: {
   projectTitle: string;
   onRenameProject: (next: string) => void;
@@ -2764,6 +2773,7 @@ function TabBar({
   onSetPinned: (id: string, pinned: boolean) => void;
   onRename: (id: string, label: string) => void;
   onAdd: () => void;
+  onOpenSettings: () => void;
 }) {
   // One-at-a-time tab context menu, positioned at the click coordinates.
   const [menu, setMenu] = useState<{ tab: Tab; x: number; y: number } | null>(null);
@@ -2811,7 +2821,18 @@ function TabBar({
       <button className={s.tabPlus} onClick={onAdd} aria-label="New tab">+</button>
 
       <div className={s.tabRight}>
-        <EditorThemeSwitch />
+        <button
+          type="button"
+          className={s.settingsBtn}
+          onClick={onOpenSettings}
+          title="Settings"
+          aria-label="Open settings"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="2" />
+            <path d="M8 1.5v2 M8 12.5v2 M14.5 8h-2 M3.5 8h-2 M12.6 3.4l-1.4 1.4 M4.8 11.2l-1.4 1.4 M12.6 12.6l-1.4-1.4 M4.8 4.8L3.4 3.4" />
+          </svg>
+        </button>
         <Link to="/" className={s.present} title="Open without editor chrome">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.4}>
             <path d="M3 2 L11 7 L3 12 Z" fill="currentColor" />
@@ -2951,34 +2972,6 @@ function TabContextMenu({
       </button>
       <button className={s.tabMenuItem} onClick={onReveal}>Reveal in Design Files</button>
       <button className={`${s.tabMenuItem} ${s.tabMenuItemDanger}`} onClick={onCloseTab}>Close tab</button>
-    </div>
-  );
-}
-
-/* ─── Theme switch ───────────────────────────────────────────── */
-/** Segmented pill in the top-right tabbar. Toggles the data-theme attr
- *  on <html>; CSS tokens defined per-theme in index.css do the rest.
- *  Subscribes to 'editor-theme-change' so cross-tab updates reflect here. */
-function EditorThemeSwitch() {
-  const [active, setActive] = useState<ThemeName>(() => getTheme());
-  useEffect(() => {
-    const h = (e: Event) => setActive((e as CustomEvent<{ name: ThemeName }>).detail.name);
-    window.addEventListener("editor-theme-change", h);
-    return () => window.removeEventListener("editor-theme-change", h);
-  }, []);
-  return (
-    <div className={s.themeSwitch} role="group" aria-label="Editor theme">
-      {themes.map((th) => (
-        <button
-          key={th.name}
-          type="button"
-          className={`${s.themeOption} ${th.name === active ? s.themeOptionActive : ""}`}
-          onClick={() => setTheme(th.name)}
-          aria-pressed={th.name === active}
-        >
-          {th.label}
-        </button>
-      ))}
     </div>
   );
 }

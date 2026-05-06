@@ -342,6 +342,141 @@
   --shadow-md:   0 8px 24px rgba(28, 34, 58, 0.16);
 }
 
+/* ─── Dark theme ──────────────────────────────────────────────
+ * Activated by setting `data-theme="dark"` on <html>. Inverts the
+ * ink/surface families while keeping the brand orange — so accents
+ * stay recognizable but the chrome reads as a dark UI. Token names
+ * are unchanged; only values shift. */
+:root[data-theme="dark"] {
+  --app-bg: #14110d;
+  --surface: #1f1c17;
+  --surface-2: #2a261f;
+  --surface-3: #25211b;
+  --surface-4: #1a1712;
+  --surface-warm: #221e18;
+
+  /* Ink is now the LIGHT family — text on dark surfaces. The base
+   * stays bright cream so the alpha overlays read consistently. */
+  --ink: #f5f2eb;
+  --ink-02: rgba(245, 242, 235, 0.04);
+  --ink-04: rgba(245, 242, 235, 0.06);
+  --ink-05: rgba(245, 242, 235, 0.07);
+  --ink-06: rgba(245, 242, 235, 0.08);
+  --ink-08: rgba(245, 242, 235, 0.10);
+  --ink-10: rgba(245, 242, 235, 0.12);
+  --ink-12: rgba(245, 242, 235, 0.14);
+  --ink-15: rgba(245, 242, 235, 0.18);
+  --ink-20: rgba(245, 242, 235, 0.24);
+  --ink-25: rgba(245, 242, 235, 0.28);
+  --ink-30: rgba(245, 242, 235, 0.34);
+  --ink-35: rgba(245, 242, 235, 0.40);
+  --ink-40: rgba(245, 242, 235, 0.46);
+  --ink-44: rgba(245, 242, 235, 0.50);
+  --ink-50: rgba(245, 242, 235, 0.56);
+  --ink-55: rgba(245, 242, 235, 0.62);
+  --ink-60: rgba(245, 242, 235, 0.68);
+  --ink-64: rgba(245, 242, 235, 0.72);
+  --ink-65: rgba(245, 242, 235, 0.74);
+  --ink-70: rgba(245, 242, 235, 0.80);
+  --ink-78: rgba(245, 242, 235, 0.86);
+  --ink-85: rgba(245, 242, 235, 0.90);
+  --ink-92: rgba(245, 242, 235, 0.95);
+
+  /* Solid dark variants stay dark — used by raised "dark pill" elements
+   * that want an even deeper backdrop than the surface. */
+  --ink-strong: #0a0805;
+  --ink-strong-hover: #000000;
+  --ink-deep: #050402;
+
+  /* on-ink family flips to dark — overlays drawn on top of bright (brand)
+   * surfaces still want to read as dark ink. */
+  --on-ink: #14110d;
+  --on-brand: #ffffff;
+  --on-ink-06: rgba(15, 12, 8, 0.10);
+  --on-ink-08: rgba(15, 12, 8, 0.12);
+  --on-ink-10: rgba(15, 12, 8, 0.16);
+  --on-ink-12: rgba(15, 12, 8, 0.18);
+  --on-ink-15: rgba(15, 12, 8, 0.22);
+  --on-ink-18: rgba(15, 12, 8, 0.26);
+  --on-ink-20: rgba(15, 12, 8, 0.30);
+  --on-ink-25: rgba(15, 12, 8, 0.36);
+  --on-ink-30: rgba(15, 12, 8, 0.42);
+  --on-ink-40: rgba(15, 12, 8, 0.52);
+  --on-ink-50: rgba(15, 12, 8, 0.62);
+  --on-ink-55: rgba(15, 12, 8, 0.68);
+  --on-ink-60: rgba(15, 12, 8, 0.72);
+  --on-ink-65: rgba(15, 12, 8, 0.78);
+  --on-ink-70: rgba(15, 12, 8, 0.82);
+  --on-ink-80: rgba(15, 12, 8, 0.88);
+  --on-ink-85: rgba(15, 12, 8, 0.92);
+  --on-ink-90: rgba(15, 12, 8, 0.96);
+
+  --on-ink-soft-65: rgba(245, 242, 235, 0.74);
+  --on-ink-soft-80: rgba(245, 242, 235, 0.86);
+  --on-ink-soft-90: rgba(245, 242, 235, 0.94);
+
+  --placeholder: rgba(245, 242, 235, 0.40);
+  --placeholder-strong: rgba(245, 242, 235, 0.55);
+
+  /* Brand stays orange — slightly hotter so it pops on the dark surface. */
+  --brand: #e88d6f;
+  --brand-fg: #f4a98c;
+  --brand-strong-fg: #f7c1a8;
+  --brand-faint: rgba(232, 141, 111, 0.06);
+  --brand-soft: rgba(232, 141, 111, 0.10);
+  --brand-bg: rgba(232, 141, 111, 0.16);
+  --brand-border: rgba(232, 141, 111, 0.30);
+  --brand-hover: rgba(232, 141, 111, 0.24);
+  --brand-strong: rgba(232, 141, 111, 0.55);
+
+  --brand-light: #f7c89a;
+  --brand-warm: #ff8a80;
+  --brand-warm-strong: #ff5a4f;
+
+  --danger: #ff6b6b;
+  --danger-fg: #ff9b9b;
+  --danger-bg: rgba(255, 107, 107, 0.16);
+  --danger-bg-strong: rgba(255, 107, 107, 0.10);
+  --danger-border: rgba(255, 107, 107, 0.32);
+
+  --success: #4ade80;
+  --success-fg: #86efac;
+  --success-alt: #4ade80;
+  --success-alt-bg: rgba(74, 222, 128, 0.16);
+  --success-alt-border: rgba(74, 222, 128, 0.34);
+
+  --info: #6ea8fe;
+  --info-strong: rgba(110, 168, 254, 1);
+  --info-alt: #6ea8fe;
+  --info-alt-bg: rgba(110, 168, 254, 0.16);
+  --info-alt-border: rgba(110, 168, 254, 0.34);
+  --info-alt-soft: rgba(110, 168, 254, 0.10);
+
+  /* Amber for edit-kind chips — brighter on dark. */
+  --warning: #fbbf24;
+  --warning-fg: #fcd34d;
+  --warning-bg: rgba(251, 191, 36, 0.16);
+  --warning-border: rgba(251, 191, 36, 0.34);
+
+  --brand-warm-soft: rgba(255, 138, 128, 0.12);
+  --brand-warm-bg: rgba(255, 138, 128, 0.18);
+  --brand-stronger: rgba(232, 141, 111, 0.85);
+
+  --icon-bg-warm: rgba(255, 200, 170, 0.18);
+  --icon-bg-cool: rgba(180, 200, 240, 0.18);
+  --icon-bg-blue-soft: rgba(110, 168, 254, 0.22);
+  --icon-bg-blue-strong: rgba(110, 168, 254, 0.78);
+  --icon-bg-light: rgba(245, 242, 235, 0.10);
+
+  --backdrop: rgba(0, 0, 0, 0.65);
+
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
+  --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.70);
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-md:   0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
 *,
 *::before,
 *::after {

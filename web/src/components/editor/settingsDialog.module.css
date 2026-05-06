@@ -1,0 +1,338 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--backdrop, rgba(0, 0, 0, 0.32));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 120ms ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.dialog {
+  background: var(--surface);
+  color: var(--ink-92);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+  width: min(720px, 94vw);
+  height: min(540px, 86vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--ink-08);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--ink-08);
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-92);
+}
+
+.closeBtn {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ink-50);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.closeBtn:hover { background: var(--ink-04); color: var(--ink-92); }
+
+.body {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--ink-08);
+  background: var(--surface-2);
+}
+
+.navBtn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink-70);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 80ms ease-out, color 80ms ease-out;
+}
+.navBtn:hover { background: var(--ink-04); color: var(--ink-92); }
+
+.navBtnActive,
+.navBtnActive:hover {
+  background: var(--ink-08);
+  color: var(--ink-92);
+  font-weight: 500;
+}
+
+.content {
+  padding: 18px 22px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-92);
+  letter-spacing: 0;
+}
+
+.sectionDesc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-65);
+}
+.sectionDesc strong { color: var(--ink-85); font-weight: 600; }
+
+/* ─── Appearance — seg-control ─────────────────────────────── */
+
+.segControl {
+  display: grid;
+  grid-template-columns: repeat(var(--seg-cols, 4), 1fr);
+  gap: 4px;
+  padding: 4px;
+  background: var(--ink-04);
+  border-radius: 8px;
+  border: 1px solid var(--ink-08);
+  margin-top: 4px;
+}
+
+.segBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink-65);
+  padding: 8px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 100ms ease-out, color 100ms ease-out;
+}
+.segBtn:hover { color: var(--ink-92); }
+.segBtnActive,
+.segBtnActive:hover {
+  background: var(--surface);
+  color: var(--ink-92);
+  box-shadow: var(--shadow-sm);
+  font-weight: 500;
+}
+
+/* ─── Adapter cards (ported from adaptersDialog) ───────────── */
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.empty {
+  font-size: 12px;
+  color: var(--ink-50);
+  padding: 12px 0;
+}
+
+.card {
+  border: 1px solid var(--ink-08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface-warm);
+}
+.card[data-status="missing"] { opacity: 0.72; }
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot[data-status="ok"]      { background: var(--success); }
+.dot[data-status="auth"]    { background: var(--warning); }
+.dot[data-status="missing"] { background: var(--ink-30); }
+
+.cardName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-92);
+}
+
+.cardStatus {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+  color: var(--ink-50);
+}
+.cardStatus[data-status="ok"]   { color: var(--success); }
+.cardStatus[data-status="auth"] { color: var(--warning); }
+
+.cardMeta {
+  font-size: 11px;
+  color: var(--ink-50);
+}
+
+.hint {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hintText {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-65);
+}
+.hintText code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 4px;
+  background: var(--ink-04);
+  border-radius: 4px;
+}
+
+.copyBtn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--ink-12);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--ink-92);
+}
+.copyBtn:hover { background: var(--ink-04); }
+.copyBtn code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.copyLabel {
+  font-size: 10px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  color: var(--ink-50);
+}
+
+.adapterFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.notice {
+  font-size: 11px;
+  color: var(--ink-50);
+}
+
+.rescanBtn {
+  background: var(--surface);
+  color: var(--ink-92);
+  border: 1px solid var(--ink-12);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rescanBtn:hover:not(:disabled) { background: var(--ink-04); }
+.rescanBtn:disabled { opacity: 0.6; cursor: progress; }
+
+/* ─── About ─────────────────────────────────────────────────── */
+
+.aboutList {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+  row-gap: 6px;
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  background: var(--surface-warm);
+  border: 1px solid var(--ink-08);
+  border-radius: 8px;
+}
+
+.aboutRow {
+  display: contents;
+}
+
+.aboutRow dt {
+  font-size: 11px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+  color: var(--ink-50);
+}
+
+.aboutRow dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-92);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.aboutLong {
+  font-size: 11px !important;
+  line-height: 1.5;
+}
+
+.aboutLinks {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.aboutLinks a {
+  color: var(--brand-fg);
+  text-decoration: none;
+}
+.aboutLinks a:hover { text-decoration: underline; }

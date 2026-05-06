@@ -1,12 +1,15 @@
 /* ModelPicker.tsx — reusable model selector used in ChatSidebar,
  * CommentBubble, and Inspector. */
 
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import s from "./modelPicker.module.css";
 import { DEFAULT_MODEL_ID, presetsByTier, getModel, mergeAgentModels } from "../../data/modelPresets";
 import { useAgents } from "../../data/agents";
 import { useFlag } from "../../lib/flags";
-import { AdaptersDialog } from "./AdaptersDialog";
+
+const SettingsDialog = lazy(() =>
+  import("./SettingsDialog").then((m) => ({ default: m.SettingsDialog })),
+);
 
 export function ModelPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -71,7 +74,15 @@ export function ModelPicker({ value, onChange }: { value: string; onChange: (id:
           </button>
         </div>
       )}
-      <AdaptersDialog open={adaptersOpen} onClose={() => setAdaptersOpen(false)} />
+      {adaptersOpen && (
+        <Suspense fallback={null}>
+          <SettingsDialog
+            open={adaptersOpen}
+            onClose={() => setAdaptersOpen(false)}
+            initialSection="adapters"
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
