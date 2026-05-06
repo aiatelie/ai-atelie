@@ -8,6 +8,22 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.1.3
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.2...v0.1.3)
+
+### Features
+
+- **web:** QoL bundle v0.1.3 — TS cleanup + Settings dialog + notifications + markdown polish ([#64](https://github.com/aiatelie/ai-atelie/pull/64))
+
+### Refactor
+
+- **web:** Clear pre-existing TS errors so build is green ([#59](https://github.com/aiatelie/ai-atelie/pull/59))
+
+### ❤️ Contributors
+
+- Kadu Maverick ([@whatiskadudoing](https://github.com/whatiskadudoing))
+
 ## v0.1.2
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.1...v0.1.2)
