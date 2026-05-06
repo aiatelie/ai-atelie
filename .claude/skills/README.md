@@ -10,6 +10,8 @@ Markdown playbooks Claude Code auto-loads when you (the contributor) open this r
 - **`verify-with-playwright/`** — drives the dev server with a real browser, captures screenshots/video, hands them to `bun run upload:evidence`.
 - **`cuj-guardian/`** — runs and triages the Critical User Journey (`web/tests/e2e/cuj.spec.ts`). Pre-flight gate by diff inspection; five-step triage protocol on failure.
 - **`semantic-commit/`** — drafts Conventional Commits messages tuned to the workspace scope set (`api | web | mcp | skills | repo | deps`).
+- **`demo-clip/`** — composes a `verify-with-playwright` recording into a polished Screen-Studio-style MP4 via Remotion (gradient backdrop, dead-time trim, motion-zooms on click events). Free local pipeline; no SaaS signup.
+- **`remotion-best-practices/`** — vendored copy of the official `remotion-dev/skills` package. Domain rules (composition layout, `useCurrentFrame`, `Easing`, asset loading) consumed by `demo-clip`. Sync via `npx skills update remotion-best-practices`.
 
 ## Adding a dev-time skill
 

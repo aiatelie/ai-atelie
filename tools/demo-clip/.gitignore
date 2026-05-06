@@ -1,0 +1,5 @@
+# User-supplied source footage (populated by the demo-clip skill at
+# render time). Stays local; the rendered MP4 lives in /tmp or
+# .evidence/, not here.
+public/source.mp4
+public/moments.json
