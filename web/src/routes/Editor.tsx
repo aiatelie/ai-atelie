@@ -46,6 +46,7 @@ const TemplatesDialog = lazy(() => import("../components/editor/TemplatesDialog"
 const SettingsDialog = lazy(() => import("../components/editor/SettingsDialog").then((m) => ({ default: m.SettingsDialog })));
 const TweaksPreviewDialog = lazy(() => import("../components/editor/TweaksPreviewDialog").then((m) => ({ default: m.TweaksPreviewDialog })));
 const QuickSwitcher = lazy(() => import("../components/editor/QuickSwitcher").then((m) => ({ default: m.QuickSwitcher })));
+const KeyboardShortcutsModal = lazy(() => import("../components/editor/KeyboardShortcutsModal").then((m) => ({ default: m.KeyboardShortcutsModal })));
 const DrawOverlay = lazy(() => import("../components/editor/DrawOverlay").then((m) => ({ default: m.DrawOverlay })));
 const DrawActionBar = lazy(() => import("../components/editor/DrawActionBar").then((m) => ({ default: m.DrawActionBar })));
 import { clearStrokes, useStrokes, compositeStrokesOnto } from "../lib/drawings";
@@ -1586,13 +1587,24 @@ export default function Editor() {
   // Cmd/Ctrl+P opens the quick file switcher. Suppressed when the user is
   // already typing in another input/textarea so we don't hijack their flow.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Cmd/Ctrl+/ opens the keyboard-shortcuts cheat sheet. Same suppression
+  // rule — typing "/" in chat composer mustn't hijack into this modal.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const inField = tag === "INPUT" || tag === "TEXTAREA";
       if ((e.metaKey || e.ctrlKey) && (e.key === "p" || e.key === "P")) {
-        const tag = (e.target as HTMLElement | null)?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (inField) return;
         e.preventDefault();
         setPaletteOpen(true);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "/") {
+        if (inField) return;
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+        return;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -2032,6 +2044,11 @@ export default function Editor() {
             onOpenRoute={openRouteAsTab}
             onClose={() => setPaletteOpen(false)}
           />
+        </Suspense>
+      )}
+      {shortcutsOpen && (
+        <Suspense fallback={null}>
+          <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />
         </Suspense>
       )}
       <TabBar
