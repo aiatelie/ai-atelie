@@ -138,3 +138,69 @@ test("network failure on first fetch: loading flips off so empty state can rende
   // referenced so the compiler keeps the import (esbuild + isolatedModules)
   void listProjects;
 });
+
+test("createProject aborts an inflight stale fetchFromServer (CUJ race fix)", async () => {
+  // Simulate the race: bootCache fires GET /api/projects on page load.
+  // Before that resolves, the user clicks "+ new project" → POST commits,
+  // and our cache should NOT get clobbered by the stale GET response
+  // (which can't include the new project because it predates the POST).
+
+  type Resolver = (v: { ok: boolean; json: () => Promise<unknown> }) => void;
+  const getResolvers: Resolver[] = [];
+  const fetchSeenSignals: (AbortSignal | undefined)[] = [];
+
+  globalThis.fetch = ((url: string, init?: { method?: string; signal?: AbortSignal; body?: string }) => {
+    fetchSeenSignals.push(init?.signal);
+    if (url.includes("/api/projects/create")) {
+      // POST — succeeds with new project id
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: "p_new",
+          manifest: { pages: [{ file: "index.html", label: "index.html" }] },
+        }),
+      } as unknown as Response);
+    }
+    // GET /api/projects — return [demo] only, but DELAY resolution
+    // until the test releases it (mimics network latency).
+    return new Promise<Response>((resolve) => {
+      getResolvers.push(resolve as unknown as Resolver);
+    }) as unknown as Promise<Response>;
+  }) as typeof fetch;
+  mockedFetch = globalThis.fetch;
+
+  // First read kicks off bootCache → triggers the inflight GET.
+  expect(m.listProjects()).toEqual([]);
+  expect(m.isLoadingProjects()).toBe(true);
+
+  // User creates a project. createProject should call invalidateInflightFetch
+  // BEFORE seeding cache so the inflight GET's abort signal fires.
+  const created = await m.createProject("CUJ Hello World");
+  expect(created.id).toBe("p_new");
+  expect(m.listProjects().map((p) => p.id)).toContain("p_new");
+
+  // Now we release the stale GET to resolve. With the fix, the response
+  // should be ignored (signal aborted) — cache must still contain p_new.
+  const resolveGet = getResolvers.shift();
+  if (resolveGet) {
+    resolveGet({
+      ok: true,
+      json: async () => [{
+        id: "demo", name: "AI Atelie demo", createdAt: 1, updatedAt: 1,
+        pages: [{ file: "index.html", label: "index.html" }],
+      }],
+    });
+  }
+  // Microtasks drain.
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+
+  // The fix's contract: p_new is still in cache, still active.
+  const ids = m.listProjects().map((p) => p.id);
+  expect(ids).toContain("p_new");
+  // The inflight fetch was passed a signal (proves the AbortController wiring).
+  const getSignal = fetchSeenSignals.find((s, i) => i === 0 && s !== undefined);
+  expect(getSignal).toBeDefined();
+  expect(getSignal!.aborted).toBe(true);
+});
