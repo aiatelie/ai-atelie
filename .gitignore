@@ -58,14 +58,17 @@ playwright-tools/
 # Personal user content — designs, templates, assets the maintainer
 # created for their own use. The OSS repo ships only the framework.
 # Local files in these paths stay on disk; they're just untracked.
-bg/
-content/
-editor/
-pages/
-globe-lottie.json
-vite.config.js
-web/.data/
-web/src/assets/hero.png
+# Anchored with a leading slash so they only match repo-root dirs and
+# don't accidentally swallow same-named dirs deeper in the tree
+# (e.g. web/src/components/editor/).
+/bg/
+/content/
+/editor/
+/pages/
+/globe-lottie.json
+/vite.config.js
+/web/.data/
+/web/src/assets/hero.png
 
 # Local tooling caches
 .cache/
