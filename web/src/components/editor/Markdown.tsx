@@ -21,11 +21,13 @@
  */
 
 import {
+  Fragment,
   memo,
   useEffect,
   useMemo,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import { createPatch, structuredPatch } from "diff";
 import s from "./chat.module.css";
@@ -39,16 +41,45 @@ type InlineNode =
   | { type: "italic"; value: string }
   | { type: "link"; text: string; href: string };
 
+type TableAlign = "left" | "center" | "right" | null;
+
 type BlockNode =
   | { type: "paragraph"; children: InlineNode[] }
   | { type: "codeBlock"; lang: string; code: string }
-  | { type: "list"; ordered: boolean; items: InlineNode[][] };
+  | {
+      type: "list";
+      ordered: boolean;
+      items: { content: InlineNode[]; checked: boolean | null }[];
+    }
+  | { type: "table"; header: InlineNode[][]; rows: InlineNode[][][]; align: TableAlign[] };
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+/** Bare-URL autolink. Match http(s) URLs and split surrounding text into
+ *  text/link nodes. Trailing punctuation that's likely sentence-final gets
+ *  stripped from the URL and preserved as text — `(https://x.com).` should
+ *  not pull the closing paren + period into the link. */
+const URL_RE = /\bhttps?:\/\/[^\s<>"`]+/g;
+const TRAILING_PUNCT_RE = /[.,!?;:)\]]+$/;
+
+function autolinkText(text: string): InlineNode[] {
+  const out: InlineNode[] = [];
+  let lastIdx = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    const start = m.index ?? 0;
+    if (start > lastIdx) out.push({ type: "text", value: text.slice(lastIdx, start) });
+    let url = m[0];
+    // Pull trailing sentence punctuation out of the link.
+    const punct = url.match(TRAILING_PUNCT_RE);
+    let trail = "";
+    if (punct) {
+      trail = punct[0];
+      url = url.slice(0, -trail.length);
+    }
+    out.push({ type: "link", text: url, href: url });
+    if (trail) out.push({ type: "text", value: trail });
+    lastIdx = start + m[0].length;
+  }
+  if (lastIdx < text.length) out.push({ type: "text", value: text.slice(lastIdx) });
+  return out.length > 0 ? out : [{ type: "text", value: text }];
 }
 
 function parseInline(text: string): InlineNode[] {
@@ -84,7 +115,8 @@ function parseInline(text: string): InlineNode[] {
 
     if (bestMatch && bestType) {
       if (bestIdx > 0) {
-        nodes.push({ type: "text", value: remaining.slice(0, bestIdx) });
+        // Bare-URL autolink the leading text segment (between matches).
+        nodes.push(...autolinkText(remaining.slice(0, bestIdx)));
       }
       if (bestType === "link") {
         nodes.push({ type: "link", text: bestMatch[1], href: bestMatch[2] });
@@ -93,11 +125,50 @@ function parseInline(text: string): InlineNode[] {
       }
       remaining = remaining.slice(bestIdx + bestLen);
     } else {
-      nodes.push({ type: "text", value: remaining });
+      // No more inline-formatting matches — autolink whatever's left.
+      nodes.push(...autolinkText(remaining));
       break;
     }
   }
   return nodes;
+}
+
+/** GFM table: a header row `| col | col |` followed by a separator row
+ *  `| --- | :--: |`. Returns column count + alignment per column when the
+ *  separator line matches; otherwise null so the caller can treat the
+ *  current line as a paragraph. */
+function parseTableSeparator(line: string): TableAlign[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|")) return null;
+  const cells = trimmed.replace(/^\|/, "").replace(/\|$/, "").split("|");
+  const align: TableAlign[] = [];
+  for (const raw of cells) {
+    const c = raw.trim();
+    if (!/^:?-{2,}:?$/.test(c)) return null;
+    if (c.startsWith(":") && c.endsWith(":")) align.push("center");
+    else if (c.endsWith(":")) align.push("right");
+    else if (c.startsWith(":")) align.push("left");
+    else align.push(null);
+  }
+  return align;
+}
+
+/** Split a `| a | b | c |` row into trimmed cell texts. */
+function splitTableRow(line: string): string[] {
+  return line.trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
+}
+
+/** Pull a `[ ]` / `[x]` / `[X]` checkbox marker off the front of a list-item
+ *  text. Returns `{ checked, rest }` where `checked` is null when the item
+ *  isn't a task list entry. */
+function parseChecklistItem(text: string): { checked: boolean | null; rest: string } {
+  const m = text.match(/^\[([ xX])\]\s+(.*)$/);
+  if (!m) return { checked: null, rest: text };
+  return { checked: m[1].toLowerCase() === "x", rest: m[2] };
 }
 
 function parseMarkdown(input: string): BlockNode[] {
@@ -122,24 +193,53 @@ function parseMarkdown(input: string): BlockNode[] {
       continue;
     }
 
+    // GFM table — header line followed by a separator. Look-ahead one line
+    // before committing so a non-table pipe line falls through to the
+    // paragraph branch.
+    if (line.trim().startsWith("|") && i + 1 < lines.length) {
+      const align = parseTableSeparator(lines[i + 1]);
+      if (align) {
+        const header = splitTableRow(line).map(parseInline);
+        // Pad alignment to header length so `<td>` rendering can index it.
+        while (align.length < header.length) align.push(null);
+        const rows: InlineNode[][][] = [];
+        i += 2; // skip header + separator
+        while (i < lines.length && lines[i].trim().startsWith("|")) {
+          const cells = splitTableRow(lines[i]).map(parseInline);
+          // Normalize cell count to header so the rendered table doesn't
+          // skew when a row is short or trailing-pipe is missing.
+          while (cells.length < header.length) cells.push([]);
+          rows.push(cells.slice(0, header.length));
+          i++;
+        }
+        blocks.push({ type: "table", header, rows, align });
+        continue;
+      }
+    }
+
     // List
     const listMatch = line.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
     if (listMatch) {
       const ordered = /^\d+\./.test(listMatch[2]);
-      const items: InlineNode[][] = [];
+      const items: { content: InlineNode[]; checked: boolean | null }[] = [];
       let currentItem: string[] = [listMatch[3]];
       i++;
       while (i < lines.length) {
         const next = lines[i];
         const nextMatch = next.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
         if (nextMatch && nextMatch[1].length <= listMatch[1].length) {
-          items.push(parseInline(currentItem.join(" ")));
+          const joined = currentItem.join(" ");
+          const { checked, rest } = parseChecklistItem(joined);
+          items.push({ content: parseInline(rest), checked });
           currentItem = [nextMatch[3]];
           i++;
           continue;
         }
         if (next.trim() === "") {
-          items.push(parseInline(currentItem.join(" ")));
+          const joined = currentItem.join(" ");
+          const { checked, rest } = parseChecklistItem(joined);
+          items.push({ content: parseInline(rest), checked });
+          currentItem = [];
           i++;
           break;
         }
@@ -147,7 +247,9 @@ function parseMarkdown(input: string): BlockNode[] {
         i++;
       }
       if (currentItem.length > 0) {
-        items.push(parseInline(currentItem.join(" ")));
+        const joined = currentItem.join(" ");
+        const { checked, rest } = parseChecklistItem(joined);
+        items.push({ content: parseInline(rest), checked });
       }
       blocks.push({ type: "list", ordered, items });
       continue;
@@ -157,7 +259,13 @@ function parseMarkdown(input: string): BlockNode[] {
     if (line.trim() !== "") {
       const paraLines: string[] = [line];
       i++;
-      while (i < lines.length && lines[i].trim() !== "" && !lines[i].startsWith("```") && !lines[i].match(/^(\s*)([-*]|\d+\.)\s+/)) {
+      while (
+        i < lines.length &&
+        lines[i].trim() !== "" &&
+        !lines[i].startsWith("```") &&
+        !lines[i].match(/^(\s*)([-*]|\d+\.)\s+/) &&
+        !lines[i].trim().startsWith("|")
+      ) {
         paraLines.push(lines[i]);
         i++;
       }
@@ -171,13 +279,26 @@ function parseMarkdown(input: string): BlockNode[] {
   return blocks;
 }
 
+/** Split text on `\n` and emit real <br/> nodes between segments. Replaces
+ *  `dangerouslySetInnerHTML` so we can drop the manual escapeHtml() pass —
+ *  React handles entity escaping for any string content automatically. */
+function withBreaks(text: string, baseKey: string): ReactNode[] {
+  const parts = text.split("\n");
+  const out: ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (i > 0) out.push(<br key={`${baseKey}-br-${i}`} />);
+    if (part) out.push(<Fragment key={`${baseKey}-t-${i}`}>{part}</Fragment>);
+  });
+  return out;
+}
+
 function Inline({ nodes }: { nodes: InlineNode[] }) {
   return (
     <>
       {nodes.map((n, i) => {
         switch (n.type) {
           case "text":
-            return <span key={i} dangerouslySetInnerHTML={{ __html: escapeHtml(n.value).replace(/\n/g, "<br/>") }} />;
+            return <Fragment key={i}>{withBreaks(n.value, String(i))}</Fragment>;
           case "code":
             return <code key={i} className={s.inlineCode}>{n.value}</code>;
           case "bold":
@@ -186,7 +307,13 @@ function Inline({ nodes }: { nodes: InlineNode[] }) {
             return <em key={i}>{n.value}</em>;
           case "link":
             return (
-              <a key={i} href={n.href} target="_blank" rel="noreferrer" className={s.markdownLink}>
+              <a
+                key={i}
+                href={n.href}
+                target="_blank"
+                rel="noreferrer noopener"
+                className={s.markdownLink}
+              >
                 {n.text}
               </a>
             );
@@ -531,6 +658,107 @@ function DiffBlockImpl({
 
 export const DiffBlock = memo(DiffBlockImpl);
 
+// ─── Block renderers (memoized for streaming-incremental render) ─────
+//
+// Each closed block hashes its content via a JSON.stringify-ish key, so
+// React can skip re-rendering identical blocks while a streaming reply
+// keeps appending fresh ones at the tail. The Shiki tokenizer cache (see
+// HIGHLIGHT_CACHE above) plus this memoization is what keeps long
+// agent replies smooth as they grow.
+
+const ParagraphBlock = memo(function ParagraphBlock({ nodes }: { nodes: InlineNode[] }) {
+  return (
+    <p className={s.markdownParagraph}>
+      <Inline nodes={nodes} />
+    </p>
+  );
+});
+
+const ListBlock = memo(function ListBlock({
+  ordered,
+  items,
+}: {
+  ordered: boolean;
+  items: { content: InlineNode[]; checked: boolean | null }[];
+}) {
+  const Tag = ordered ? "ol" : "ul";
+  // Whole list becomes "task list mode" when ANY item carries a checkbox
+  // — flatten styling so checkboxes line up with non-task items below.
+  const isTaskList = items.some((it) => it.checked !== null);
+  return (
+    <Tag
+      className={`${ordered ? s.markdownOl : s.markdownUl}${isTaskList ? " " + s.markdownTaskList : ""}`}
+    >
+      {items.map((item, j) => {
+        if (item.checked === null) {
+          return (
+            <li key={j}>
+              <Inline nodes={item.content} />
+            </li>
+          );
+        }
+        return (
+          <li key={j} className={s.markdownTaskItem} data-checked={item.checked}>
+            <input
+              type="checkbox"
+              checked={item.checked}
+              readOnly
+              className={s.markdownCheckbox}
+              aria-label={item.checked ? "Task done" : "Task pending"}
+            />
+            <span className={item.checked ? s.markdownTaskDone : undefined}>
+              <Inline nodes={item.content} />
+            </span>
+          </li>
+        );
+      })}
+    </Tag>
+  );
+});
+
+const TableBlock = memo(function TableBlock({
+  header,
+  rows,
+  align,
+}: {
+  header: InlineNode[][];
+  rows: InlineNode[][][];
+  align: TableAlign[];
+}) {
+  return (
+    <div className={s.markdownTableWrap}>
+      <table className={s.markdownTable}>
+        <thead>
+          <tr>
+            {header.map((cell, i) => (
+              <th
+                key={i}
+                style={align[i] ? { textAlign: align[i] as "left" | "center" | "right" } : undefined}
+              >
+                <Inline nodes={cell} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((cell, j) => (
+                <td
+                  key={j}
+                  style={align[j] ? { textAlign: align[j] as "left" | "center" | "right" } : undefined}
+                >
+                  <Inline nodes={cell} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+});
+
 // ─── Entrypoint ──────────────────────────────────────────────────────
 
 export function Markdown({ text }: { text: string }) {
@@ -540,25 +768,13 @@ export function Markdown({ text }: { text: string }) {
       {blocks.map((b, i) => {
         switch (b.type) {
           case "paragraph":
-            return (
-              <p key={i} className={s.markdownParagraph}>
-                <Inline nodes={b.children} />
-              </p>
-            );
+            return <ParagraphBlock key={i} nodes={b.children} />;
           case "codeBlock":
             return <CodeBlock key={i} lang={b.lang} code={b.code} />;
-          case "list": {
-            const Tag = b.ordered ? "ol" : "ul";
-            return (
-              <Tag key={i} className={b.ordered ? s.markdownOl : s.markdownUl}>
-                {b.items.map((item, j) => (
-                  <li key={j}>
-                    <Inline nodes={item} />
-                  </li>
-                ))}
-              </Tag>
-            );
-          }
+          case "list":
+            return <ListBlock key={i} ordered={b.ordered} items={b.items} />;
+          case "table":
+            return <TableBlock key={i} header={b.header} rows={b.rows} align={b.align} />;
         }
       })}
     </>
