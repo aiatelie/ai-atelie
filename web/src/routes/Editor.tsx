@@ -70,6 +70,7 @@ import { loadThreads as libLoadThreads, saveThreads, subscribeThreads, releasePr
 import { attachStreamToThread, detachStream, isThreadShadowed } from "../lib/streamPersistence";
 import { cssPath, resolveCssPath, buildDescriptor } from "../lib/cssPath";
 import { applyOverrides, setOverride, clearRoute, readRoute, useOverrideCount } from "../lib/editorOverrides";
+import { notifyTurnComplete } from "../lib/notifications";
 import { trackEvent } from "../lib/telemetry";
 import {
   startStream,
@@ -756,7 +757,18 @@ export default function Editor() {
         return;
       }
       if (e.type === "elicitClear") { setPendingElicit((p) => (p && p.request.id === e.id ? null : p)); return; }
-      if (e.type === "error") { flushText(); setPendingElicit(null); updateAssistant((m) => ({ ...m, error: e.message, pending: false })); return; }
+      if (e.type === "error") {
+        flushText();
+        setPendingElicit(null);
+        updateAssistant((m) => ({ ...m, error: e.message, pending: false }));
+        notifyTurnComplete({
+          status: "failure",
+          title: `${projectTitle} · agent error`,
+          body: e.message.slice(0, 140),
+          tag: `aiatelie-${activeProject.id}`,
+        });
+        return;
+      }
       if (e.type === "done") {
         flushText();
         setPendingElicit(null);
@@ -772,6 +784,12 @@ export default function Editor() {
             return { ...m, error: "No reply received from AI (process exited without output).", pending: false };
           }
           return { ...m, pending: false };
+        });
+        notifyTurnComplete({
+          status: "success",
+          title: `${projectTitle} · agent done`,
+          body: "Your turn finished — click to bring this tab forward.",
+          tag: `aiatelie-${activeProject.id}`,
         });
       }
     };

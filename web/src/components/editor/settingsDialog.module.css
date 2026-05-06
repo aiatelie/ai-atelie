@@ -153,6 +153,92 @@
   font-weight: 500;
 }
 
+/* ─── Notifications ────────────────────────────────────────── */
+
+.notifRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--ink-08);
+  border-radius: 8px;
+  background: var(--surface-warm);
+}
+
+.notifLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.notifTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-92);
+}
+
+.notifDesc {
+  font-size: 11px;
+  color: var(--ink-65);
+  line-height: 1.5;
+}
+
+.toggleBtn {
+  appearance: none;
+  border: 1px solid var(--ink-12);
+  background: var(--surface);
+  color: var(--ink-65);
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  padding: 6px 14px;
+  border-radius: 100px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.toggleBtn:hover:not(:disabled) {
+  background: var(--ink-04);
+  color: var(--ink-92);
+}
+.toggleBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.toggleBtnActive,
+.toggleBtnActive:hover {
+  background: var(--success-alt-bg);
+  color: var(--success-fg);
+  border-color: var(--success-alt-border);
+}
+
+.subLabel {
+  font-size: 11px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+  color: var(--ink-50);
+  margin-top: 4px;
+}
+
+.testBtn {
+  align-self: flex-start;
+  margin-top: 4px;
+  appearance: none;
+  background: var(--brand-bg);
+  color: var(--brand-fg);
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.testBtn:hover { background: var(--brand-hover); }
+
 /* ─── Adapter cards (ported from adaptersDialog) ───────────── */
 
 .cards {

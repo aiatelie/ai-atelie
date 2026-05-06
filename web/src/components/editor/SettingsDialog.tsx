@@ -1,9 +1,10 @@
 /* SettingsDialog.tsx — global Settings shell with sidebar nav.
  *
  * Sections:
- *   - Appearance — theme picker (System / Light / Dark / Retro), live preview
- *   - Adapters    — existing per-CLI cards (ported from AdaptersDialog)
- *   - About       — read-only version + runtime info for bug reports
+ *   - Appearance    — theme picker (System / Light / Dark / Retro), live preview
+ *   - Notifications — completion sound + desktop ping prefs (#5)
+ *   - Adapters      — existing per-CLI cards (ported from AdaptersDialog)
+ *   - About         — read-only version + runtime info for bug reports
  *
  * The dialog deliberately mirrors the old AdaptersDialog modal/backdrop
  * so the surface feels familiar; the structural addition is the left
@@ -14,11 +15,26 @@ import { useState } from "react";
 import s from "./settingsDialog.module.css";
 import { useAgents, rescanAgents, type AgentInfo } from "../../data/agents";
 import { getTheme, setTheme, themes, type ThemePreference } from "../../lib/theme";
+import {
+  loadNotifPrefs,
+  saveNotifPrefs,
+  playSuccess,
+  playFailure,
+  currentPermission,
+  requestNotificationPermission,
+  sendTestNotification,
+  SUCCESS_SOUNDS,
+  FAILURE_SOUNDS,
+  type NotifPrefs,
+  type SuccessSoundId,
+  type FailureSoundId,
+} from "../../lib/notifications";
 
-type SectionId = "appearance" | "adapters" | "about";
+type SectionId = "appearance" | "notifications" | "adapters" | "about";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "appearance", label: "Appearance" },
+  { id: "notifications", label: "Notifications" },
   { id: "adapters", label: "Adapters" },
   { id: "about", label: "About" },
 ];
@@ -66,6 +82,7 @@ export function SettingsDialog({
 
           <div className={s.content}>
             {section === "appearance" && <AppearanceSection />}
+            {section === "notifications" && <NotificationsSection />}
             {section === "adapters" && <AdaptersSection />}
             {section === "about" && <AboutSection />}
           </div>
@@ -107,6 +124,143 @@ function AppearanceSection() {
           </button>
         ))}
       </div>
+    </section>
+  );
+}
+
+function NotificationsSection() {
+  const [prefs, setPrefs] = useState<NotifPrefs>(() => loadNotifPrefs());
+  const [perm, setPerm] = useState<NotificationPermission | "unsupported">(
+    () => currentPermission(),
+  );
+
+  const update = (patch: Partial<NotifPrefs>) => {
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    saveNotifPrefs(next);
+  };
+
+  const toggleDesktop = async () => {
+    if (!prefs.desktopEnabled) {
+      // Off → On: request permission inline. If the user denies, we leave
+      // the toggle off but still surface the denied state below.
+      const p = await requestNotificationPermission();
+      setPerm(p);
+      if (p !== "granted") return;
+    }
+    update({ desktopEnabled: !prefs.desktopEnabled });
+  };
+
+  const desktopHint =
+    perm === "unsupported"
+      ? "Your browser doesn't expose the Notification API."
+      : perm === "denied"
+        ? "Permission was denied — re-enable in your browser's site settings, then toggle this back on."
+        : prefs.desktopEnabled
+          ? "Active — completion pings will fire when this tab loses focus."
+          : "Off — flip on to ping when an agent run finishes while you're tabbed away.";
+
+  return (
+    <section className={s.section}>
+      <h3 className={s.sectionTitle}>Notifications</h3>
+      <p className={s.sectionDesc}>
+        Ping when an agent turn or long render finishes while you're tabbed
+        away. Both channels respect a focus guard — neither fires if the
+        editor tab is already in front.
+      </p>
+
+      <div className={s.notifRow}>
+        <div className={s.notifLabel}>
+          <span className={s.notifTitle}>Sound</span>
+          <span className={s.notifDesc}>
+            Synthesized via the WebAudio API — no audio assets ship with the app.
+          </span>
+        </div>
+        <button
+          type="button"
+          className={`${s.toggleBtn} ${prefs.soundEnabled ? s.toggleBtnActive : ""}`}
+          aria-pressed={prefs.soundEnabled}
+          onClick={() => update({ soundEnabled: !prefs.soundEnabled })}
+        >
+          {prefs.soundEnabled ? "Active" : "Off"}
+        </button>
+      </div>
+
+      {prefs.soundEnabled && (
+        <>
+          <div className={s.subLabel}>Success sound</div>
+          <div
+            className={s.segControl}
+            role="group"
+            aria-label="Success sound"
+            style={{ ["--seg-cols" as string]: SUCCESS_SOUNDS.length } as React.CSSProperties}
+          >
+            {SUCCESS_SOUNDS.map((sound) => (
+              <button
+                key={sound.id}
+                type="button"
+                className={`${s.segBtn} ${prefs.successSoundId === sound.id ? s.segBtnActive : ""}`}
+                aria-pressed={prefs.successSoundId === sound.id}
+                onClick={() => {
+                  update({ successSoundId: sound.id as SuccessSoundId });
+                  playSuccess(sound.id as SuccessSoundId);
+                }}
+              >
+                {sound.label}
+              </button>
+            ))}
+          </div>
+
+          <div className={s.subLabel}>Failure sound</div>
+          <div
+            className={s.segControl}
+            role="group"
+            aria-label="Failure sound"
+            style={{ ["--seg-cols" as string]: FAILURE_SOUNDS.length } as React.CSSProperties}
+          >
+            {FAILURE_SOUNDS.map((sound) => (
+              <button
+                key={sound.id}
+                type="button"
+                className={`${s.segBtn} ${prefs.failureSoundId === sound.id ? s.segBtnActive : ""}`}
+                aria-pressed={prefs.failureSoundId === sound.id}
+                onClick={() => {
+                  update({ failureSoundId: sound.id as FailureSoundId });
+                  playFailure(sound.id as FailureSoundId);
+                }}
+              >
+                {sound.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className={s.notifRow}>
+        <div className={s.notifLabel}>
+          <span className={s.notifTitle}>Desktop notification</span>
+          <span className={s.notifDesc}>{desktopHint}</span>
+        </div>
+        <button
+          type="button"
+          className={`${s.toggleBtn} ${prefs.desktopEnabled ? s.toggleBtnActive : ""}`}
+          aria-pressed={prefs.desktopEnabled}
+          disabled={perm === "unsupported" || perm === "denied"}
+          onClick={() => { void toggleDesktop(); }}
+        >
+          {prefs.desktopEnabled ? "Active" : "Off"}
+        </button>
+      </div>
+
+      {(prefs.soundEnabled || prefs.desktopEnabled) && (
+        <button
+          type="button"
+          className={s.testBtn}
+          onClick={() => { void sendTestNotification(); }}
+        >
+          Send test
+        </button>
+      )}
     </section>
   );
 }
