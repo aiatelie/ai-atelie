@@ -14,6 +14,7 @@
 import { EventEmitter } from "node:events";
 import { watch } from "node:fs";
 import {
+  appendFile,
   mkdir,
   readFile,
   readdir,
@@ -38,6 +39,7 @@ import type {
   KvDeleteResult,
   KvGetResult,
   KvPutResult,
+  LogEntry,
   ProjectScope,
   SharedScope,
   StorageDriver,
@@ -346,16 +348,172 @@ function createFsBlobStore(rootDir: string, opts: { reloadDebounceMs: number }):
   };
 }
 
-/* ─── AppendLog (stub — implemented in PR 2) ─────────────────────── */
+/* ─── AppendLog (filesystem) ─────────────────────────────────────── */
 
-function createStubAppendLog(): AppendLog {
-  function notImpl(): never {
-    throw new Error("AppendLog: filesystem driver does not implement this primitive yet (lands in PR 2).");
+/** Per-project append-only log backed by `<projectDir>/.meta/history.jsonl`.
+ *
+ *   • One entry per line: `{"seq":N,"ts":<ms>,"data":...}`.
+ *   • Append is serialized via a per-channel promise chain so concurrent
+ *     callers can't corrupt the seq counter.
+ *   • Subscribe with sinceSeq replays disk entries > seq, then attaches
+ *     for live events. Live entries arriving during replay are buffered
+ *     and drained in order — no dupes, no gaps.
+ *   • truncateBefore rewrites the file atomically (tmp + rename). */
+function createFsAppendLog(metaDir: string): AppendLog & { __destroy(): void } {
+  const file = resolvePath(metaDir, "history.jsonl");
+  const emitter = new EventEmitter();
+  emitter.setMaxListeners(0);
+
+  // Cache of the highest seq written. Loaded from disk on first append/read.
+  let lastSeq: number | null = null;
+  // Promise chain to serialize append() calls.
+  let appendChain: Promise<unknown> = Promise.resolve();
+
+  async function loadLastSeq(): Promise<number> {
+    if (lastSeq !== null) return lastSeq;
+    try {
+      const text = await readFile(file, "utf8");
+      const lines = text.trimEnd().split("\n");
+      // Walk backward to find a valid JSON line (skip torn-tail edge cases).
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        try {
+          const entry = JSON.parse(line) as LogEntry;
+          if (typeof entry.seq === "number") {
+            lastSeq = entry.seq;
+            return lastSeq;
+          }
+        } catch { /* malformed; keep looking */ }
+      }
+      lastSeq = 0;
+      return 0;
+    } catch {
+      lastSeq = 0;
+      return 0;
+    }
   }
+
+  async function readAll<T>(): Promise<LogEntry<T>[]> {
+    let text: string;
+    try { text = await readFile(file, "utf8"); }
+    catch { return []; }
+    const out: LogEntry<T>[] = [];
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try { out.push(JSON.parse(trimmed) as LogEntry<T>); }
+      catch { /* skip malformed */ }
+    }
+    return out;
+  }
+
   return {
-    async append() { notImpl(); },
-    async read() { notImpl(); },
-    subscribe() { notImpl(); },
+    async append<T = unknown>(entries: T[]): Promise<{ lastSeq: number }> {
+      const turn = appendChain.then(async () => {
+        let seq = await loadLastSeq();
+        const ts = Date.now();
+        const newEntries: LogEntry<T>[] = [];
+        const lines: string[] = [];
+        for (const data of entries) {
+          seq++;
+          const e: LogEntry<T> = { seq, ts, data };
+          newEntries.push(e);
+          lines.push(JSON.stringify(e));
+        }
+        await mkdir(dirname(file), { recursive: true });
+        await appendFile(file, lines.length ? lines.join("\n") + "\n" : "", "utf8");
+        lastSeq = seq;
+        for (const e of newEntries) emitter.emit("entry", e);
+        return { lastSeq: seq };
+      });
+      // Never let an append failure poison the chain.
+      appendChain = turn.then(() => undefined, () => undefined);
+      return turn;
+    },
+
+    async read<T = unknown>(opts?: { sinceSeq?: number; limit?: number; reverse?: boolean }): Promise<LogEntry<T>[]> {
+      let entries = await readAll<T>();
+      if (opts?.sinceSeq != null) {
+        const since = opts.sinceSeq;
+        entries = entries.filter((e) => e.seq > since);
+      }
+      if (opts?.reverse) entries.reverse();
+      if (opts?.limit != null) entries = entries.slice(0, opts.limit);
+      return entries;
+    },
+
+    subscribe<T = unknown>(
+      opts: { sinceSeq?: number } | undefined,
+      fn: (entry: LogEntry<T>) => void,
+    ): Unsubscribe {
+      // Live-only fast path.
+      if (opts?.sinceSeq == null) {
+        const direct = (e: LogEntry<T>) => fn(e);
+        emitter.on("entry", direct);
+        return () => emitter.off("entry", direct);
+      }
+
+      // Replay-then-live with buffer to avoid gaps or dupes.
+      const since = opts.sinceSeq;
+      let stopped = false;
+      let replaying = true;
+      const buffered: LogEntry<T>[] = [];
+      const handler = (e: LogEntry<T>) => {
+        if (stopped) return;
+        if (replaying) buffered.push(e);
+        else fn(e);
+      };
+      emitter.on("entry", handler);
+
+      void readAll<T>().then((all) => {
+        if (stopped) return;
+        const past = all.filter((e) => e.seq > since);
+        let lastSent = since;
+        for (const e of past) {
+          fn(e);
+          if (e.seq > lastSent) lastSent = e.seq;
+        }
+        for (const e of buffered) {
+          if (e.seq > lastSent) fn(e);
+        }
+        buffered.length = 0;
+        replaying = false;
+      }).catch(() => {
+        // If the read fails, fall through to live-only mode.
+        replaying = false;
+        buffered.length = 0;
+      });
+
+      return () => {
+        stopped = true;
+        emitter.off("entry", handler);
+      };
+    },
+
+    async truncateBefore(seq: number): Promise<{ removed: number }> {
+      // Serialize against appends so we don't drop concurrent writes.
+      const turn = appendChain.then(async () => {
+        const all = await readAll();
+        const kept = all.filter((e) => e.seq > seq);
+        const removed = all.length - kept.length;
+        if (removed === 0) return { removed: 0 };
+        await mkdir(dirname(file), { recursive: true });
+        const tmp = file + ".tmp";
+        const text = kept.length ? kept.map((e) => JSON.stringify(e)).join("\n") + "\n" : "";
+        await writeFile(tmp, text, "utf8");
+        await rename(tmp, file);
+        // Recompute lastSeq from kept.
+        lastSeq = kept.length ? kept[kept.length - 1].seq : 0;
+        return { removed };
+      });
+      appendChain = turn.then(() => undefined, () => undefined);
+      return turn;
+    },
+
+    __destroy() {
+      emitter.removeAllListeners();
+    },
   };
 }
 
@@ -383,12 +541,12 @@ export function createFsDriver(opts: FsDriverOptions): StorageDriver {
     const dir = projectDir(id);
     const meta = createFsJsonKv(resolvePath(dir, ".meta"));
     const files = createFsBlobStore(dir, { reloadDebounceMs });
-    const history = createStubAppendLog();
+    const history = createFsAppendLog(resolvePath(dir, ".meta"));
     return {
       meta,
       files,
       history,
-      __destroy() { files.__destroy(); },
+      __destroy() { files.__destroy(); history.__destroy(); },
     };
   }
 
