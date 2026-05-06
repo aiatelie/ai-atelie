@@ -8,6 +8,11 @@ import "./lib/theme";
 import Editor from "./routes/Editor";
 import Projects from "./routes/Projects";
 import { hydrateProjectFromServer } from "./lib/projects";
+import { registerNotificationServiceWorker } from "./lib/notifications";
+
+// Register the notifications SW so completion pings persist past tab close
+// and click handlers can refocus the originating tab. Failure is non-fatal.
+void registerNotificationServiceWorker();
 
 // The editor is the entire SPA now. User project content (banners,
 // pages, components) lives under web/projects/<id>/ and is served

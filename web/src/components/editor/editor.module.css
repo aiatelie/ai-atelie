@@ -236,37 +236,23 @@
   font-size: var(--text-sm);
 }
 
-.themeSwitch {
+.settingsBtn {
+  appearance: none;
+  border: 1px solid var(--ink-08);
+  background: var(--ink-04);
+  color: var(--ink-65);
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   display: inline-flex;
   align-items: center;
-  background: var(--ink-04);
-  border: 1px solid var(--ink-08);
-  border-radius: 100px;
-  padding: 2px;
-  gap: 1px;
-}
-.themeOption {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--ink-64);
-  padding: 4px 12px;
-  border-radius: 100px;
+  justify-content: center;
   cursor: pointer;
-  font-family: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
   transition: background 120ms ease, color 120ms ease;
-  line-height: 1;
 }
-.themeOption:hover {
+.settingsBtn:hover {
+  background: var(--ink-08);
   color: var(--ink-92);
-}
-.themeOptionActive,
-.themeOptionActive:hover {
-  background: var(--surface);
-  color: var(--ink-92);
-  box-shadow: var(--shadow-card);
 }
 
 /* ─── Toolbar ───────────────────────────────────────────────── */

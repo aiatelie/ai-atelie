@@ -16,11 +16,17 @@
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import pkg from "../package.json" with { type: "json" };
 
 const API_URL = process.env.VITE_API_URL || "http://localhost:5174";
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // Surface the monorepo's release version to the bundle so the
+    // Settings → About panel can display it. Replaced at build time.
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   server: {
     watch: {
       ignored: ["**/projects/**", "**/.data/**"],
