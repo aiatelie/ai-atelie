@@ -4,7 +4,8 @@
  * (creating projects, managing shared assets).
  */
 
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import s from "./projectSwitcher.module.css";
 import { ConfirmDialog } from "../projects/ConfirmDialog";
@@ -20,19 +21,59 @@ export function ProjectSwitcher() {
   const { all, active } = useProjects();
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Position the portal menu against the trigger's viewport rect on open.
+  // Done in a layout effect so the menu renders at the right spot before
+  // first paint — avoids a one-frame flash at (0, 0).
+  useLayoutEffect(() => {
+    if (!open) return;
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: r.left });
+  }, [open]);
+
+  // Close on outside click and on Escape. The previous onMouseLeave
+  // approach lost the menu the moment a user's cursor wandered.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t)) return;
+      if (triggerRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
     <div className={s.root}>
       <button
+        ref={triggerRef}
         type="button"
         className={s.trigger}
         onClick={() => setOpen((v) => !v)}
         title="Switch / manage projects"
         aria-label="Switch project"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <span className={s.chev}>▾</span>
       </button>
-      {open && (
-        <div className={s.menu} onMouseLeave={() => setOpen(false)}>
+      {open && pos && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          className={s.menu}
+          style={{ top: pos.top, left: pos.left }}
+        >
           <div className={s.section}>Projects</div>
           {all.map((p) => (
             <ProjectRow
@@ -53,7 +94,8 @@ export function ProjectSwitcher() {
             <span className={s.icon}>▦</span>
             Browse all projects
           </Link>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {deleting && (
