@@ -1,8 +1,10 @@
 /* Projects.tsx — dashboard / first-run page for the editor.
  *
  * Shows a card grid of all projects, with a header "+ New project" button
- * and a hero empty-state when there are zero projects. Clicking a card
- * activates that project and routes to /editor.
+ * and an inline "+ New project" tile as the first grid card so first-run
+ * users see the create affordance in the same place returning users will
+ * find it later (muscle memory). Clicking a card activates that project
+ * and routes to /editor.
  */
 
 import { useState } from "react";
@@ -46,6 +48,8 @@ export default function Projects() {
     }
   };
 
+  const isEmpty = all.length === 0;
+
   return (
     <div className={s.shell}>
       <div className={s.inner}>
@@ -61,30 +65,38 @@ export default function Projects() {
               <div className={s.brandSub}>YOUR PROJECTS</div>
             </div>
           </div>
-          {all.length > 0 && (
+          {!isEmpty && (
             <button className={s.newBtn} onClick={() => setCreating(true)}>
               + New project
             </button>
           )}
         </header>
 
-        {all.length === 0 ? (
-          <EmptyState onCreate={() => setCreating(true)} />
-        ) : (
-          <>
-            <div className={s.sectionLabel}>Projects · {all.length}</div>
-            <div className={s.grid}>
-              {all.map((p) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  onOpen={() => openProject(p.id)}
-                  onDelete={() => setDeleting(p)}
-                  onRename={(next) => updateProject(p.id, { name: next })}
-                />
-              ))}
-            </div>
-          </>
+        <div className={s.sectionLabel}>
+          {isEmpty ? "Get started" : `Projects · ${all.length}`}
+        </div>
+        <div className={s.grid}>
+          <CreateTile
+            emphasis={isEmpty}
+            onCreate={() => setCreating(true)}
+          />
+          {all.map((p) => (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              onOpen={() => openProject(p.id)}
+              onDelete={() => setDeleting(p)}
+              onRename={(next) => updateProject(p.id, { name: next })}
+            />
+          ))}
+        </div>
+
+        {isEmpty && (
+          <p className={s.emptyHint}>
+            A project is a workspace for one banner system, prototype, or design exploration.
+            It owns its own tabs, comments, and chat history. Shared assets (colors, lotties,
+            components) are global across projects.
+          </p>
         )}
 
         <footer className={s.footer}>
@@ -124,24 +136,38 @@ export default function Projects() {
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+/**
+ * Inline create tile — the first card in the grid. Always present so the
+ * "make a new project" affordance lives in the same spot whether the user
+ * has 0 or 30 projects. On the empty state we add `data-emphasis="true"`
+ * so the tile reads as the primary CTA (slightly punchier label, no
+ * separate hero block needed).
+ */
+function CreateTile({
+  emphasis,
+  onCreate,
+}: {
+  emphasis: boolean;
+  onCreate: () => void;
+}) {
+  const label = emphasis ? "Create your first project" : "New project";
+  // The aria-label always contains "new project" so the same role+name
+  // matcher (used by the CUJ and by future click handlers) finds this
+  // tile in either state — even though the visible label varies.
+  const ariaLabel = emphasis ? "New project — create your first" : "New project";
   return (
-    <div className={s.empty}>
-      <span className={s.emptyMark}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 7 V18 H21 V9 H12 L10 7 Z" />
-        </svg>
+    <button
+      type="button"
+      className={s.createTile}
+      data-emphasis={emphasis ? "true" : undefined}
+      onClick={onCreate}
+      aria-label={ariaLabel}
+    >
+      <span className={s.createGlyph} aria-hidden="true">
+        +
       </span>
-      <div className={s.emptyTitle}>No projects yet</div>
-      <div className={s.emptyBody}>
-        A project is a workspace for one banner system, prototype, or design exploration.
-        It owns its own tabs, comments, and chat history. Shared assets (colors, lotties,
-        components) are global across projects.
-      </div>
-      <button className={s.newBtn} onClick={onCreate}>
-        + Create your first project
-      </button>
-    </div>
+      <span className={s.createLabel}>{label}</span>
+    </button>
   );
 }
 

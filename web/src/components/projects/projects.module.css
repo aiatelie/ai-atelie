@@ -154,38 +154,66 @@
   max-width: 100%;
 }
 
-.empty {
-  background: var(--surface);
-  border: 1px solid var(--ink-10);
-  border-radius: var(--radius-xl);
-  padding: 56px 32px;
-  text-align: center;
+/* Inline create tile — always rendered as the first grid card. Dashed
+ * border + large `+` glyph + label, becomes punchier (`data-emphasis`)
+ * on the empty state so it reads as the primary CTA without needing a
+ * separate hero block. */
+.createTile {
+  appearance: none;
+  background: transparent;
+  border: 1.5px dashed var(--ink-15);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  box-shadow: var(--shadow-card);
-}
-.emptyMark {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-xl);
-  background: var(--brand-bg);
-  color: var(--brand);
-  display: inline-flex;
-  align-items: center;
   justify-content: center;
-}
-.emptyTitle {
-  font-size: 18px;
-  font-weight: var(--weight-semi);
-  color: var(--ink-92);
-}
-.emptyBody {
+  gap: 10px;
+  min-height: 140px;
   color: var(--ink-64);
+  font-family: var(--font-system);
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease, transform 0.08s ease;
+}
+.createTile:hover {
+  border-color: var(--brand-strong);
+  color: var(--ink-92);
+  background: var(--ink-04);
+}
+.createTile:focus-visible {
+  outline: none;
+  border-color: var(--ink-35);
+  box-shadow: 0 0 0 3px var(--ink-08);
+}
+.createTile:active { transform: translateY(1px); }
+.createGlyph {
+  font-size: 32px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  color: var(--ink-44);
+  transition: color 0.12s ease;
+}
+.createTile:hover .createGlyph { color: var(--brand); }
+.createLabel {
   font-size: var(--text-md);
-  max-width: 420px;
-  line-height: 1.5;
+  font-weight: var(--weight-medium);
+}
+.createTile[data-emphasis="true"] {
+  border-color: var(--brand-strong);
+  color: var(--ink-92);
+  background: var(--brand-bg);
+}
+.createTile[data-emphasis="true"] .createGlyph { color: var(--brand); }
+.createTile[data-emphasis="true"]:hover { background: var(--brand-bg); filter: brightness(0.98); }
+
+/* Hint paragraph shown only on the empty state, below the grid. Replaces
+ * the previous hero empty-state block. */
+.emptyHint {
+  margin-top: 18px;
+  color: var(--ink-64);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  max-width: 560px;
 }
 
 .dialogBackdrop {
