@@ -12,13 +12,17 @@ features or breaking changes; everything else is patch.
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.0...v0.1.1)
 
-### Docs
+### Features
 
-- **skills:** Make "evidence must show post-completion state" an explicit rule ([feede31](https://github.com/aiatelie/ai-atelie/commit/feede31))
+- **web:** Canvas-busy pulse + rotating phrase pill while an agent run is in flight, so a user can tell at a glance which canvas is busy and avoid starting a conflicting chat in parallel. Pill rotates through 24 phrases ("AI is cooking", "Magic in progress", "Sprinkling pixels", "Wrangling the DOM", …) every ~5s, never repeats consecutively. Provider-neutral: works for Claude, Kimi, and OpenCode equally because it watches the existing `lastIsPending` state, not provider-specific deltas. Includes the repo's first unit test (`busyPhrases.test.ts`, 3 tests / 203 expects via `bun test`) ([#53](https://github.com/aiatelie/ai-atelie/pull/53))
 
 ### Build
 
-- **web:** Exclude *.test.ts from tsc compilation ([0398330](https://github.com/aiatelie/ai-atelie/commit/0398330))
+- **web:** Exclude `*.test.ts` from tsc compilation so colocated unit tests using `bun:test` don't break the build ([0398330](https://github.com/aiatelie/ai-atelie/commit/0398330))
+
+### Docs
+
+- **skills:** Make "evidence must show post-completion state" an explicit rule in `verify-with-playwright/SKILL.md` — capture the agent's actual output, not just the in-flight UX. Adds polling pattern, valid completion signals, anti-patterns to refuse ([feede31](https://github.com/aiatelie/ai-atelie/commit/feede31))
 
 ### ❤️ Contributors
 
