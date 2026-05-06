@@ -25,7 +25,7 @@ bun install
 bun run dev
 ```
 
-Open <http://localhost:5173/projects>. The repo ships with a **bundled demo project** (a 3-direction LinkedIn banner) so you can poke at a real artifact before scaffolding your own — click the **demo** card to land in the editor.
+Open <http://localhost:5173>. The repo ships with a **bundled demo project** (a 3-direction LinkedIn banner) so you can poke at a real artifact before scaffolding your own — click the **demo** card to land in the editor.
 
 To create your own from scratch: hit **+ New project**, walk through the onboarding form, and the agent starts designing.
 
