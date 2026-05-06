@@ -21,37 +21,73 @@
  */
 
 import {
+  Fragment,
   memo,
   useEffect,
   useMemo,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import { createPatch, structuredPatch } from "diff";
 import s from "./chat.module.css";
 
 // ─── Inline AST ──────────────────────────────────────────────────────
 
-type InlineNode =
+export type InlineNode =
   | { type: "text"; value: string }
   | { type: "code"; value: string }
   | { type: "bold"; value: string }
   | { type: "italic"; value: string }
-  | { type: "link"; text: string; href: string };
+  | { type: "link"; text: string; href: string }
+  | { type: "autolink"; href: string };
 
 type BlockNode =
   | { type: "paragraph"; children: InlineNode[] }
   | { type: "codeBlock"; lang: string; code: string }
   | { type: "list"; ordered: boolean; items: InlineNode[][] };
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+// Bare-URL autolink: matches http(s):// URLs not already wrapped in
+// markdown link syntax. Trailing punctuation that's clearly sentence
+// punctuation (e.g. a period, comma, or closing paren that didn't open
+// inside the URL) is trimmed back into the surrounding text.
+const URL_RE = /\bhttps?:\/\/[^\s<>"']+/g;
+const URL_TRAIL_PUNCT = /[.,;:!?)\]}>'"`]+$/;
+
+function splitBareUrls(value: string): InlineNode[] {
+  const out: InlineNode[] = [];
+  let last = 0;
+  URL_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = URL_RE.exec(value)) !== null) {
+    let url = m[0];
+    let trail = "";
+    // Pull trailing punctuation back out of the URL — readers expect
+    // "see https://example.com." to render as a link + period, not a
+    // link that includes the period.
+    const trailMatch = url.match(URL_TRAIL_PUNCT);
+    if (trailMatch) {
+      trail = trailMatch[0];
+      url = url.slice(0, url.length - trail.length);
+    }
+    if (!url) continue;
+    if (m.index > last) {
+      out.push({ type: "text", value: value.slice(last, m.index) });
+    }
+    out.push({ type: "autolink", href: url });
+    last = m.index + url.length;
+    if (trail) {
+      out.push({ type: "text", value: trail });
+      last += trail.length;
+    }
+  }
+  if (last < value.length) {
+    out.push({ type: "text", value: value.slice(last) });
+  }
+  return out.length > 0 ? out : [{ type: "text", value }];
 }
 
-function parseInline(text: string): InlineNode[] {
+export function parseInline(text: string): InlineNode[] {
   const nodes: InlineNode[] = [];
   const patterns = [
     { re: /\[([^\]]+)\]\(([^)]+)\)/g, type: "link" as const },
@@ -97,7 +133,33 @@ function parseInline(text: string): InlineNode[] {
       break;
     }
   }
-  return nodes;
+
+  // Second pass: walk text nodes and split out bare http(s) URLs into
+  // autolinks. Other node types (existing markdown links, code, bold,
+  // italic) are left untouched, so a URL inside `inline code` stays
+  // verbatim.
+  const out: InlineNode[] = [];
+  for (const n of nodes) {
+    if (n.type === "text" && URL_RE.test(n.value)) {
+      out.push(...splitBareUrls(n.value));
+    } else {
+      out.push(n);
+    }
+  }
+  return out;
+}
+
+// Split a string on "\n" into real React nodes — a Fragment per chunk
+// with <br/> between them — so we don't need dangerouslySetInnerHTML on
+// text. Keeps streaming-safe (no innerHTML reflows mid-token).
+function withBreaks(text: string, baseKey: string): ReactNode[] {
+  const parts = text.split("\n");
+  const out: ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (i > 0) out.push(<br key={`${baseKey}-br-${i}`} />);
+    if (part) out.push(<Fragment key={`${baseKey}-t-${i}`}>{part}</Fragment>);
+  });
+  return out;
 }
 
 function parseMarkdown(input: string): BlockNode[] {
@@ -177,7 +239,7 @@ function Inline({ nodes }: { nodes: InlineNode[] }) {
       {nodes.map((n, i) => {
         switch (n.type) {
           case "text":
-            return <span key={i} dangerouslySetInnerHTML={{ __html: escapeHtml(n.value).replace(/\n/g, "<br/>") }} />;
+            return <Fragment key={i}>{withBreaks(n.value, String(i))}</Fragment>;
           case "code":
             return <code key={i} className={s.inlineCode}>{n.value}</code>;
           case "bold":
@@ -186,8 +248,14 @@ function Inline({ nodes }: { nodes: InlineNode[] }) {
             return <em key={i}>{n.value}</em>;
           case "link":
             return (
-              <a key={i} href={n.href} target="_blank" rel="noreferrer" className={s.markdownLink}>
+              <a key={i} href={n.href} target="_blank" rel="noreferrer noopener" className={s.markdownLink}>
                 {n.text}
+              </a>
+            );
+          case "autolink":
+            return (
+              <a key={i} href={n.href} target="_blank" rel="noreferrer noopener" className={s.markdownLink}>
+                {n.href}
               </a>
             );
         }
