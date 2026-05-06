@@ -107,7 +107,7 @@ After bundling, prune older runs to keep the last 5:
 ls -1t .evidence | tail -n +6 | xargs -I{} rm -rf ".evidence/{}"
 ```
 
-Once evidence is uploaded to a PR via `gh attach` (see `ship-task`), the canonical copy lives on GitHub's CDN. Local `.evidence/` is just scratch.
+Once evidence is uploaded to a PR via `bun run upload:evidence` (see `scripts/upload-evidence.mjs`), the canonical copy lives on GitHub's `user-attachments/assets/...` CDN — videos play inline, images embed natively. Local `.evidence/` is just scratch. Note: this requires a one-time `bun run setup:attach` to log into github.com via Chromium; the cookies live in `~/.local/state/aiatelie/` (per-user, never committed).
 
 ## Known failure modes
 

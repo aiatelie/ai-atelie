@@ -81,9 +81,11 @@ The repo ships four contributor workflows under `.claude/skills/`. They auto-loa
 Optional but recommended one-time setup so the verify+PR flow works end-to-end:
 
 ```bash
-bunx playwright install chromium       # ~80MB, one-time
-gh extension install Addono/gh-attach  # uploads evidence to PRs
+bunx playwright install chromium     # ~80MB, one-time — for the verify-with-playwright skill
+bun run setup:attach                 # one-time — opens Chromium so you can log into github.com once
 ```
+
+`setup:attach` saves your GitHub browser session at `~/.local/state/aiatelie/` (per-user, outside the repo, never committed). After that, `bun run upload:evidence <owner/repo/pull/N> <file1> [file2] ...` uploads evidence headless to GitHub's `user-attachments` CDN — videos auto-play inline, images embed natively, no `releases/download/...` download links. Re-run `setup:attach` every few weeks (or when uploads start 401-ing) to refresh the session. We do this instead of using `gh-attach` because the user-attachments upload endpoint is cookie-only — no PAT or `gh auth token` works against it as of May 2026.
 
 ## The Critical User Journey (CUJ)
 

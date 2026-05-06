@@ -33,7 +33,7 @@ If either is missing, **STOP** and tell the user: "ship-task needs both verify-w
 Also verify:
 
 - [ ] `gh` CLI is authenticated (`gh auth status` succeeds).
-- [ ] `gh attach` extension installed (`gh extension list | grep gh-attach`). If missing: `gh extension install Addono/gh-attach`.
+- [ ] `bun run setup:attach` has been run on this machine at least once (cookies at `~/.local/state/aiatelie/gh-attach-cookies.txt` exist). Refresh every few weeks. The script and the rationale live in `scripts/setup-attach-session.mjs`.
 - [ ] You're on a branch that isn't `main` (or the user has explicitly OK'd shipping straight to main, which is unusual).
 - [ ] `bun run dev` is running on `:5173` (the verify step needs it).
 
@@ -143,14 +143,25 @@ Pre-PR checklist:
 - [ ] Evidence is bundled in `.evidence/<run>/`.
 - [ ] Blast Radius Report is ready to paste into the PR body.
 
-Upload evidence to GitHub's user-attachments CDN via `gh-attach`:
+Upload evidence to GitHub's `user-attachments` CDN with the in-repo helper. Returns a JSON array of `{file, url}` you can plug into the PR body. Videos play inline if you embed the bare URL on its own line; images go in `<img alt="..." src="..." />` tags.
 
 ```sh
-REPO="aiatelie/ai-atelie"
-VIDEO_MD=$(gh attach upload .evidence/<run>/video.webm --target "$REPO" --format markdown)
-BEFORE_MD=$(gh attach upload .evidence/<run>/before.png --target "$REPO" --format markdown 2>/dev/null || echo "")
-AFTER_MD=$(gh attach upload .evidence/<run>/after.png --target "$REPO" --format markdown 2>/dev/null || echo "")
+bun run upload:evidence aiatelie/ai-atelie/pull/<N> \
+  .evidence/<run>/before.png \
+  .evidence/<run>/after.png \
+  .evidence/<run>/video.mp4
 ```
+
+If the video is a long Playwright recording (typical: 5+ min webm), compress it first so the upload is fast and the inline player loads reasonably:
+
+```sh
+ffmpeg -i .evidence/<run>/video.webm \
+  -filter:v "setpts=0.125*PTS,scale=1024:-2" \
+  -an -c:v libx264 -preset fast -crf 28 -movflags +faststart \
+  -y .evidence/<run>/video.mp4
+```
+
+That's 8× speed + 1024px width + reasonable compression — typical 19MB/5min input → ~1.5MB/30sec output.
 
 Then create the PR with this body template:
 

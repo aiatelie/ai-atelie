@@ -43,6 +43,13 @@ test-results/
 playwright-report/
 .evidence/
 
+# Defense-in-depth: the setup-attach-session helper saves browser
+# session state and cookies to ~/.local/state/aiatelie/ (well outside
+# the repo) — but if anyone ever points it at a path inside the repo,
+# these patterns make sure the cookies never get committed.
+*-cookies.txt
+chromium-profile/
+
 # Per-user projects under web/projects/ are runtime data and not tracked,
 # EXCEPT the bundled demo project. .meta/ (chat history) inside the demo
 # is still per-user and stays ignored.
