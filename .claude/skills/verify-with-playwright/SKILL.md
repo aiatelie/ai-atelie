@@ -80,16 +80,27 @@ bunx playwright test web/tests/e2e/<slug>.spec.ts --headed
 bunx playwright show-report
 ```
 
-## Evidence MUST show the post-completion state
+## Evidence MUST show the post-completion state — including the canvas
 
-**Rule**: a capture that ends while the agent is still working (or while the loading/busy/streaming UI is still on screen) is incomplete evidence and should never be submitted to a PR.
+**Rule**: a capture that ends while the agent is still working, OR that doesn't include the visual outcome on the canvas / iframe / final UI surface, is incomplete evidence and should never be submitted to a PR.
 
-The point of evidence is to demonstrate two things, in order:
+The point of evidence is to demonstrate, in order:
 
-1. **The change still produces the expected user-visible outcome** — the agent finished, the result rendered, the iframe shows the new content, the file was written, whatever the acceptance criteria called for.
-2. (Optionally, secondarily) **The in-flight UX is correct** — loading spinner appears, busy pill rotates, progress is visible.
+1. **The change produces the expected user-visible outcome.** The agent finished, the result rendered, the **iframe canvas shows the new content** (or the file was written, or the UI updated to reflect the new state) — whatever the acceptance criteria says is "the thing the user will see."
+2. (Optionally) **The chat / chip / loading UI was correct in flight** — busy pill rotated, chip turned amber while editing, etc.
+3. (Optionally) **Failures are valid evidence too.** If the agent's API errored, hit a rate limit, or refused — capture that screenshot and explain. It's better than no evidence; reviewers can tell whether the feature works or whether the agent had a bad day.
 
-If your video stops at step 2, you have *zero* evidence for step 1. Reviewers can't tell whether the feature actually worked or whether the script bailed before anything happened.
+If your screenshot only shows the chat sidebar without the canvas, you've captured *the harness reacting* but NOT *the user-visible result*. Reviewers can't tell whether the feature works.
+
+### Pick prompts that produce a visible canvas change
+
+For features whose acceptance criteria is "the chat sidebar / chips / status indicator does X," a pure-chat capture is fine. But the **default** evidence prompt should be one that ALSO updates the iframe canvas, so the same screenshot proves both surfaces work:
+
+- ✅ `"Make this a Hello World page on a bright green background. Replace whatever is there."` — agent writes index.html, canvas re-renders green, chip strip + canvas both visible.
+- ✅ `"Add a red rectangle in the top-right corner of the canvas."` — visible diff on the iframe.
+- ❌ `"Just read the current index.html."` — chat updates, canvas unchanged. You proved the *chat* works, not the *product*.
+
+If the acceptance criteria genuinely is chat-only (e.g., "tool chips are colored"), a chat-only capture is acceptable but you should still trigger a chat that *would* have updated the canvas — that way the still-blank canvas is itself evidence that the agent ran in a normal mode, not a special test mode.
 
 ### How to wait for completion correctly
 
@@ -111,6 +122,20 @@ expect(sawBusy, "agent run was observed to be in flight at some point").toBe(tru
 ```
 
 Then add ONE extra `await page.waitForTimeout(2_000)` after the busy state clears so the iframe re-renders before you screenshot.
+
+### Use Sonnet, not Opus, for evidence runs
+
+Evidence captures don't need the most expensive model — Sonnet produces equivalent visible results for the kinds of "Hello World" / "make a red rectangle" prompts these runs use, at a fraction of the token cost. Force it via `localStorage` before navigating:
+
+```ts
+await ctx.addInitScript(() => {
+  localStorage.setItem("editor-model-id", "claude-sonnet-4-6");
+});
+```
+
+(See `web/src/data/modelPresets.ts` for the canonical id list. Update if Anthropic ships a newer Sonnet that's cheaper still.)
+
+Reserve Opus for the actual feature work the maintainer is shipping — not the dogfood test that re-runs on every PR.
 
 ### Other valid completion signals
 
@@ -165,6 +190,9 @@ Once evidence is uploaded to a PR via `bun run upload:evidence` (see `scripts/up
 ## Anti-patterns the skill must refuse
 
 - **Submitting evidence that ends while the agent is still working.** No matter how good the in-flight footage looks, if the recording stops before the post-completion state, the evidence is incomplete and the PR review will (correctly) bounce.
+- **Capturing only the chat sidebar without the canvas.** The chat is the harness; the canvas is the product. A screenshot of just the chips proves the harness reacted, not that the user-visible result rendered. Default to a prompt that updates the iframe so a single full-page screenshot covers both.
+- **Hiding agent failures.** If the API errors or rate-limits or refuses, capture that screenshot AND explain it in the PR body. "The flow ran, the agent declined for X reason, here's what the UI did when that happened" is much better evidence than no evidence.
+- **Burning Opus on dogfood runs.** Set `editor-model-id` to `claude-sonnet-4-6` via the init script (see "Use Sonnet, not Opus" above). Opus is for the maintainer's real feature work, not the harness check.
 - **Aborting / cancelling the run** to save time on the capture. The point of evidence is the full flow; if you cancel, you're not proving anything happened.
 - **Sleep-then-screenshot** as a fake completion signal. Use a real signal (busy state cleared, file modified, DOM mutation) — never a fixed timeout.
 - **"It worked when I ran it manually"** — without captured evidence, this doesn't appear in the PR. Re-run with capture before submitting.

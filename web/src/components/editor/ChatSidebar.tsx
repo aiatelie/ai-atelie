@@ -8,7 +8,7 @@
  * for the onboarding full-page chat to reuse without forking.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import s from "./chat.module.css";
 import type { Attachment } from "./CommentBubble";
 import { ModelPicker, loadModelId, saveModelId, useModelPickerFlag } from "./ModelPicker";
@@ -18,6 +18,66 @@ import { ElicitForm } from "./ElicitForm";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
+import { kindOf, KIND_VERB, type ToolKind } from "../../lib/toolKind";
+
+/* KindIcon — 12px inline SVG icons for tool-call chips. Lucide-style
+ * minimal: single stroke, currentColor, no fill. Sized to sit inside
+ * the chip pill without inflating its height. Picked over emoji
+ * (which renders unevenly across OSes and clashes with the unicode-
+ * glyph language used elsewhere in the app: ▾ ↑ ·). */
+const KIND_ICON_SVG: Record<ToolKind, ReactElement> = {
+  read: (
+    <>
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </>
+  ),
+  execute: (
+    <>
+      <polyline points="4 17 10 11 4 5" />
+      <line x1="12" y1="19" x2="20" y2="19" />
+    </>
+  ),
+  fetch: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </>
+  ),
+  other: (
+    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-2.5z" />
+  ),
+};
+function KindIcon({ kind }: { kind: ToolKind }) {
+  return (
+    <svg
+      width={12}
+      height={12}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {KIND_ICON_SVG[kind]}
+    </svg>
+  );
+}
 
 export type ChatMessage =
   | {
@@ -1301,25 +1361,16 @@ function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean })
  *  by the parent's m.content check). */
 function LiveStatus({ tools }: { tools: ToolCall[] }) {
   const last = tools.length > 0 ? tools[tools.length - 1] : null;
-  // Map common tool names to a verb the user understands.
+  // Derive verb from the tool's semantic kind so this preview stays
+  // aligned with the chip color below it (single source of truth in
+  // toolKind.ts). The tool's label still drives the file/target text.
   let verb = "Working";
   let target = "";
   if (last) {
-    const label = last.label || last.tool || "";
-    const m = label.match(/^(\w+)\s*·\s*(.+)$/);
-    if (m) {
-      const [, name, file] = m;
-      target = file.trim();
-      const v = name.toLowerCase();
-      if (v.startsWith("read")) verb = "Reading";
-      else if (v.startsWith("edit") || v.startsWith("strreplace") || v.startsWith("write")) verb = "Editing";
-      else if (v.startsWith("grep") || v.startsWith("search")) verb = "Searching";
-      else if (v.startsWith("glob")) verb = "Looking through";
-      else if (v.startsWith("bash") || v.startsWith("shell")) verb = "Running";
-      else verb = name;
-    } else {
-      verb = label || "Working";
-    }
+    verb = KIND_VERB[kindOf(last.name)];
+    const label = last.label || "";
+    const m = label.match(/^[^·]+·\s*(.+)$/);
+    target = m ? m[1].trim() : "";
   }
   return (
     <div className={s.liveStatus}>
@@ -1337,17 +1388,21 @@ function LiveStatus({ tools }: { tools: ToolCall[] }) {
 function ToolChip({ tool }: { tool: ToolCall }) {
   const [open, setOpen] = useState(false);
   const hasDetails = !!tool.input && Object.keys(tool.input).length > 0;
+  const kind = kindOf(tool.name);
   return (
     <div className={`${s.toolChipWrap} ${open ? s.toolChipOpen : ""}`}>
       <button
         type="button"
         className={s.toolChip}
+        data-kind={kind}
+        data-error={tool.isError ? "true" : undefined}
         onClick={() => hasDetails && setOpen((o) => !o)}
         disabled={!hasDetails}
         aria-expanded={open}
         title={hasDetails ? (open ? "Hide details" : "Show details") : undefined}
       >
-        <span>{tool.label}</span>
+        <KindIcon kind={kind} />
+        <span className={s.toolChipLabel}>{tool.label}</span>
         {hasDetails && <span className={s.toolChipChev} aria-hidden="true">▾</span>}
       </button>
       {open && hasDetails && (
