@@ -16,7 +16,9 @@
     "build": "cd web && bun run build",
     "preview": "cd web && bun run preview",
     "release": "bunx changelogen --release --push",
-    "release:manual": "bunx bumpp --no-push --execute 'bunx changelogen --no-bump --output CHANGELOG.md'"
+    "release:manual": "bunx bumpp --no-push --execute 'bunx changelogen --no-bump --output CHANGELOG.md'",
+    "test:e2e": "bunx playwright test --grep-invert @cuj",
+    "test:cuj": "bunx playwright test --grep @cuj"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

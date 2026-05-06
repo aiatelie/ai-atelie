@@ -12,6 +12,11 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./web/tests/e2e",
   outputDir: "./test-results",
+  // NOTE: the Critical User Journey (cuj.spec.ts) takes ~5 minutes
+  // (agent latency dominates) and isn't appropriate for every run.
+  // Use `bun run test:e2e` to run everything EXCEPT the CUJ; use
+  // `bun run test:cuj` to run only the CUJ. Bare `bunx playwright
+  // test` runs both — the npm scripts are what most callers want.
   reporter: [
     ["list"],
     ["html", { outputFolder: "playwright-report", open: "never" }],

@@ -71,10 +71,11 @@ export GH_TOKEN=$(gh auth token)
 
 ## Dev-time skills
 
-The repo ships three contributor workflows under `.claude/skills/`. They auto-load when you open Claude Code in this repo:
+The repo ships four contributor workflows under `.claude/skills/`. They auto-load when you open Claude Code in this repo:
 
 - **`ship-task`** — orchestrates implement → verify → blast-radius check → commit → PR for any issue or task.
 - **`verify-with-playwright`** — drives the dev server with a real browser, captures evidence (`.evidence/<run>/`), attaches it to the PR.
+- **`cuj-guardian`** — runs and triages the Critical User Journey (the single end-to-end test that proves the agent loop still works). Gates by inspecting the PR diff first; on failure walks a five-step triage to decide "broken feature" vs "stale test" before touching either.
 - **`semantic-commit`** — drafts Conventional Commits messages tuned to the workspace scope set above.
 
 Optional but recommended one-time setup so the verify+PR flow works end-to-end:
@@ -83,6 +84,17 @@ Optional but recommended one-time setup so the verify+PR flow works end-to-end:
 bunx playwright install chromium       # ~80MB, one-time
 gh extension install Addono/gh-attach  # uploads evidence to PRs
 ```
+
+## The Critical User Journey (CUJ)
+
+`web/tests/e2e/cuj.spec.ts` is the single end-to-end test that proves AI Atelie's core promise: a user opens the app, creates a project, the agent designs into it, the canvas renders. It takes ~5 minutes (agent latency), so it's tagged `@cuj` and gated behind a separate npm script:
+
+```bash
+bun run test:e2e   # everything EXCEPT the CUJ — fast, run as often as you like
+bun run test:cuj   # ONLY the CUJ — run before approving any PR
+```
+
+The change log for the CUJ is `web/tests/e2e/CUJ_JOURNAL.md`. **Touching `cuj.spec.ts` without adding a journal entry is a bug.** The `cuj-guardian` skill enforces this and walks the triage protocol on failure.
 
 ## What is not accepted
 
