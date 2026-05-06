@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import s from "./fileBrowserView.module.css";
 import { readRecents, pushRecent } from "./recents";
+import { readFolderState, writeFolderState } from "./folderState";
 
 export type SandboxFile = {
   path: string;
@@ -40,7 +41,15 @@ type Props = {
 export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRoute, revealRequest }: Props) {
   const [tree, setTree] = useState<FileTree | null>(null);
   const [selected, setSelected] = useState<SandboxFile | null>(null);
-  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({ uploads: false });
+  // Folder-collapse state is per-project: a user who collapsed "uploads"
+  // expects it to stay collapsed on the next reopen of the same project.
+  // We seed from localStorage on first render, then write back on every
+  // change so flipping projects loses no state. Defaults to {} (every
+  // folder closed) when nothing is stored, keeping the historical
+  // behavior on a fresh browser.
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>(
+    () => readFolderState(projectId),
+  );
   const [dropOver, setDropOver] = useState(false);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ file: SandboxFile; x: number; y: number } | null>(null);
@@ -98,6 +107,16 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
     window.addEventListener("files:invalidate", onChange);
     return () => window.removeEventListener("files:invalidate", onChange);
   }, [refresh]);
+
+  // Re-seed folder state when the active project changes so each project
+  // remembers its own "uploads collapsed / inspirations expanded" shape.
+  // FileBrowserView remounts rarely; without this the previous project's
+  // map would carry over.
+  useEffect(() => { setOpenFolders(readFolderState(projectId)); }, [projectId]);
+
+  // Persist on every change. Cheap (<10 keys, <100 bytes), and keeps
+  // the storage in lockstep with React state — no debounce needed.
+  useEffect(() => { writeFolderState(projectId, openFolders); }, [projectId, openFolders]);
 
   // Group files by inferred kind + by directory prefix (uploads/, bg/, etc.).
   // When the user has typed a query, filter to case-insensitive substring
