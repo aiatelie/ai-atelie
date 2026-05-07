@@ -83,6 +83,8 @@ import {
   getStreamState,
   abortStream,
   newStreamId,
+  notifyServerStop,
+  resumeStream,
   type StreamEvent,
   type ElicitRequest,
   type ToolCall,
@@ -179,7 +181,16 @@ function sanitizeThreads(threads: ChatThread[]): { threads: ChatThread[]; dirty:
         const userMsg = arr[i - 1];
         const streamId = userMsg && userMsg.role === "user" ? userMsg.streamId : undefined;
         if (!isStreamActive(streamId)) {
-          nm = closeStrandedAssistant(nm);
+          // If we have a streamId, give the server-side replay endpoint
+          // a chance: the re-attach useEffect will probe it on mount and
+          // either reattach the live run or strand the message itself
+          // when 404 comes back. Stranding here would race the resume
+          // probe and lose every time. No streamId → genuinely
+          // unrecoverable, strand immediately so the UI doesn't sit
+          // forever on a non-resumable pending message.
+          if (!streamId) {
+            nm = closeStrandedAssistant(nm);
+          }
         }
       } else if (
         // Heal legacy data: messages that already shipped through the old
@@ -614,6 +625,10 @@ export default function Editor() {
       for (let i = index; i < t.messages.length; i++) {
         const m = t.messages[i];
         if (m.role === "user" && m.streamId) {
+          // Truncating the thread destroys the assistant message that
+          // would have rendered any reattach output — bypass the
+          // server-side grace window so the SDK aborts immediately.
+          void notifyServerStop(m.streamId);
           abortStream(m.streamId);
           detachStream(m.streamId);
         }
@@ -836,9 +851,9 @@ export default function Editor() {
     if (!streamId) return;
     const aIdx = activeThread.messages.length - 1;
     const updateAssistant = makeAssistantUpdater(activeThread.id, aIdx);
-    // Hydrate from current accumulated state so the bubble shows what
-    // arrived during the unmount window (HMR replacement, or terminal
-    // events that piled up while we weren't subscribed).
+
+    // 1. In-tab path — chatStream module survived (e.g. HMR remount of
+    //    Editor.tsx but the SSE pump kept running). Hydrate + subscribe.
     const cur = getStreamState(streamId);
     if (cur) {
       updateAssistant((m) => ({
@@ -849,15 +864,77 @@ export default function Editor() {
         turnId: cur.turnId ?? m.turnId,
         error: cur.error ?? m.error,
       }));
-      // Hydrate any in-flight elicitation so an HMR remount doesn't drop
-      // an open form. The thread is whichever one we're re-attaching to.
       if (cur.elicit) setPendingElicit({ request: cur.elicit, threadId: activeThread.id });
+      const handler = buildStreamHandler(activeThread.id, aIdx);
+      return subscribeStream(streamId, handler);
     }
-    const handler = buildStreamHandler(activeThread.id, aIdx);
-    // subscribeStream returns a no-op if the stream entry was evicted; in
-    // that case there's nothing to clean up and `pending` stays — the
-    // mount-time sanitizer in loadThreads handles that case.
-    return subscribeStream(streamId, handler);
+
+    // 2. Server-resume path — full reload happened, the in-tab module
+    //    state is gone. Try the server's replay endpoint: if it has a
+    //    buffered run for this streamId, we reattach without re-issuing
+    //    the AI turn (no double-bill). Falls through to (3) on 404.
+    //
+    //    Race guard: a fresh `runTurn` registers the streamId in
+    //    chatStream synchronously (`streams.set` in startStream), but
+    //    runTurn awaits a screenshot capture before calling startStream.
+    //    During that await, React re-renders and this effect can run
+    //    too early — `getStreamState` returns null and we'd race-probe
+    //    a streamId the server hasn't registered yet. A short delay
+    //    + re-check on cur lets the in-tab path take over for fresh
+    //    sends; reload-resume scenarios still hit the probe (in-tab
+    //    state stays null no matter how long we wait, because the
+    //    module was just initialized empty).
+    let cancelled = false;
+    let attached: (() => void) | null = null;
+    void (async () => {
+      // Yield ~250ms — captures the typical `captureIframeAsDataUrl`
+      // window in runTurn before its `startStream` call lands.
+      await new Promise((r) => setTimeout(r, 250));
+      if (cancelled) return;
+      const recheck = getStreamState(streamId);
+      if (recheck) {
+        // Fresh-send raced ahead of us; the in-tab path would have
+        // attached above on a later effect run. Subscribe here so
+        // events from the now-registered stream drive React state.
+        const handlerLate = buildStreamHandler(activeThread.id, aIdx);
+        attached = subscribeStream(streamId, handlerLate);
+        return;
+      }
+      const projectId = activeProject.id;
+      const threadId = activeThread.id;
+      const handler = buildStreamHandler(threadId, aIdx);
+      const shadowHandler = attachStreamToThread({
+        projectId,
+        threadId,
+        streamId,
+        msgIdx: aIdx,
+        resumeFrom: "snapshot",
+      });
+      const ok = await resumeStream(streamId, [handler, shadowHandler]);
+      if (cancelled) {
+        detachStream(streamId);
+        return;
+      }
+      if (!ok) {
+        // 3. Genuinely stranded — server has no buffered run for this
+        //    streamId (server restarted, GC'd, or never tracked it).
+        //    Apply closeStrandedAssistant ourselves; the sanitizer
+        //    deferred this so the resume probe could try first.
+        detachStream(streamId);
+        updateAssistant((m) => closeStrandedAssistant(m));
+        return;
+      }
+      // Subscribe via the chatStream surface so further events drive
+      // the React handler. resumeStream registered the stream with the
+      // shadow handler in the `listeners` set already; subscribeStream
+      // here is what gives us the unsubscribe hook for cleanup.
+      attached = subscribeStream(streamId, () => { /* handler is already attached */ });
+    })();
+
+    return () => {
+      cancelled = true;
+      if (attached) attached();
+    };
     // Only re-evaluate when the active thread identity / pending shape changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThread?.id, activeThread?.messages.length]);
@@ -1075,6 +1152,9 @@ export default function Editor() {
         modelId: opts.modelId,
         projectId: activeProject.id,
         scopeFile,
+        // Send our streamId so the server uses it as the registry key
+        // and a reloaded tab can resume via /api/comment-edit/replay/<streamId>.
+        streamId,
       },
       listeners: [handler, shadowHandler],
     });
@@ -2224,6 +2304,8 @@ export default function Editor() {
           onStop={() => {
             // Abort the in-flight stream — server's req.on("close")
             // aborts the SDK query and cancels any pending elicitation.
+            // Also tell the server to bypass the GRACE_DISCONNECT_MS
+            // window so this is a real Stop, not a "user might come back".
             const t = activeThread;
             if (!t) return;
             const lastUser = [...t.messages].reverse().find((m) => m.role === "user") as
@@ -2231,7 +2313,10 @@ export default function Editor() {
               | undefined;
             const streamId = lastUser?.streamId;
             const live = !!streamId && isStreamActive(streamId);
-            if (live && streamId) abortStream(streamId);
+            if (live && streamId) {
+              void notifyServerStop(streamId);
+              abortStream(streamId);
+            }
             setPendingElicit((p) => (p && p.threadId === t.id ? null : p));
             // No live stream to abort (page reloaded mid-turn, watchdog
             // missed the stall, etc.). The pending:true is just stale —
@@ -2263,6 +2348,9 @@ export default function Editor() {
               if (dying) {
                 for (const m of dying.messages) {
                   if (m.role === "user" && m.streamId) {
+                    // Thread is being deleted — bypass grace, the
+                    // assistant message is gone for good either way.
+                    void notifyServerStop(m.streamId);
                     abortStream(m.streamId);
                     detachStream(m.streamId);
                   }

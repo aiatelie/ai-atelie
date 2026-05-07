@@ -30,7 +30,7 @@
  *     edit) flow through the same useEffect and write normally.
  */
 
-import { subscribeStream, type StreamEvent } from "./chatStream";
+import { getStreamState, subscribeStream, type StreamEvent } from "./chatStream";
 import { loadThreads as libLoadThreads, saveThreads } from "./threads";
 import type { ChatMessage, ChatThread, ThreadArchive } from "../components/editor/ChatSidebar";
 
@@ -41,13 +41,24 @@ type Tracked = {
    *  Stable for the lifetime of the stream — we never insert/remove
    *  messages mid-stream from this index forward. */
   msgIdx: number;
+  streamId: string;
+  /** When true the shadow runs in REPLACE mode — every text/thinking/
+   *  tool event sets the persisted message from `getStreamState()`'s
+   *  rebuilding accumulator, instead of appending the delta. Used by
+   *  the reload-resume path: the persisted message may already hold a
+   *  prefix (the original tab flushed before unload), and the resumed
+   *  stream rebuilds the full state from index 0 — appending again
+   *  would double the content. Replace-from-state is idempotent and
+   *  converges to the right shape no matter what was there before. */
+  resumeFrom?: "snapshot";
   /** Late subscription handle. Empty until `wireSubscription` runs;
    *  filled once the stream entry is registered in chatStream. */
   unsub: () => void;
   /** Buffered text/thinking deltas, flushed periodically to coalesce
    *  archive mutations + reduce save noise (saveThreads itself debounces
    *  300ms, but we still want to avoid creating dozens of new archive
-   *  objects per second). */
+   *  objects per second). Unused in resumeFrom="snapshot" mode — we
+   *  apply the StreamState snapshot synchronously per event. */
   textBuf: string;
   thinkBuf: string;
   flushTimer: ReturnType<typeof setTimeout> | null;
@@ -93,8 +104,15 @@ export function attachStreamToThread(args: {
   threadId: string;
   streamId: string;
   msgIdx: number;
+  /** Set to "snapshot" when this attachment is part of a reload-resume
+   *  flow. In snapshot mode the handler reads the live StreamState (in
+   *  chatStream) on every event and overwrites the persisted message
+   *  fields, instead of appending deltas. Idempotent under replay so
+   *  the resumed stream converges to the right final shape regardless
+   *  of what flushed pre-reload. */
+  resumeFrom?: "snapshot";
 }): (e: StreamEvent) => void {
-  const { projectId, threadId, streamId, msgIdx } = args;
+  const { projectId, threadId, streamId, msgIdx, resumeFrom } = args;
 
   // Replace any existing entry for this streamId so we don't leak listeners.
   const prior = tracked.get(streamId);
@@ -108,11 +126,31 @@ export function attachStreamToThread(args: {
     projectId,
     threadId,
     msgIdx,
+    streamId,
+    resumeFrom,
     unsub: () => {},
     textBuf: "",
     thinkBuf: "",
     flushTimer: null,
     handler: () => {},
+  };
+
+  /** Snapshot the current StreamState into the persisted message. Used
+   *  by every text/thinking/tool/toolResult branch in resume mode so
+   *  the message always reflects what the rebuilding accumulator has,
+   *  regardless of what was on disk before. Cheap because it reads a
+   *  module-level reference; expensive only if called per-frame at
+   *  high event rates — but the same archive write debounce (300ms in
+   *  saveThreads) coalesces network PATCHes anyway. */
+  const snapshotFromState = () => {
+    const state = getStreamState(streamId);
+    if (!state) return;
+    mutateAssistant(entry, (m) => ({
+      ...m,
+      content: state.text,
+      thinking: state.thinking,
+      tools: state.tools.map((t) => ({ ...t })),
+    }));
   };
 
   const flushBuffers = () => {
@@ -136,6 +174,47 @@ export function attachStreamToThread(args: {
   };
 
   const handler = (e: StreamEvent) => {
+    // Resume mode short-circuit: snapshot the rebuilding StreamState
+    // into the persisted message instead of appending deltas. The
+    // delta-based path below is for the original streaming flow.
+    if (entry.resumeFrom === "snapshot") {
+      switch (e.type) {
+        case "text":
+        case "finalText":
+        case "thinking":
+        case "tool":
+        case "toolResult":
+          snapshotFromState();
+          return;
+        case "turnId":
+          mutateAssistant(entry, (m) => ({ ...m, turnId: e.turnId }));
+          return;
+        case "error":
+          mutateAssistant(entry, (m) => ({ ...m, error: e.message }));
+          return;
+        case "done":
+          // Snapshot once more to capture any final-text-only event,
+          // then finalize the same way the delta path does.
+          snapshotFromState();
+          mutateAssistant(entry, (m) => {
+            if (!m.content && !m.error && m.tools.length > 0) {
+              const files = uniqueFiles(m.tools);
+              const summary = files.length > 0
+                ? `Made ${m.tools.length} tool call${m.tools.length === 1 ? "" : "s"}, touching: ${files.join(", ")}.`
+                : `Made ${m.tools.length} tool call${m.tools.length === 1 ? "" : "s"}.`;
+              return { ...m, content: summary, pending: false };
+            }
+            if (!m.content && !m.error) {
+              return { ...m, error: "No reply received from AI (process exited without output).", pending: false };
+            }
+            return { ...m, pending: false };
+          });
+          detachStream(streamId);
+          return;
+        default:
+          return;
+      }
+    }
     switch (e.type) {
       case "text":
         entry.textBuf += e.chunk;
