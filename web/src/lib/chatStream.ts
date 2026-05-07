@@ -223,8 +223,8 @@ export async function startStream({ streamId, body, listener, listeners }: Start
           stream.watchdog = undefined;
         }
         // The turn may have created/edited/deleted files in the project
-        // sandbox. Tell the FilesPanel to refetch so it doesn't show
-        // stale state until the user manually hits Refresh.
+        // sandbox. Tell file-list consumers (e.g. FileBrowserView) to
+        // refetch so they don't show stale state until manual refresh.
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("files:invalidate"));
         }

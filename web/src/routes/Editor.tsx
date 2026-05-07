@@ -2131,28 +2131,11 @@ export default function Editor() {
       />
 
       <div className={s.stage}>
-        {!isDesignFiles && <LeftPanel
+        <LeftPanel
           projectId={activeProject.id}
-          onOpenRoute={(route, label) => {
-            const existing = tabs.find((t) => t.route === route);
-            if (existing) {
-              setActiveTabId(existing.id);
-              return;
-            }
-            const tab: Tab = {
-              id: uniqueTabId(),
-              label: routeToLabel(route) || label,
-              route,
-              display: defaultDisplay(route),
-            };
-            setTabs((prev) => [...prev, tab]);
-            setActiveTabId(tab.id);
-            trackEvent("tab_open", { route, source: "files-panel" }, activeProject.id);
-          }}
           threads={threads}
           activeThread={activeThread}
           activeFile={activeTab.route}
-          openRoutes={openRoutes}
           composerContext={
             // Show the picked element whenever there IS one — both Edit
             // (inspector mode) and Select (no tool) populate `selected`,
@@ -2315,7 +2298,7 @@ export default function Editor() {
               alert(`Undo failed: ${err instanceof Error ? err.message : String(err)}`);
             }
           }}
-        />}
+        />
 
         <div className={s.right}>
           {!isDesignFiles && <Toolbar

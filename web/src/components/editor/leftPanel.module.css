@@ -1,5 +1,5 @@
-/* LeftPanel — unified left-side rail with tabs (Files / Layers / Chat
- * / Comments) and a collapse button. */
+/* LeftPanel — unified left-side rail with Chat + Comments tabs and a
+ * collapse button. */
 
 .panel {
   width: 360px;
@@ -117,13 +117,6 @@
 .headIcon:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
-}
-
-.body {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
 }
 
 .collapseHandle {

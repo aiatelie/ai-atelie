@@ -1,5 +1,5 @@
 /* LeftPanel — unified left rail with tabs for everything except the
- * style inspector. Tabs: Files, Chat, Comments. The right side stays
+ * style inspector. Tabs: Chat, Comments. The right side stays
  * dedicated to the inspector when in Edit mode.
  *
  * Collapse persists across reloads under "left-panel-collapsed". When
@@ -10,14 +10,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import s from "./leftPanel.module.css";
-import { ContextualFilesPanel } from "./ContextualFilesPanel";
 import { ChatTab, type ChatThread, type QueuedMessage } from "./ChatSidebar";
 import { CommentsPanel } from "./CommentsPanel";
 import { useComments, type LocalComment } from "../../lib/comments";
 import type { Attachment } from "./CommentBubble";
 import type { ElicitRequest } from "../../lib/chatStream";
 
-type Tab = "files" | "chat" | "comments";
+type Tab = "chat" | "comments";
 
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 720;
@@ -48,9 +47,7 @@ function readStoredPanelWidth(projectId: string): number {
 }
 
 type Props = {
-  /* Files tab */
   projectId: string;
-  onOpenRoute: (route: string, label: string) => void;
 
   /* Chat tab */
   threads: ChatThread[];
@@ -79,9 +76,6 @@ type Props = {
 
   /* Comments tab */
   activeFile: string;
-  /** Stripped routes of every open editor tab — used by Files panel to
-   *  mark referenced rows that are also currently open. */
-  openRoutes: Set<string>;
   selectedPinId: string | null;
   onSelectPin: (id: string | null) => void;
   /** Multi-select promotion entry-point. Replaces the legacy
@@ -120,19 +114,19 @@ type Props = {
 
 export function LeftPanel(props: Props) {
   const {
-    projectId, onOpenRoute,
+    projectId,
     threads, activeThread, onNewThread, onSwitchThread, onDeleteThread,
     onRenameThread, onUndo, onRetry, onDeleteMessage, onSend, onRestore,
     pendingElicit, onElicitResolved, onStop,
     queuedMessage, onCancelQueued,
-    activeFile, openRoutes, selectedPinId, onSelectPin, onPromoteComments, onRestoreComment,
+    activeFile, selectedPinId, onSelectPin, onPromoteComments, onRestoreComment,
     captureRouteScreenshot,
     autoResolvePromptIds, onAutoResolveConfirm, onAutoResolveDismiss,
     chatTabSwitchKey, composerContext, onClearComposerContext,
     emptyState,
   } = props;
 
-  const [tab, setTab] = useState<Tab>("files");
+  const [tab, setTab] = useState<Tab>("chat");
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("left-panel-collapsed") === "1";
@@ -241,12 +235,6 @@ export function LeftPanel(props: Props) {
       <div className={s.head}>
         <div className={s.tabs}>
           <button
-            className={`${s.tab} ${tab === "files" ? s.tabActive : ""}`}
-            onClick={() => setTab("files")}
-          >
-            Files
-          </button>
-          <button
             className={`${s.tab} ${tab === "chat" ? s.tabActive : ""}`}
             onClick={() => setTab("chat")}
           >
@@ -270,16 +258,6 @@ export function LeftPanel(props: Props) {
           ×
         </button>
       </div>
-      {tab === "files" && (
-        <div className={s.body}>
-          <ContextualFilesPanel
-            projectId={projectId}
-            activeFile={activeFile}
-            openRoutes={openRoutes}
-            onOpenRoute={onOpenRoute}
-          />
-        </div>
-      )}
       {tab === "chat" && (
         <ChatTab
           threads={threads}
