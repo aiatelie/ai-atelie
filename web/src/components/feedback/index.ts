@@ -4,3 +4,5 @@ export { Spinner } from "./Spinner";
 export type { SpinnerProps } from "./Spinner";
 export { CenteredLoader } from "./CenteredLoader";
 export type { CenteredLoaderProps } from "./CenteredLoader";
+export { EmptyState } from "./EmptyState";
+export type { EmptyStateProps, EmptyStateSize } from "./EmptyState";

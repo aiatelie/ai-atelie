@@ -57,3 +57,50 @@
   .skeleton { animation: none; background: var(--ink-08); }
   .spinner { animation-duration: 1.6s; }
 }
+
+/* ─── EmptyState ─────────────────────────────────────────────── */
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  color: var(--ink-55);
+  font-family: var(--font-system);
+}
+
+.emptyStateSm { gap: 6px; padding: 24px 16px; }
+.emptyStateMd { gap: 10px; padding: 40px 20px; }
+.emptyStateLg { gap: 14px; padding: 64px 24px; }
+
+.emptyStateIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--ink-04);
+  color: var(--ink-55);
+  margin-bottom: 4px;
+}
+.emptyStateSm .emptyStateIcon { width: 32px; height: 32px; }
+.emptyStateLg .emptyStateIcon { width: 56px; height: 56px; }
+
+.emptyStateTitle {
+  font: var(--weight-semi) var(--text-md) var(--font-system);
+  color: var(--ink-78);
+  letter-spacing: 0.005em;
+}
+.emptyStateLg .emptyStateTitle { font-size: var(--text-lg); }
+
+.emptyStateBody {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink-55);
+  max-width: 36ch;
+}
+
+.emptyStateAction {
+  margin-top: 4px;
+}

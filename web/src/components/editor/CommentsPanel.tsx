@@ -29,6 +29,7 @@ import {
   saveModelId,
   useModelPickerFlag,
 } from "./ModelPicker";
+import { EmptyState } from "../feedback";
 
 /** Where to send the bundled selection.
  *   - "active" → append to the currently-active chat thread (or start
@@ -181,26 +182,22 @@ export function CommentsPanel({
       )}
 
       {visible.length === 0 && (
-        <div className={s.empty}>
-          <p style={{ margin: 0 }}>
-            {filter === "open" && "No open notes on this file yet."}
-            {filter === "promoted" && "Nothing promoted to chat yet."}
-            {filter === "resolved" && "No resolved notes."}
-            {filter === "all-files" && "No notes yet — start by clicking an element."}
-          </p>
-          {filter !== "all-files" && otherCount && otherCount > 0 ? (
-            <p style={{ margin: 0, opacity: 0.7 }}>
-              {otherCount} comment{otherCount === 1 ? "" : "s"} on other files.{" "}
+        <EmptyState
+          icon={<CommentEmptyIcon />}
+          title={emptyTitleFor(filter)}
+          body={emptyBodyFor(filter)}
+          action={
+            filter !== "all-files" && otherCount && otherCount > 0 ? (
               <button
                 onClick={() => setFilter("all-files")}
                 className={s.commentLinkBtn}
-                style={{ display: "inline" }}
               >
-                Show all
+                Show {otherCount} on other file{otherCount === 1 ? "" : "s"}
               </button>
-            </p>
-          ) : null}
-        </div>
+            ) : undefined
+          }
+          size="md"
+        />
       )}
 
       {visible.map((c, i) => (
@@ -232,6 +229,32 @@ export function CommentsPanel({
         captureRouteScreenshot={captureRouteScreenshot}
       />
     </div>
+  );
+}
+
+function emptyTitleFor(filter: CommentFilter): string {
+  switch (filter) {
+    case "open":      return "No open notes on this file";
+    case "promoted":  return "Nothing promoted to chat yet";
+    case "resolved":  return "No resolved notes";
+    case "all-files": return "No notes anywhere yet";
+  }
+}
+
+function emptyBodyFor(filter: CommentFilter): string {
+  switch (filter) {
+    case "open":      return "Switch on Comment mode, click anywhere on the canvas, and write a note. It'll show up here.";
+    case "promoted":  return "Promote selected notes to chat to ask Claude to act on them.";
+    case "resolved":  return "Resolved notes will appear here once you mark them done.";
+    case "all-files": return "Click an element with Comment mode on to add your first note.";
+  }
+}
+
+function CommentEmptyIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
   );
 }
 

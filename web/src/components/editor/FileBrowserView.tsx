@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import s from "./fileBrowserView.module.css";
 import { readRecents, pushRecent } from "./recents";
 import { readFolderState, writeFolderState } from "./folderState";
+import { EmptyState } from "../feedback";
 
 export type SandboxFile = {
   path: string;
@@ -280,7 +281,13 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
 
         {/* Pages */}
         <Section label="Pages" count={groups.pages.length}>
-          {groups.pages.length === 0 && <div className={s.empty}>No pages yet.</div>}
+          {groups.pages.length === 0 && (
+            <EmptyState
+              title="No pages yet"
+              body="Ask Claude to scaffold one, or drop in a starter file."
+              size="sm"
+            />
+          )}
           {groups.pages.map((f) => (
             <FileRow
               key={f.path}
@@ -528,7 +535,11 @@ function FilePreview({
   if (!file) {
     return (
       <aside className={s.preview}>
-        <div className={s.previewEmpty}>Select a file to preview</div>
+        <EmptyState
+          title="Nothing to preview"
+          body="Pick a file on the left to see it render here."
+          size="sm"
+        />
       </aside>
     );
   }
