@@ -15,6 +15,7 @@ import { ModelPicker, loadModelId, saveModelId, useModelPickerFlag } from "./Mod
 import { getModel } from "../../data/modelPresets";
 import { Markdown, DiffBlock } from "./Markdown";
 import { previewReminder, splitSystemReminders } from "./systemReminder";
+import { ELAPSED_TICK_MS, SLOW_RUN_THRESHOLD_MS, formatElapsed } from "./elapsed";
 import { ElicitForm } from "./ElicitForm";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
@@ -1256,7 +1257,7 @@ function Bubble({
             {m.content ? (
               <AssistantContent text={m.content} />
             ) : m.pending ? (
-              <LiveStatus tools={m.tools} />
+              <LiveStatus tools={m.tools} since={m.ts} />
             ) : (
               <span className={s.dim}>(no response)</span>
             )}
@@ -1457,7 +1458,7 @@ function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean })
  *  doing right now even when it hasn't yet sent prose. As soon as text
  *  starts streaming, this gets replaced by the actual content (handled
  *  by the parent's m.content check). */
-function LiveStatus({ tools }: { tools: ToolCall[] }) {
+function LiveStatus({ tools, since }: { tools: ToolCall[]; since?: number }) {
   const last = tools.length > 0 ? tools[tools.length - 1] : null;
   // Derive verb from the tool's semantic kind so this preview stays
   // aligned with the chip color below it (single source of truth in
@@ -1476,7 +1477,31 @@ function LiveStatus({ tools }: { tools: ToolCall[] }) {
       <span className={s.liveStatusLabel}>
         {target ? `${verb} ${target}…` : "Thinking…"}
       </span>
+      {since !== undefined && <ElapsedSince since={since} />}
     </div>
+  );
+}
+
+/** Live elapsed-time readout for an in-flight stream. Ticks every
+ *  ELAPSED_TICK_MS so the user sees forward motion; after
+ *  SLOW_RUN_THRESHOLD_MS, swaps to a slow-run hint that reminds the
+ *  user they can stop the run from the composer footer. */
+function ElapsedSince({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), ELAPSED_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+  const elapsedMs = Math.max(0, now - since);
+  const slow = elapsedMs >= SLOW_RUN_THRESHOLD_MS;
+  return (
+    <span
+      className={`${s.liveStatusElapsed} ${slow ? s.liveStatusElapsedSlow : ""}`}
+      title={slow ? "Long-running turn — use the Stop button below if needed" : undefined}
+      aria-live="off"
+    >
+      {formatElapsed(elapsedMs / 1000)}
+    </span>
   );
 }
 
