@@ -108,6 +108,11 @@ type ActiveStream = {
    *  the watchdog to detect a hung connection (server crash, network blip)
    *  that never delivers a graceful `done`. */
   lastEventAt: number;
+  /** Highest SSE `id:` consumed for this stream. Set by the parser when
+   *  the server tagged each event with a monotonic eventIndex. Used by
+   *  `resumeStream(streamId)` so a reloaded tab asks for events it has
+   *  not yet seen — the server's replay endpoint slices from this value. */
+  lastEventIndex: number;
   /** Watchdog interval token. Cleared when `done` fires normally. */
   watchdog?: ReturnType<typeof setInterval>;
 };
@@ -187,6 +192,7 @@ export async function startStream({ streamId, body, listener, listeners }: Start
     state: { text: "", thinking: "", tools: [], done: false },
     listeners: initial,
     lastEventAt: Date.now(),
+    lastEventIndex: -1,
   };
   streams.set(streamId, stream);
 
@@ -282,6 +288,21 @@ export async function startStream({ streamId, body, listener, listeners }: Start
     return;
   }
 
+  await pumpSse(res, stream, dispatch);
+  dispatch({ type: "done" });
+}
+
+/** Read a fetch Response's SSE body and dispatch each parsed event.
+ *  Shared between `startStream` (initial POST) and `resumeStream` (GET
+ *  replay). Handles bytes-as-liveness (keepalive comments don't parse
+ *  as events but still reset the stall watchdog) and the SSE `id:`
+ *  field (recorded as `lastEventIndex` for resume continuity). */
+async function pumpSse(
+  res: Response,
+  stream: ActiveStream,
+  dispatch: (e: StreamEvent) => void,
+): Promise<void> {
+  if (!res.body) return;
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
@@ -302,7 +323,11 @@ export async function startStream({ streamId, body, listener, listeners }: Start
       while ((idx = buf.indexOf("\n\n")) !== -1) {
         const block = buf.slice(0, idx);
         buf = buf.slice(idx + 2);
-        for (const e of parseSseBlock(block)) dispatch(e);
+        const parsed = parseSseBlock(block);
+        if (parsed.eventIndex != null) {
+          stream.lastEventIndex = Math.max(stream.lastEventIndex, parsed.eventIndex);
+        }
+        for (const e of parsed.events) dispatch(e);
       }
     }
   } catch (err) {
@@ -310,7 +335,143 @@ export async function startStream({ streamId, body, listener, listeners }: Start
       dispatch({ type: "error", message: `Stream error: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
-  dispatch({ type: "done" });
+}
+
+/** Reattach to a server-side run that's still streaming after a full
+ *  page reload. Returns true if the server has the buffered run and
+ *  this client successfully started receiving events; false if the run
+ *  is no longer in the registry (server restarted, GC'd post-completion,
+ *  or the streamId was never tracked).
+ *
+ *  This NEVER triggers a fresh AI turn. The original POST already kicked
+ *  off the SDK call — `resumeStream` is a pure consumer of the buffered
+ *  + live event tail. */
+export async function resumeStream(streamId: string, listeners: Listener[]): Promise<boolean> {
+  // Already running in this tab (HMR remount or two callers in the same
+  // process). Just attach listeners and let the existing pump drive them.
+  const existing = streams.get(streamId);
+  if (existing) {
+    for (const l of listeners) existing.listeners.add(l);
+    if (existing.state.done) {
+      const error = existing.state.error;
+      queueMicrotask(() => {
+        for (const l of listeners) {
+          if (!existing.listeners.has(l)) continue;
+          try {
+            if (error) l({ type: "error", message: error });
+            l({ type: "done" });
+          } catch { /* ignore */ }
+        }
+      });
+    }
+    return true;
+  }
+
+  const controller = new AbortController();
+  const stream: ActiveStream = {
+    controller,
+    state: { text: "", thinking: "", tools: [], done: false },
+    listeners: new Set(listeners),
+    lastEventAt: Date.now(),
+    lastEventIndex: -1,
+  };
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `/api/comment-edit/replay/${encodeURIComponent(streamId)}?fromIndex=0`,
+      { signal: controller.signal },
+    );
+  } catch (err) {
+    // Network failure — caller treats this the same as "no buffered run".
+    if ((err as Error).name !== "AbortError") {
+      console.warn("[chatStream] resume fetch failed:", err);
+    }
+    return false;
+  }
+  if (res.status === 404 || !res.body) return false;
+  if (!res.ok) return false;
+
+  // Past this point we're committed: register the stream so subscribers
+  // (e.g. the elicit form lookup) can find it via getStreamState.
+  streams.set(streamId, stream);
+
+  const dispatch = (e: StreamEvent) => {
+    stream.lastEventAt = Date.now();
+    switch (e.type) {
+      case "text":        stream.state.text += e.chunk;       break;
+      case "finalText":
+        if (!stream.state.text) stream.state.text = e.chunk;
+        break;
+      case "thinking":    stream.state.thinking += e.chunk;   break;
+      case "tool":        stream.state.tools.push(e.tool);    break;
+      case "toolResult": {
+        const t = stream.state.tools.find((x) => x.id === e.id);
+        if (t) { t.result = e.content; t.isError = e.isError; }
+        break;
+      }
+      case "turnId":      stream.state.turnId = e.turnId;     break;
+      case "elicit":      stream.state.elicit = e.request;    break;
+      case "elicitClear":
+        if (stream.state.elicit?.id === e.id) stream.state.elicit = undefined;
+        break;
+      case "usage":       stream.state.usage = e.usage;       break;
+      case "error":       stream.state.error = e.message;     break;
+      case "done":
+        stream.state.done = true;
+        if (stream.watchdog) {
+          clearInterval(stream.watchdog);
+          stream.watchdog = undefined;
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("files:invalidate"));
+        }
+        break;
+    }
+    for (const l of stream.listeners) {
+      try { l(e); } catch { /* a stale listener shouldn't kill the stream */ }
+    }
+  };
+
+  // Watchdog identical to startStream's — server-side keepalive resets
+  // it on every chunk, so a hung resume connection still drops cleanly.
+  stream.watchdog = setInterval(() => {
+    if (stream.state.done) {
+      if (stream.watchdog) {
+        clearInterval(stream.watchdog);
+        stream.watchdog = undefined;
+      }
+      return;
+    }
+    if (Date.now() - stream.lastEventAt < WATCHDOG_STALL_MS) return;
+    try { stream.controller.abort(); } catch { /* ignore */ }
+    dispatch({ type: "error", message: "Stream stalled — connection may have dropped." });
+    dispatch({ type: "done" });
+  }, WATCHDOG_TICK_MS);
+
+  // Fire the pump asynchronously; resumeStream returns true immediately
+  // so the caller can show the pending bubble while events catch up.
+  void (async () => {
+    await pumpSse(res, stream, dispatch);
+    dispatch({ type: "done" });
+  })();
+
+  return true;
+}
+
+/** Tell the server we're explicitly stopping this run. Bypasses the
+ *  grace window so the SDK aborts immediately rather than waiting the
+ *  full GRACE_DISCONNECT_MS in case a tailer reattaches. Best-effort:
+ *  errors are swallowed (the local fetch abort is the canonical signal). */
+export async function notifyServerStop(streamId: string): Promise<void> {
+  try {
+    await fetch(
+      `/api/comment-edit/abort/${encodeURIComponent(streamId)}`,
+      { method: "POST" },
+    );
+  } catch {
+    /* network gone — local abort still fires */
+  }
 }
 
 /* ─── SSE block → typed events ───────────────────────────────── */
@@ -327,49 +488,61 @@ type WireAgentEvent =
   | { type: "toolResult"; id: string; content: string; isError?: boolean }
   | { type: "usage"; usage: TurnUsage };
 
-function parseSseBlock(block: string): StreamEvent[] {
+function parseSseBlock(block: string): { events: StreamEvent[]; eventIndex: number | null } {
   let event = "message";
+  let eventIndex: number | null = null;
   const dataLines: string[] = [];
   for (const line of block.split("\n")) {
     if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("id:")) {
+      const n = Number(line.slice(3).trim());
+      if (Number.isFinite(n)) eventIndex = n;
+    }
     else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
   }
   const dataStr = dataLines.join("\n");
-  if (!dataStr) return [];
+  if (!dataStr) return { events: [], eventIndex };
   let parsed: unknown;
-  try { parsed = JSON.parse(dataStr); } catch { return []; }
+  try { parsed = JSON.parse(dataStr); } catch { return { events: [], eventIndex }; }
+
+  const wrap = (events: StreamEvent[]) => ({ events, eventIndex });
 
   if (event === "status") {
     const p = parsed as { phase?: "started" | "done" | "retry"; turnId?: string };
-    if (p.phase === "started" && p.turnId) return [{ type: "turnId", turnId: p.turnId }];
-    return [];
+    if (p.phase === "started" && p.turnId) return wrap([{ type: "turnId", turnId: p.turnId }]);
+    return wrap([]);
   }
   if (event === "error") {
     const p = parsed as { message?: string };
-    return [{ type: "error", message: p.message ?? "Unknown error" }];
+    return wrap([{ type: "error", message: p.message ?? "Unknown error" }]);
   }
   if (event === "elicit") {
     const p = parsed as ElicitRequest;
-    if (!p?.id || !p?.message) return [];
-    return [{ type: "elicit", request: p }];
+    if (!p?.id || !p?.message) return wrap([]);
+    return wrap([{ type: "elicit", request: p }]);
+  }
+  if (event === "elicitClear") {
+    const p = parsed as { id?: string };
+    if (!p?.id) return wrap([]);
+    return wrap([{ type: "elicitClear", id: p.id }]);
   }
   if (event === "text") {
     const p = parsed as { text?: string };
-    return p.text ? [{ type: "text", chunk: p.text }] : [];
+    return p.text ? wrap([{ type: "text", chunk: p.text }]) : wrap([]);
   }
   if (event === "agent") {
     const e = parsed as WireAgentEvent;
     switch (e.type) {
-      case "text":       return [{ type: "text", chunk: e.chunk }];
-      case "finalText":  return [{ type: "finalText", chunk: e.chunk }];
-      case "thinking":   return [{ type: "thinking", chunk: e.chunk }];
-      case "tool":       return [{ type: "tool", tool: makeToolCall(e.tool.name, e.tool.input, e.tool.id) }];
-      case "toolResult": return [{ type: "toolResult", id: e.id, content: e.content, isError: e.isError }];
-      case "usage":      return [{ type: "usage", usage: e.usage }];
+      case "text":       return wrap([{ type: "text", chunk: e.chunk }]);
+      case "finalText":  return wrap([{ type: "finalText", chunk: e.chunk }]);
+      case "thinking":   return wrap([{ type: "thinking", chunk: e.chunk }]);
+      case "tool":       return wrap([{ type: "tool", tool: makeToolCall(e.tool.name, e.tool.input, e.tool.id) }]);
+      case "toolResult": return wrap([{ type: "toolResult", id: e.id, content: e.content, isError: e.isError }]);
+      case "usage":      return wrap([{ type: "usage", usage: e.usage }]);
     }
-    return [];
+    return wrap([]);
   }
-  return [];
+  return wrap([]);
 }
 
 /** Build the ToolCall object used by the chat UI. The `label` mirrors the

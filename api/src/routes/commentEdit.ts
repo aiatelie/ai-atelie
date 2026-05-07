@@ -12,7 +12,18 @@ import { streamSSE } from "hono/streaming";
 import { randomUUID } from "node:crypto";
 import { pickAdapter } from "../agents/registry.ts";
 import { applySnapshot, deleteSnapshot, diffSnapshot, getSnapshot, recordSnapshot } from "../services/snapshots.ts";
-import { activeRuns } from "../services/runRegistry.ts";
+import {
+  activeRuns,
+  appendBufferedEvent,
+  attachTailer,
+  cancelGraceAbort,
+  detachTailer,
+  freshRunCore,
+  GRACE_DISCONNECT_MS,
+  markRunFinished,
+  replaySince,
+  scheduleGraceAbort,
+} from "../services/runRegistry.ts";
 import {
   cancelPendingForStream,
   registerStreamEmitter,
@@ -21,6 +32,16 @@ import {
 import { projectDirOf, internalBaseUrl } from "../services/projectStore.ts";
 import { openRunLog } from "../services/runLogger.ts";
 import type { CommentPayload } from "../services/types.ts";
+
+/** Validate a client-provided streamId before we use it as a registry
+ *  key (which becomes part of the run-log filename). Allows the
+ *  `chatStream.newStreamId()` shape `s-<digits>-<alnum>` plus a UUID
+ *  fallback. Anything else is rejected and we generate our own. */
+function isSafeStreamId(s: unknown): s is string {
+  return typeof s === "string"
+    && (/^s-\d{10,16}-[a-z0-9]{4,12}$/.test(s)
+      || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s));
+}
 
 /** Hard wall-clock cap on a single AI turn. If we don't reach `done`
  *  within this window we abort and return a clear timeout error.
@@ -52,7 +73,20 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
   }
 
   const turnId = randomUUID();
-  const requestStreamId = randomUUID();
+  // Use the client-supplied streamId as the registry key when present
+  // and well-formed, so the same key threads (a) the original POST,
+  // (b) the elicit bus emitter, (c) the run log, and (d) any future
+  // resume request via /api/comment-edit/replay/:streamId. A duplicate
+  // POST on the same streamId — common if a panicky client retries — is
+  // rejected with 409 to avoid double-billing the SDK turn.
+  const clientStreamId = isSafeStreamId(payload.streamId) ? payload.streamId : null;
+  const requestStreamId = clientStreamId ?? randomUUID();
+  if (clientStreamId && activeRuns.has(clientStreamId)) {
+    return c.json(
+      { error: "stream-in-progress", streamId: clientStreamId },
+      409,
+    );
+  }
   const startedAt = Date.now();
   const abortController = new AbortController();
   const baseUrl = internalBaseUrl();
@@ -81,14 +115,19 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
 
   return streamSSE(c, async (stream) => {
     const send = (event: string, data: unknown) => {
-      // Hono's writeSSE swallows write errors when the stream is aborted;
-      // catch defensively so a closed socket can't poison the agent loop.
-      stream.writeSSE({ event, data: JSON.stringify(data) }).catch(() => { /* aborted */ });
+      // Record the event in the registry's per-stream ring buffer so
+      // a reloaded client can pick it up via the resume endpoint, then
+      // write it on the wire. The eventIndex is sent as the SSE `id:`
+      // field — clients track it and resume with `?fromIndex=lastSeen+1`.
+      const json = JSON.stringify(data);
+      const idx = appendBufferedEvent(requestStreamId, event, json);
+      stream
+        .writeSSE(idx == null ? { event, data: json } : { event, data: json, id: String(idx) })
+        .catch(() => { /* aborted */ });
       // Mirror to the per-stream log so a hung turn leaves a tail-able
       // trace. Truncate big payloads (kimi can emit multi-KB blobs).
       try {
-        const j = JSON.stringify(data);
-        runLog.log(`sse event=${event} data=${j.length > 600 ? j.slice(0, 600) + "…(+" + (j.length - 600) + ")" : j}`);
+        runLog.log(`sse event=${event} data=${json.length > 600 ? json.slice(0, 600) + "…(+" + (json.length - 600) + ")" : json}`);
       } catch { /* unstringifiable; skip */ }
     };
 
@@ -116,16 +155,30 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
     // happened — we surface a clear error in the catch branch below.
     let agentDone = false;
     let clientAborted = false;
+    /** Performs the actual SDK abort + elicit cleanup. Hoisted so the
+     *  grace timer (and the explicit Stop endpoint via `bypassGrace`)
+     *  can both invoke the same path. */
+    const abortRunNow = (reason: string) => {
+      if (!abortController.signal.aborted) {
+        abortController.abort(reason);
+        const cancelled = cancelPendingForStream(requestStreamId, reason);
+        for (const id of cancelled) {
+          try { send("elicitClear", { id, reason }); } catch { /* ignore */ }
+        }
+      }
+    };
     stream.onAbort(() => {
       clientAborted = true;
       if (agentDone) return;
-      if (!abortController.signal.aborted) {
-        abortController.abort("client-aborted");
-        const cancelled = cancelPendingForStream(requestStreamId, "client-aborted");
-        for (const id of cancelled) {
-          try { send("elicitClear", { id, reason: "client-aborted" }); } catch { /* ignore */ }
-        }
-      }
+      // Don't abort yet — wait GRACE_DISCONNECT_MS for a resume request
+      // to land. If a tailer attaches in time, the SDK keeps streaming
+      // into the buffer and the new client picks it up via /replay.
+      // If no client returns, the timer fires and aborts the SDK turn.
+      // Bypassed instantly when the user explicitly pressed Stop (the
+      // /abort/:streamId endpoint sets `bypassGrace = true`).
+      scheduleGraceAbort(requestStreamId, GRACE_DISCONNECT_MS, () => {
+        abortRunNow("client-aborted");
+      });
     });
 
     // Helper: list files the model edited before getting cut off, so
@@ -162,6 +215,7 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
     }, RUN_MAX_DURATION_MS);
 
     activeRuns.set(requestStreamId, {
+      ...freshRunCore(),
       startedAt,
       projectId: payload.projectId,
       abort: abortController,
@@ -215,13 +269,92 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
       agentDone = true;
       heartbeatActive = false;
       clearTimeout(timeoutTimer);
-      activeRuns.delete(requestStreamId);
+      // Defer activeRuns deletion via markRunFinished so the buffered
+      // events stick around for BUFFER_GC_MS — covers the slow-reload
+      // case where the user reloads AFTER the run completed but before
+      // they could see the result.
+      const terminal: "done" | "error" = abortController.signal.aborted ? "error" : "done";
+      markRunFinished(requestStreamId, terminal);
       unregisterStreamEmitter(requestStreamId);
       try { await heartbeat; } catch { /* ignore */ }
       try { await runLog.flush(); } catch { /* ignore */ }
       runLog.close();
     }
   });
+});
+
+/** Resume an in-flight run from a reloaded tab. Replays buffered events
+ *  with eventIndex >= fromIndex (default 0), then tails live until the
+ *  run finishes or this client disconnects too. The original POST is
+ *  NEVER re-issued from this path — that would double-bill the SDK. */
+commentEditRoutes.get("/api/comment-edit/replay/:streamId", async (c) => {
+  const streamId = c.req.param("streamId");
+  if (!isSafeStreamId(streamId)) return c.text("bad streamId", 400);
+  const fromIndex = Math.max(0, parseInt(c.req.query("fromIndex") ?? "0", 10) | 0);
+  const run = activeRuns.get(streamId);
+  if (!run) return c.text("not found", 404);
+
+  // A resume client just landed; cancel any pending grace-abort.
+  cancelGraceAbort(streamId);
+
+  return streamSSE(c, async (stream) => {
+    // 1. Flush whatever the buffer holds since fromIndex.
+    for (const ev of replaySince(streamId, fromIndex)) {
+      await stream
+        .writeSSE({ event: ev.event, id: String(ev.eventIndex), data: ev.data })
+        .catch(() => { /* socket gone */ });
+    }
+    // 2. If the run already finished, the buffer carries the terminal
+    //    `status: done` event — nothing more to forward.
+    if (run.finishedAt) return;
+
+    // 3. Tail live: every appendBufferedEvent fans out to this tailer.
+    const tailer = (ev: { eventIndex: number; event: string; data: string }) => {
+      stream
+        .writeSSE({ event: ev.event, id: String(ev.eventIndex), data: ev.data })
+        .catch(() => { /* socket gone */ });
+    };
+    attachTailer(streamId, tailer);
+
+    // Same heartbeat behavior as the primary endpoint so the resumed
+    // client's stall watchdog stays satisfied during long tool calls.
+    let alive = true;
+    stream.onAbort(() => {
+      alive = false;
+      detachTailer(streamId, tailer);
+      // No live consumers + run not finished → start the grace clock
+      // again. The original SSE socket is already gone, so this client
+      // dropping is "the user closed the tab". Schedule eventual abort.
+      const r = activeRuns.get(streamId);
+      if (r && !r.finishedAt && r.tailers.size === 0) {
+        scheduleGraceAbort(streamId, GRACE_DISCONNECT_MS, () => {
+          if (!r.abort.signal.aborted) r.abort.abort("client-aborted");
+        });
+      }
+    });
+    while (alive && !run.finishedAt) {
+      await stream.sleep(25_000);
+      if (!alive || run.finishedAt) break;
+      try { await stream.write(":keepalive\n\n"); } catch { break; }
+    }
+  });
+});
+
+/** Explicit stop request from the client. Bypasses the grace window so
+ *  the SDK aborts immediately when the user hits Stop (not when they
+ *  navigate away — that path waits the full grace period). */
+commentEditRoutes.post("/api/comment-edit/abort/:streamId", async (c) => {
+  const streamId = c.req.param("streamId");
+  if (!isSafeStreamId(streamId)) return c.text("bad streamId", 400);
+  const run = activeRuns.get(streamId);
+  if (!run) return c.json({ ok: false, reason: "not-found" }, 404);
+  run.bypassGrace = true;
+  if (run.graceTimer) { clearTimeout(run.graceTimer); run.graceTimer = undefined; }
+  if (!run.abort.signal.aborted) {
+    try { run.abort.abort("user-stop"); } catch { /* ignore */ }
+    cancelPendingForStream(streamId, "user-stop");
+  }
+  return c.json({ ok: true });
 });
 
 commentEditRoutes.post("/api/comment-undo", async (c) => {

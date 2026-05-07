@@ -43,6 +43,12 @@ export type CommentPayload = {
   projectId?: string;
   /** When set, the AI is told to ONLY edit this single file (component canvas mode). */
   scopeFile?: string;
+  /** Client-generated stream id (chatStream.newStreamId). When present
+   *  AND well-formed, the server uses it as the registry key so a
+   *  reloaded client can resume via GET /api/comment-edit/replay/:streamId.
+   *  Legacy clients omit this and the server falls back to randomUUID()
+   *  (no replay possible — preserves prior behavior). */
+  streamId?: string;
 };
 
 export type Emitter = (event: string, data: unknown) => void;
