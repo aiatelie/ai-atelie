@@ -60,11 +60,6 @@ export default function Projects() {
           </span>
           <span className={s.brandTitle}>AI Atelie</span>
         </div>
-        <div className={s.appbarRight}>
-          <span className={s.avatar} aria-label="Account" title="Account">
-            AA
-          </span>
-        </div>
       </header>
 
       <div className={s.body}>

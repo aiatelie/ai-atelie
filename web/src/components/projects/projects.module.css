@@ -62,29 +62,6 @@
   color: var(--ink-92);
   white-space: nowrap;
 }
-.appbarRight {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--surface-2);
-  border: 1px solid var(--ink-08);
-  color: var(--ink-65);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.04em;
-  font-family: var(--font-mono);
-  user-select: none;
-}
-
 /* ── Body — sidebar + main ─────────────────────────────────── */
 .body {
   display: grid;
