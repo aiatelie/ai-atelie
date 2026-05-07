@@ -213,11 +213,6 @@ export function ContextualFilesPanel({ projectId, activeFile, openRoutes, onOpen
   return (
     <>
       <div className={s.section}>
-        <div className={s.sectionLabel}>This file</div>
-        <FileRow file={self} active onOpen={() => onOpenRoute(routeFor(self), self.name)} />
-      </div>
-
-      <div className={s.section}>
         <div className={s.sectionLabel}>
           Referenced{refs.length > 0 ? ` · ${refs.length}` : ""}
         </div>

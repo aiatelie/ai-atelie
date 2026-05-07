@@ -1,101 +1,322 @@
-/* Projects.tsx — dashboard / first-run page. Card grid, empty-state
- * hero, new-project dialog. Tokens drive everything below — see
- * web/src/index.css for the source palette. */
+/* Projects.tsx — home page (3-column shell).
+ *
+ * Layout:
+ *   .shell           grid with two rows (chrome bar + body)
+ *     .appbar        sticky top bar (brand + avatar slot)
+ *     .body          two-column grid (sidebar + main)
+ *       .sidebar     always-visible NewProjectForm + footer chip
+ *       .main        tab strip + grid / skeleton / empty
+ *
+ * Tokens drive everything below — see web/src/index.css for the
+ * source palette. Hardcoded colors outside :root are bugs.
+ *
+ * Accent discipline: at most two visible uses of var(--brand) per
+ * screen — the brand mark in the appbar and the Create button in the
+ * sidebar. Don't add a third brand-coloured element here.
+ */
 
+/* ── Shell ─────────────────────────────────────────────────── */
 .shell {
   min-height: 100vh;
   background: var(--app-bg);
-  padding: 64px 48px 96px;
   font-family: var(--font-system);
   color: var(--ink-92);
-}
-.inner {
-  max-width: 1080px;
-  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto 1fr;
 }
 
-.header {
+/* ── App chrome bar ────────────────────────────────────────── */
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 36px;
+  justify-content: space-between;
+  padding: 4px 14px;
+  background: var(--app-bg);
+  border-bottom: 1px solid var(--ink-08);
+  gap: 12px;
 }
 .brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  flex: 1;
+  gap: 10px;
+  min-width: 0;
 }
 .brandMark {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  background: var(--brand);
-  color: var(--surface);
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  color: var(--ink-92);
+  flex-shrink: 0;
 }
 .brandTitle {
-  font-size: 22px;
-  font-weight: var(--weight-semi);
+  font-size: 18px;
+  font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--ink-92);
+  white-space: nowrap;
 }
-.brandSub {
-  font-size: var(--text-xs);
-  color: var(--ink-44);
-  margin-top: 2px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
-}
-
-.newBtn {
-  appearance: none;
-  border: 1px solid var(--ink-15);
-  background: var(--brand);
-  color: var(--app-bg);
-  font: var(--weight-medium) var(--text-md) var(--font-system);
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.newBtn:hover { background: var(--brand-fg); }
-
-.sectionLabel {
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-44);
-  font-weight: var(--weight-semi);
-  margin-bottom: 12px;
-}
-
-.grid {
+/* ── Body — sidebar + main ─────────────────────────────────── */
+.body {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: 380px 1fr;
+  align-items: stretch;
+  min-height: 0;
 }
 
-.card {
+/* ── Sidebar ───────────────────────────────────────────────── */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+  gap: 20px;
+  border-right: 1px solid var(--ink-08);
   background: var(--surface);
-  border: 1px solid var(--ink-10);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  cursor: pointer;
-  transition: border-color 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease;
+  min-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+.sidebarFoot {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--ink-08);
+  font-size: var(--text-xs);
+  color: var(--ink-65);
+}
+
+/* ── New-project form ──────────────────────────────────────── */
+.formWrap {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 140px;
+}
+.formEyebrow {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ink-65);
+  margin-bottom: 4px;
+}
+
+/* sr-only style — for labels that the screen reader needs but
+ * sighted users get from placeholder + adjacent context. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.formLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--ink-65);
+}
+.formInput {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font: var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  outline: none;
+  min-height: 32px;
+}
+.formInput:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-color: var(--ink-15);
+}
+.formInput:disabled { opacity: 0.6; }
+.formInput[aria-invalid="true"] {
+  border-color: var(--danger-border);
+}
+.formError {
+  font-size: var(--text-sm);
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  line-height: 1.4;
+}
+.formCreateBtn {
+  appearance: none;
+  border: 1px solid var(--ink-15);
+  background: var(--brand);
+  color: var(--on-brand);
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  min-height: 32px;
+  margin-top: 4px;
+}
+.formCreateBtn:hover { background: var(--brand-fg); }
+.formCreateBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.formCreateBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.formImportBtn {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  min-height: 32px;
+}
+.formImportBtn:disabled,
+.formImportBtn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.formImportBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.formStatus {
+  font-size: var(--text-sm);
+  color: var(--ink-65);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.formStatus::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-12);
+  border-top-color: var(--ink-65);
+  animation: dialogSpin 0.7s linear infinite;
+}
+
+/* ── Main pane ─────────────────────────────────────────────── */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.mainBody {
+  flex: 1;
+  min-height: 0;
+  padding: 22px 28px 32px;
+}
+
+/* Tab strip — single tab today, designed so future tabs slot in. */
+.tabstrip {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 28px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--ink-08);
+}
+.tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-lg) var(--font-system);
+  padding: 14px 11px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  min-height: 32px;
+  white-space: nowrap;
+}
+.tab:hover:not([data-active="true"]) {
+  color: var(--ink-92);
+  background: var(--ink-04);
+}
+.tab[data-active="true"] {
+  color: var(--ink-92);
+  font-weight: var(--weight-semi);
+  border-bottom-color: var(--ink-92);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+/* ── Grid ──────────────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+/* Tab count chip — small pill next to the active tab name. */
+.tabCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: var(--ink-04);
+  color: var(--ink-65);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Project card ──────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--ease-out-expressive),
+    box-shadow var(--motion-fast) var(--ease-out-expressive),
+    transform var(--motion-fast) var(--ease-out-expressive);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 132px;
   position: relative;
   box-shadow: var(--shadow-card);
 }
-.card:hover { border-color: var(--brand-strong); }
-.card:active { transform: translateY(1px); }
+.card:hover {
+  border-color: var(--ink-15);
+  box-shadow: var(--shadow-pop);
+  transform: translateY(-1px);
+}
+.card:active { transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) {
+  .card { transition: none; }
+  .card:hover { transform: none; }
+}
+.card:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .cardName {
   font-size: var(--text-xl);
   font-weight: var(--weight-semi);
@@ -109,32 +330,37 @@
   display: flex;
   gap: 12px;
   font-size: var(--text-xs);
-  color: var(--ink-44);
+  color: var(--ink-65);
   margin-top: auto;
 }
 .cardActions {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
   display: flex;
   gap: 4px;
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--motion-fast) var(--ease-out-expressive);
 }
-.card:hover .cardActions { opacity: 1; }
+.card:hover .cardActions,
+.card:focus-within .cardActions { opacity: 1; }
 .cardActBtn {
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-65);
   width: 24px;
   height: 24px;
   border-radius: var(--radius-xs);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .cardActBtn:hover { background: var(--ink-04); color: var(--ink-92); }
 .cardActBtn:hover[data-danger="true"] { color: var(--danger); background: var(--danger-bg); }
+.cardActBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 
 .tabsList {
   display: flex;
@@ -143,10 +369,10 @@
 }
 .tabPill {
   background: var(--ink-04);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   border-radius: var(--radius-xs);
   padding: 2px 6px;
-  color: var(--ink-64);
+  color: var(--ink-65);
   font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
@@ -154,40 +380,56 @@
   max-width: 100%;
 }
 
+/* ── Empty hero (centered inside main pane) ────────────────── */
 .empty {
   background: var(--surface);
   border: 1px solid var(--ink-10);
   border-radius: var(--radius-xl);
-  padding: 56px 32px;
+  padding: 48px 32px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   box-shadow: var(--shadow-card);
 }
 .emptyMark {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-xl);
-  background: var(--brand-bg);
-  color: var(--brand);
+  background: var(--ink-04);
+  color: var(--ink-65);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .emptyTitle {
-  font-size: 18px;
+  font-size: var(--text-h3);
   font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-heading);
   color: var(--ink-92);
 }
 .emptyBody {
-  color: var(--ink-64);
+  color: var(--ink-65);
   font-size: var(--text-md);
-  max-width: 420px;
+  max-width: 460px;
   line-height: 1.5;
 }
 
+/* ── Footer chip (sidebar bottom) ───────────────────────────── */
+.footerChip {
+  background: var(--ink-04);
+  border: 1px solid var(--ink-08);
+  padding: 5px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--ink-65);
+}
+
+/* ── Dialog primitives (used by ConfirmDialog) ─────────────── */
 .dialogBackdrop {
   position: fixed;
   inset: 0;
@@ -205,7 +447,7 @@
   width: 100%;
   max-width: 440px;
   padding: 24px;
-  box-shadow: 0 24px 64px var(--ink-35);
+  box-shadow: var(--shadow-deep);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -217,7 +459,7 @@
 }
 .dialogLabel {
   font-size: var(--text-sm);
-  color: var(--ink-64);
+  color: var(--ink-65);
   font-weight: var(--weight-medium);
 }
 .dialogInput {
@@ -229,11 +471,15 @@
   color: var(--ink-92);
   outline: none;
 }
-.dialogInput:focus { border-color: var(--brand-strong); }
+.dialogInput:focus { border-color: var(--ink-15); }
+.dialogInput:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .dialogInput:disabled { opacity: 0.6; }
 .dialogStatus {
   font-size: var(--text-sm);
-  color: var(--ink-64);
+  color: var(--ink-65);
   margin-top: -2px;
   padding-left: 2px;
   display: flex;
@@ -246,15 +492,15 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 1.5px solid var(--brand-bg);
-  border-top-color: var(--brand);
+  border: 1.5px solid var(--ink-12);
+  border-top-color: var(--ink-65);
   animation: dialogSpin 0.7s linear infinite;
 }
 @keyframes dialogSpin { to { transform: rotate(360deg); } }
 .dialogBody {
   font-size: var(--text-md);
   line-height: 1.5;
-  color: var(--ink-64);
+  color: var(--ink-65);
   margin-top: -4px;
 }
 .dialogBody strong { color: var(--ink-92); font-weight: var(--weight-semi); }
@@ -268,42 +514,39 @@
   padding: 8px 14px;
   border-radius: var(--radius-md);
   cursor: pointer;
+  min-height: 32px;
 }
 .dialogBtn:hover { background: var(--ink-04); }
 .dialogBtn:focus-visible {
-  outline: none;
-  border-color: var(--ink-35);
-  box-shadow: 0 0 0 3px var(--ink-08);
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 .dialogPrimary {
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   border-color: var(--ink-15);
 }
 .dialogPrimary:hover { background: var(--brand-fg); }
 .dialogPrimary:disabled { opacity: 0.5; cursor: not-allowed; }
 .dialogDanger {
-  background: var(--brand-warm-strong, #d05a4a);
+  background: var(--danger);
   color: var(--surface);
   border-color: transparent;
 }
 .dialogDanger:hover { filter: brightness(0.95); }
 .dialogDanger:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.footer {
-  margin-top: 64px;
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  font-size: var(--text-xs);
-  color: var(--ink-44);
-}
-.footerChip {
-  background: var(--ink-04);
-  border: 1px solid var(--ink-08);
-  padding: 5px 10px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+/* ── Compact viewport — collapse to single column ──────────── */
+@media (max-width: 720px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--ink-08);
+    min-height: 0;
+  }
+  .main {
+    padding: 24px 20px 48px;
+  }
 }

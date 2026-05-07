@@ -172,6 +172,10 @@
   font-size: var(--text-sm);
   color: var(--ink-44);
   line-height: 1.45;
+  transition:
+    border-color var(--motion-default) var(--ease-out-expressive),
+    background var(--motion-default) var(--ease-out-expressive),
+    color var(--motion-default) var(--ease-out-expressive);
 }
 .dropZoneActive {
   border-color: var(--brand);
@@ -180,8 +184,8 @@
 }
 .dropZoneTitle {
   font-weight: var(--weight-semi);
-  letter-spacing: 0.06em;
-  font-size: 10px;
+  letter-spacing: var(--tracking-caps);
+  font-size: var(--text-xs);
   text-transform: uppercase;
   margin-bottom: 4px;
   color: var(--ink-64);
@@ -256,8 +260,16 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
 }
-.headBtn:hover { background: var(--ink-04); color: var(--ink-92); }
+.headBtn:hover { background: var(--ink-04); color: var(--ink-92); border-color: var(--ink-12); }
+.headBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .headIcon {
   appearance: none;
   border: 0;
@@ -270,5 +282,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive);
 }
 .headIcon:hover { background: var(--ink-08); color: var(--ink-92); }
+.headIcon:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}

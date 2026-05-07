@@ -93,19 +93,19 @@
   --placeholder: #888;
   --placeholder-strong: #aaa;
 
-  /* ─── Brand — Anthropic / Claude orange ────────────────────
+  /* ─── Brand — Claude design rust ───────────────────────────
    * fg: deeper variant for text on tinted bg
    * strong-fg: even deeper for high-emphasis text
    * bg/border/strong: progressive alphas of brand on white */
-  --brand: #d97757;
-  --brand-fg: #b14a30;
+  --brand: #c96442;
+  --brand-fg: #b45a3b;
   --brand-strong-fg: #c46a4d;
-  --brand-faint: rgba(217, 119, 87, 0.04);
-  --brand-soft: rgba(217, 119, 87, 0.06);
-  --brand-bg: rgba(217, 119, 87, 0.10);
-  --brand-border: rgba(217, 119, 87, 0.18);
-  --brand-hover: rgba(217, 119, 87, 0.18);
-  --brand-strong: rgba(217, 119, 87, 0.45);
+  --brand-faint: rgba(201, 100, 66, 0.04);
+  --brand-soft: rgba(201, 100, 66, 0.06);
+  --brand-bg: rgba(201, 100, 66, 0.10);
+  --brand-border: rgba(201, 100, 66, 0.18);
+  --brand-hover: rgba(201, 100, 66, 0.18);
+  --brand-strong: rgba(201, 100, 66, 0.45);
 
   /* Light orange variants — tags, accents. */
   --brand-light: #f7c89a;
@@ -198,6 +198,35 @@
   --weight-medium: 500;
   --weight-semi: 600;
 
+  /* Headings + display sizes (above body). Use these on h1–h3 and
+   * any hero copy; body-size tokens (--text-xs..xl) cover the rest. */
+  --text-h3: 20px;
+  --text-h2: 28px;
+  --text-h1: 40px;
+  --text-display: 56px;
+
+  /* Line heights — tight pairs with display, normal with body,
+   * relaxed with long-form reading surfaces (Onboard intro, release
+   * notes). See atelier/typography.md. */
+  --leading-tight: 1.1;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* Letter-spacing — ALL CAPS always uses --tracking-caps (0.06em) at
+   * minimum. Display copy uses negative tracking; UI labels positive. */
+  --tracking-display: -0.02em;
+  --tracking-heading: -0.01em;
+  --tracking-body: 0;
+  --tracking-ui: 0.02em;
+  --tracking-caps: 0.06em;
+
+  /* Font roles. --font-display aliases the system stack today and can
+   * upgrade to a webfont later without touching consumers. --font-serif
+   * covers editorial surfaces; Instrument Serif is already imported. */
+  --font-display: var(--font-system);
+  --font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+
   /* ─── Geometry ─────────────────────────────────────────── */
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -210,6 +239,18 @@
   --pad-md: 8px;
   --pad-lg: 10px;
   --pad-xl: 14px;
+
+  /* ─── Motion ─────────────────────────────────────────────
+   * Durations and easings used by transitions across the chrome.
+   * Default for state-confirmation feedback is 150 ms; entering UI
+   * (modals, dropdowns) is 200–300 ms; cross-screen morphs land at
+   * 400 ms. See atelier/animation-discipline.md. */
+  --motion-fast: 120ms;
+  --motion-default: 150ms;
+  --motion-medium: 250ms;
+  --motion-slow: 400ms;
+  --ease-out-expressive: cubic-bezier(0.2, 0, 0, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ─── Retro theme — navy + cream + orange ─────────────────────

@@ -1,14 +1,21 @@
-/* Projects.tsx — dashboard / first-run page for the editor.
+/* Projects.tsx — home page (3-column shell).
  *
- * Shows a card grid of all projects, with a header "+ New project" button
- * and a hero empty-state when there are zero projects. Clicking a card
- * activates that project and routes to /editor.
+ * Top: sticky app chrome bar (brand mark + wordmark, avatar slot).
+ * Left: sidebar with the always-visible NewProjectForm and the
+ *       "Local-first · stored on disk" chip pinned to the bottom.
+ * Main: tab strip (single "Projects" tab today, ready for more) above
+ *       the project grid. Loading skeleton, empty hero, and populated
+ *       grid all render inside the main pane.
+ *
+ * Project creation is owned by `handleCreate`; the sidebar form calls
+ * it directly. Errors surface as an inline `role="alert"` under the
+ * form input rather than a browser `alert()`.
  */
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import s from "../components/projects/projects.module.css";
-import { NewProjectDialog } from "../components/projects/NewProjectDialog";
+import { NewProjectForm } from "../components/projects/NewProjectForm";
 import { ConfirmDialog } from "../components/projects/ConfirmDialog";
 import {
   createProject,
@@ -22,7 +29,6 @@ import {
 export default function Projects() {
   const { all, loading } = useProjects();
   const navigate = useNavigate();
-  const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Project | null>(null);
 
   const openProject = (id: string) => {
@@ -30,81 +36,80 @@ export default function Projects() {
     navigate("/editor");
   };
 
+  /** Owns the create flow. The sidebar form calls this and lets any
+   *  thrown error bubble up so it can render the inline alert. */
   const handleCreate = async (name: string) => {
     const trimmed = name.trim() || "Untitled project";
-    try {
-      const p = await createProject(trimmed);
-      setActiveProject(p.id);
-      // Land directly in the editor. When the project has no real files
-      // yet, the editor renders an empty-project chat layout (no canvas,
-      // bigger composer, starter chips) and the same intake prompt fires
-      // automatically — so this replaces the old /projects/:id/start
-      // wizard while keeping Claude's behaviour identical.
-      navigate("/editor?fresh=1");
-    } catch (err) {
-      alert(`Couldn't create project: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    const p = await createProject(trimmed);
+    setActiveProject(p.id);
+    // Land directly in the editor. When the project has no real files
+    // yet, the editor renders an empty-project chat layout (no canvas,
+    // bigger composer, starter chips) and the same intake prompt fires
+    // automatically.
+    navigate("/editor?fresh=1");
   };
 
   return (
     <div className={s.shell}>
-      <div className={s.inner}>
-        <header className={s.header}>
-          <div className={s.brand}>
-            <span className={s.brandMark}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2 L20 6 V18 L12 22 L4 18 V6 Z" />
-              </svg>
-            </span>
-            <div>
-              <div className={s.brandTitle}>AI Atelie</div>
-              <div className={s.brandSub}>YOUR PROJECTS</div>
-            </div>
+      <header className={s.appbar}>
+        <div className={s.brand}>
+          <span className={s.brandMark} aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2 L20 6 V18 L12 22 L4 18 V6 Z" />
+            </svg>
+          </span>
+          <span className={s.brandTitle}>AI Atelie</span>
+        </div>
+      </header>
+
+      <div className={s.body}>
+        <aside className={s.sidebar} aria-label="Create project">
+          <NewProjectForm onSubmit={handleCreate} />
+          <div className={s.sidebarFoot}>
+            <span className={s.footerChip}>Local-first · stored on disk</span>
           </div>
-          {all.length > 0 && (
-            <button className={s.newBtn} onClick={() => setCreating(true)}>
-              + New project
+        </aside>
+
+        <main className={s.main}>
+          <nav className={s.tabstrip} aria-label="Home sections">
+            <button
+              type="button"
+              className={s.tab}
+              data-active="true"
+              aria-current="page"
+            >
+              Projects
+              {!loading && (
+                <span className={s.tabCount} aria-label={`${all.length} projects`}>
+                  {all.length}
+                </span>
+              )}
             </button>
-          )}
-        </header>
+          </nav>
 
-        {all.length === 0 ? (
-          loading ? (
-            <LoadingSkeleton />
-          ) : (
-            <EmptyState onCreate={() => setCreating(true)} />
-          )
-        ) : (
-          <>
-            <div className={s.sectionLabel}>Projects · {all.length}</div>
-            <div className={s.grid}>
-              {all.map((p) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  onOpen={() => openProject(p.id)}
-                  onDelete={() => setDeleting(p)}
-                  onRename={(next) => updateProject(p.id, { name: next })}
-                />
-              ))}
-            </div>
-          </>
-        )}
-
-        <footer className={s.footer}>
-          <span className={s.footerChip}>Local-first · stored on disk</span>
-        </footer>
+          <div className={s.mainBody}>
+            {all.length === 0 ? (
+              loading ? (
+                <LoadingSkeleton />
+              ) : (
+                <EmptyState />
+              )
+            ) : (
+              <div className={s.grid}>
+                {all.map((p) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    onOpen={() => openProject(p.id)}
+                    onDelete={() => setDeleting(p)}
+                    onRename={(next) => updateProject(p.id, { name: next })}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </main>
       </div>
-
-      {creating && (
-        <NewProjectDialog
-          onCancel={() => setCreating(false)}
-          onConfirm={async (name) => {
-            await handleCreate(name);
-            setCreating(false);
-          }}
-        />
-      )}
 
       {deleting && (
         <ConfirmDialog
@@ -130,43 +135,38 @@ export default function Projects() {
 
 function LoadingSkeleton() {
   return (
-    <>
-      <div className={s.sectionLabel} aria-busy="true">Projects · …</div>
-      <div className={s.grid}>
-        {[0, 1, 2].map((i) => (
-          <div key={i} className={s.card} aria-hidden="true" style={{ opacity: 0.35 }}>
-            <div className={s.cardName} style={{ background: "currentColor", height: 18, borderRadius: 4, opacity: 0.15, width: "60%" }} />
-            <div className={s.tabsList}>
-              <span className={s.tabPill} style={{ width: 80 }}>&nbsp;</span>
-              <span className={s.tabPill} style={{ width: 64 }}>&nbsp;</span>
-            </div>
-            <div className={s.cardMeta}>
-              <span>&nbsp;</span>
-            </div>
+    <div className={s.grid} aria-busy="true">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className={s.card} aria-hidden="true" style={{ opacity: 0.35 }}>
+          <div className={s.cardName} style={{ background: "currentColor", height: 18, borderRadius: 4, opacity: 0.15, width: "60%" }} />
+          <div className={s.tabsList}>
+            <span className={s.tabPill} style={{ width: 80 }}>&nbsp;</span>
+            <span className={s.tabPill} style={{ width: 64 }}>&nbsp;</span>
           </div>
-        ))}
-      </div>
-    </>
+          <div className={s.cardMeta}>
+            <span>&nbsp;</span>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState() {
   return (
     <div className={s.empty}>
-      <span className={s.emptyMark}>
+      <span className={s.emptyMark} aria-hidden="true">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 7 V18 H21 V9 H12 L10 7 Z" />
         </svg>
       </span>
       <div className={s.emptyTitle}>No projects yet</div>
       <div className={s.emptyBody}>
-        A project is a workspace for one banner system, prototype, or design exploration.
-        It owns its own tabs, comments, and chat history. Shared assets (colors, lotties,
-        components) are global across projects.
+        A project is a workspace for one banner system, prototype, or design
+        exploration. It owns its own tabs, comments, and chat history. Shared
+        assets (colors, lotties, components) are global across projects.
+        Name yours in the sidebar to get started.
       </div>
-      <button className={s.newBtn} onClick={onCreate}>
-        + Create your first project
-      </button>
     </div>
   );
 }
@@ -190,7 +190,7 @@ function ProjectCard({
       <div className={s.card} onClick={(e) => e.stopPropagation()}>
         <input
           autoFocus
-          className={s.dialogInput}
+          className={s.formInput}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => { onRename(draft.trim() || project.name); setEditing(false); }}

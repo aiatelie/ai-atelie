@@ -3,7 +3,7 @@
 
 .shell {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   grid-template-columns: 1fr;
   height: 100vh;
   background: var(--app-bg);
@@ -16,8 +16,8 @@
 /* ─── Tab bar ───────────────────────────────────────────────── */
 .tabbar {
   display: flex;
-  align-items: stretch;
-  gap: 0;
+  align-items: center;
+  gap: 4px;
   padding: 0 12px;
   background: var(--app-bg);
   border-bottom: 1px solid var(--ink-08);
@@ -42,11 +42,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  background: var(--brand);
-  color: var(--surface);
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  color: var(--ink-92);
   flex-shrink: 0;
 }
 .projectTitle {
@@ -92,9 +91,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px 0 14px;
-  height: 100%;
+  padding: 0 10px;
+  height: 30px;
+  flex-shrink: 0;
   background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--ink-64);
   cursor: pointer;
   user-select: none;
@@ -103,14 +105,26 @@
   white-space: nowrap;
   max-width: 220px;
   position: relative;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive),
+    box-shadow var(--motion-fast) var(--ease-out-expressive);
 }
-.tab:hover { color: var(--ink-92); }
+.tab:hover { color: var(--ink-92); background: var(--ink-04); }
+.tab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
 .tab.active {
   color: var(--ink-92);
-  border-bottom-color: var(--ink-92);
   font-weight: var(--weight-semi);
+  background: var(--surface);
+  border-color: var(--ink-10);
+  box-shadow: var(--shadow-card);
+}
+.tab.active:hover {
+  background: var(--surface);
 }
 .tab .label {
   overflow: hidden;
@@ -236,8 +250,14 @@
   border: 0;
   cursor: pointer;
   font-size: 16px;
+  transition: color var(--motion-fast) var(--ease-out-expressive);
 }
 .tabPlus:hover { color: var(--ink-92); }
+.tabPlus:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
 
 .tabRight {
   margin-left: auto;
@@ -258,35 +278,16 @@
   cursor: pointer;
   font-weight: var(--weight-medium);
   font-size: var(--text-md);
+  text-decoration: none;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
 }
-.present:hover { background: var(--ink-08); }
-.share {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: var(--radius-md);
-  background: var(--ink-strong);
-  color: var(--surface);
-  border: 0;
-  cursor: pointer;
-  font-weight: var(--weight-semi);
-  font-size: var(--text-md);
+.present:hover { background: var(--ink-08); border-color: var(--ink-12); }
+.present:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
-.share:hover { background: var(--ink-strong-hover); }
-.avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand), var(--brand-fg));
-  color: var(--surface);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: var(--weight-semi);
-  font-size: var(--text-sm);
-}
-
 .settingsBtn {
   appearance: none;
   border: 1px solid var(--ink-08);
@@ -299,11 +300,19 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .settingsBtn:hover {
   background: var(--ink-08);
   color: var(--ink-92);
+  border-color: var(--ink-12);
+}
+.settingsBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 /* ─── Toolbar ───────────────────────────────────────────────── */
@@ -630,7 +639,24 @@
   min-height: 0;
   background: var(--app-bg);
 }
-.stage > .canvas { flex: 1; min-width: 0; }
+/* Right pane — column container for the canvas-toolbar and the canvas
+ * body. Sits next to the LeftPanel inside .stage and takes the
+ * remaining width via flex:1. */
+.right {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Inner body of the right pane — flex row so the canvas sits next to
+ * the inspector when edit mode is on. */
+.rightBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.rightBody > .canvas { flex: 1; min-width: 0; }
 .canvas {
   position: relative;
   overflow: hidden;

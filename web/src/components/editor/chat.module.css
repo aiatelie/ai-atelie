@@ -37,14 +37,15 @@
 .tabBtn:hover { background: var(--ink-04); color: var(--ink-92); }
 .tabBtnActive { background: var(--ink-08); color: var(--ink-92); }
 .tabBadge {
-  background: var(--brand-bg);
-  color: var(--brand-fg);
-  font: var(--weight-semi) 10px var(--font-system);
+  background: var(--ink-04);
+  color: var(--ink-65);
+  font: var(--weight-medium) 10px var(--font-system);
   border-radius: 999px;
   padding: 1px 6px;
   min-width: 16px;
   text-align: center;
   line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
 .tabsSpacer { flex: 1; }
 .threadHeader {
@@ -80,8 +81,14 @@
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   color: var(--ink-64);
+  transition: color var(--motion-fast) var(--ease-out-expressive);
 }
 .threadTab:hover { color: var(--ink-92); }
+.threadTab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
 .threadTabActive {
   color: var(--ink-92);
   border-bottom-color: var(--brand);
@@ -109,10 +116,18 @@
   justify-content: center;
   visibility: hidden;
   flex-shrink: 0;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive);
 }
 .threadTab:hover .threadTabClose,
 .threadTabActive .threadTabClose { visibility: visible; }
 .threadTabClose:hover { background: var(--ink-08); color: var(--ink-92); }
+.threadTabClose:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  visibility: visible;
+}
 
 .threadTabAdd {
   appearance: none;
@@ -126,8 +141,15 @@
   border-radius: var(--radius-sm);
   margin: 4px 2px;
   flex-shrink: 0;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive);
 }
 .threadTabAdd:hover { background: var(--ink-04); color: var(--ink-92); }
+.threadTabAdd:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
 
 .threadTabInput {
   appearance: none;

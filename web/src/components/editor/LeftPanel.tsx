@@ -1,6 +1,6 @@
 /* LeftPanel — unified left rail with tabs for everything except the
- * style inspector. Tabs: Files, Layers, Chat, Comments. The right side
- * stays dedicated to the inspector when in Edit mode.
+ * style inspector. Tabs: Files, Chat, Comments. The right side stays
+ * dedicated to the inspector when in Edit mode.
  *
  * Collapse persists across reloads under "left-panel-collapsed". When
  * the parent bumps `chatTabSwitchKey`, this component switches to the
@@ -11,14 +11,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import s from "./leftPanel.module.css";
 import { ContextualFilesPanel } from "./ContextualFilesPanel";
-import { OutlinePanel } from "./OutlinePanel";
 import { ChatTab, type ChatThread, type QueuedMessage } from "./ChatSidebar";
 import { CommentsPanel } from "./CommentsPanel";
 import { useComments, type LocalComment } from "../../lib/comments";
 import type { Attachment } from "./CommentBubble";
 import type { ElicitRequest } from "../../lib/chatStream";
 
-type Tab = "files" | "layers" | "chat" | "comments";
+type Tab = "files" | "chat" | "comments";
 
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 720;
@@ -52,12 +51,6 @@ type Props = {
   /* Files tab */
   projectId: string;
   onOpenRoute: (route: string, label: string) => void;
-
-  /* Layers tab */
-  doc: Document | null;
-  onSelectNode: (selector: string) => void;
-  onHoverNode: (selector: string | null) => void;
-  selectedSelector?: string;
 
   /* Chat tab */
   threads: ChatThread[];
@@ -128,7 +121,6 @@ type Props = {
 export function LeftPanel(props: Props) {
   const {
     projectId, onOpenRoute,
-    doc, onSelectNode, onHoverNode, selectedSelector,
     threads, activeThread, onNewThread, onSwitchThread, onDeleteThread,
     onRenameThread, onUndo, onRetry, onDeleteMessage, onSend, onRestore,
     pendingElicit, onElicitResolved, onStop,
@@ -255,12 +247,6 @@ export function LeftPanel(props: Props) {
             Files
           </button>
           <button
-            className={`${s.tab} ${tab === "layers" ? s.tabActive : ""}`}
-            onClick={() => setTab("layers")}
-          >
-            Layers
-          </button>
-          <button
             className={`${s.tab} ${tab === "chat" ? s.tabActive : ""}`}
             onClick={() => setTab("chat")}
           >
@@ -291,16 +277,6 @@ export function LeftPanel(props: Props) {
             activeFile={activeFile}
             openRoutes={openRoutes}
             onOpenRoute={onOpenRoute}
-          />
-        </div>
-      )}
-      {tab === "layers" && (
-        <div className={s.body}>
-          <OutlinePanel
-            doc={doc}
-            onSelect={onSelectNode}
-            onHover={onHoverNode}
-            selectedSelector={selectedSelector}
           />
         </div>
       )}

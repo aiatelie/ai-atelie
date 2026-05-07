@@ -218,8 +218,8 @@
 }
 .dropHintLabel {
   font-weight: var(--weight-semi);
-  letter-spacing: 0.06em;
-  font-size: 10.5px;
+  letter-spacing: var(--tracking-caps);
+  font-size: var(--text-xs);
   text-transform: uppercase;
   color: var(--ink-64);
 }

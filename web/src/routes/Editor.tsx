@@ -32,7 +32,6 @@ import { CommentBubble, type CommentTarget, type Attachment } from "../component
 import { CommentPins } from "../components/editor/CommentPins";
 import { LeftPanel } from "../components/editor/LeftPanel";
 import { FileBrowserView, PageIcon, ComponentIcon, AssetIcon } from "../components/editor/FileBrowserView";
-import { ProjectSwitcher } from "../components/editor/ProjectSwitcher";
 
 // Lazy-loaded heavy components — pulled out of the initial bundle and
 // fetched only when the user actually opens them. Each lazy() returns a
@@ -1408,9 +1407,8 @@ export default function Editor() {
   // touching any file (the "ask 5-10 questions before building"
   // workflow). Strip the flag immediately so a refresh doesn't re-fire
   // the intake.
-  // Track per-project so creating a second project from the in-editor
-  // ProjectSwitcher (without remounting the route) still fires intake
-  // for the new project.
+  // Track per-project so an in-place project switch (without
+  // remounting the route) still fires intake for the new project.
   const intakeFiredFor = useRef<Set<string>>(new Set());
   const [chatTabSwitchKey, setChatTabSwitchKey] = useState(0);
   // Per-project flag: this project hasn't yet received the intake brief.
@@ -2132,197 +2130,6 @@ export default function Editor() {
         }}
       />
 
-      {!isDesignFiles && <Toolbar
-        mode={mode}
-        onMode={(m) => {
-          setMode(m);
-          // Selection persists across edit ↔ export so the popover can use
-          // it as the capture target. Clear only when leaving both.
-          if (m !== "edit" && m !== "export") setSelected(null);
-          if (m !== "comment") setCommentTarget(null);
-        }}
-        zoom={zoom}
-        onZoom={setZoom}
-        showZoom={activeTab.display === "frame"}
-        display={activeTab.display}
-        onDisplay={(d) =>
-          setTabs((prev) =>
-            prev.map((t) => (t.id === activeTabId ? { ...t, display: d } : t))
-          )
-        }
-        viewport={activeTab.viewport ?? DEFAULT_VIEWPORT}
-        onViewport={(vp) =>
-          setTabs((prev) =>
-            prev.map((t) => (t.id === activeTabId ? { ...t, viewport: vp } : t))
-          )
-        }
-        onClearStrokes={() => clearStrokes(activeTab.route)}
-        exportScale={exportScale}
-        onExportScale={setExportScale}
-        exportFormat={exportFormat}
-        onExportFormat={(f) => {
-          setExportFormat(f);
-          // JPG can't carry alpha — flip background to white when JPG is picked.
-          if (f === "jpg" && exportBg === "transparent") setExportBg("white");
-        }}
-        exportBg={exportBg}
-        onExportBg={setExportBg}
-        videoResolution={videoResolution}
-        onVideoResolution={setVideoResolution}
-        videoQuality={videoQuality}
-        onVideoQuality={setVideoQuality}
-        videoDuration={videoDuration}
-        onVideoDuration={setVideoDuration}
-        videoFps={videoFps}
-        onVideoFps={setVideoFps}
-        videoBg={videoBg}
-        onVideoBg={setVideoBg}
-        exportSelected={selected}
-        exportCapturing={exportCapturing}
-        onCaptureExport={onCaptureExport}
-        onWalkExportParent={onWalkExportParent}
-        tweakBridge={tweakBridge}
-        onAskTweaks={() => {
-          // Build the AI prompt that asks Claude to add live-tweak
-          // controls to the current page. The host (this editor) wires
-          // everything in once the page posts __edit_mode_available, so
-          // the prompt only needs to instruct on:
-          //   1. the EDITMODE-BEGIN/END marker block (so source rewrites
-          //      can find + patch the JSON)
-          //   2. the existing tweaks-panel.jsx in the project
-          //   3. wiring TWEAK_DEFAULTS keys into the rendered output
-          // The dialog lets the user edit before sending.
-          const prompt = [
-            `For the active page \`${activeTab.route}\` in this sandbox project,`,
-            `add live-tweak controls so I can adjust the salient values (text, colors,`,
-            `font sizes, spacing, etc.) without touching code.`,
-            ``,
-            `**How it works in this project:**`,
-            `- The page is plain HTML + CDN React + Babel-Standalone (no build step).`,
-            `- There is already a \`tweaks-panel.jsx\` at the project root that exports`,
-            `  \`useTweaks(DEFAULTS, "storageKey")\` and \`<TweaksPanel>\`. Use them — don't`,
-            `  re-implement.`,
-            `- Define \`const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{...}/*EDITMODE-END*/;\``,
-            `  inside the page (or a small companion .jsx). The marker comments are`,
-            `  load-bearing — the editor's host bridge reads them to write knob changes`,
-            `  back to source. The block must be valid JSON, exactly one per file.`,
-            `- Wire the values from \`useTweaks\` into the rendered output, and render`,
-            `  \`<TweaksPanel>\` with \`<TweakText>\`/\`<TweakSelect>\`/\`<TweakSlider>\`/`,
-            `  \`<TweakToggle>\` children for each key.`,
-            ``,
-            `**Scope:**`,
-            `- Only edit files inside this project directory.`,
-            `- Pick 5–10 high-leverage knobs — don't try to expose every value.`,
-            `- Keep the panel small (floating bottom-right is the established pattern).`,
-            ``,
-            `When done, the editor's "Edit live" toolbar toggle will appear and clicking`,
-            `it will open your panel. Each knob change writes back to source automatically.`,
-          ].join("\n");
-          setTweaksPreviewPrompt(prompt);
-        }}
-        overrideCount={overrideCountForActive}
-        onReset={async () => {
-          await clearRouteEverywhere(activeTab.route);
-          const ifr = iframeRef.current;
-          if (ifr) ifr.src = ifr.src;
-        }}
-        onSaveInspectorEdits={async () => {
-          // Fast path: write inspector edits to _inspector_edits.css in
-          // the project (no AI). Page reloads via vite watcher and the
-          // saved styles apply via the auto-injected <link>.
-          const overrides = readRoute(activeTab.route);
-          if (Object.keys(overrides).length === 0) return;
-          try {
-            const res = await fetch(
-              `/api/projects/${encodeURIComponent(activeProject.id)}/inspector-css`,
-              {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ route: activeTab.route, edits: overrides }),
-              },
-            );
-            if (!res.ok) {
-              const j = await res.json().catch(() => ({}));
-              throw new Error(j?.error ?? `HTTP ${res.status}`);
-            }
-            // Drop the localStorage layer — the CSS file owns the styles
-            // now. Reload the iframe + cache-bust the link so the new
-            // rules apply immediately.
-            clearRoute(activeTab.route);
-            const ifr = iframeRef.current;
-            if (ifr) {
-              DmBridge.injectInspectorCSS(ifr, Date.now());
-              ifr.src = ifr.src;
-            }
-            trackEvent("inspector_save", { count: String(Object.keys(overrides).length) }, activeProject.id);
-          } catch (err) {
-            alert(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
-          }
-        }}
-        onBakeToSource={async () => {
-          // Slow path: ask Claude to walk the source and rewrite the
-          // original JSX / CSS so the overrides become permanent (i.e.
-          // can be deleted from _inspector_edits.css). Use sparingly —
-          // this is what you'd hit before shipping a design.
-          const overrides = readRoute(activeTab.route);
-          const entries = Object.entries(overrides);
-          if (entries.length === 0) {
-            alert("No inspector edits to bake on this route.");
-            return;
-          }
-          // Enrich each override with semantic info pulled from the live
-          // iframe so Claude has something to grep for. The selector
-          // alone (especially `[data-dm-ref="…"]`) carries nothing
-          // source-side.
-          const doc = iframeRef.current?.contentDocument;
-          const summary = entries
-            .map(([sel, props]) => {
-              const propsBlock = Object.entries(props).map(([k, v]) => `    ${k}: ${v};`).join("\n");
-              const el = doc ? (doc.querySelector(sel) as HTMLElement | null) : null;
-              if (!el) {
-                return `  selector: \`${sel}\`\n${propsBlock}`;
-              }
-              const tag = el.tagName.toLowerCase();
-              const cls = (typeof el.className === "string" ? el.className : "")
-                .split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
-              const inner = (el.innerText ?? "").trim().replace(/\s+/g, " ").slice(0, 120);
-              const parent = el.parentElement;
-              const parentTag = parent ? parent.tagName.toLowerCase() : "";
-              const parentCls = parent && typeof parent.className === "string"
-                ? parent.className.split(/\s+/).filter(Boolean).slice(0, 4).join(" ")
-                : "";
-              const lines = [
-                `  selector: \`${sel}\``,
-                `  tag: <${tag}>${cls ? ` class="${cls}"` : ""}`,
-              ];
-              if (inner) lines.push(`  text: ${JSON.stringify(inner)}`);
-              if (parentTag) lines.push(`  parent: <${parentTag}>${parentCls ? ` class="${parentCls}"` : ""}`);
-              lines.push(propsBlock);
-              return lines.join("\n");
-            })
-            .join("\n\n");
-          setChatTabSwitchKey((k) => k + 1);
-          await runTurn({
-            text:
-              `Bake the following editor-overrides into the source for route \`${activeTab.route}\`. ` +
-              `For each item, find the element in the corresponding JSX or CSS module by its tag + ` +
-              `class names + inner text + parent context (the positional CSS selector is a fallback ` +
-              `only — don't grep for it). Apply each style permanently in source, then confirm with ` +
-              `one short sentence so I can clear the overrides.\n\n` +
-              `Touch only files inside this sandbox project. Don't run shell commands.\n\n` +
-              `**Overrides to persist:**\n\n` + summary,
-            attachments: [],
-            target: null,
-          });
-          // Clear BOTH localStorage and _inspector_edits.css. Without
-          // the CSS-file clear, the !important rules would continue to
-          // shadow whatever Claude just wrote into source.
-          await clearRouteEverywhere(activeTab.route);
-          const ifr = iframeRef.current;
-          if (ifr) ifr.src = ifr.src;
-        }}
-      />}
-
       <div className={s.stage}>
         {!isDesignFiles && <LeftPanel
           projectId={activeProject.id}
@@ -2341,22 +2148,6 @@ export default function Editor() {
             setTabs((prev) => [...prev, tab]);
             setActiveTabId(tab.id);
             trackEvent("tab_open", { route, source: "files-panel" }, activeProject.id);
-          }}
-          doc={iframeRef.current?.contentDocument ?? null}
-          selectedSelector={selected?.selector}
-          onHoverNode={(sel) => canvasFrameRef.current?.paintHoverBySelector(sel)}
-          onSelectNode={(sel) => {
-            const doc = iframeRef.current?.contentDocument;
-            if (!doc) return;
-            const el = resolveCssPath(doc, sel) as HTMLElement | null;
-            if (!el) return;
-            setMode("edit");
-            setSelected({
-              selector: sel,
-              tag: el.tagName.toLowerCase(),
-              computed: doc.defaultView!.getComputedStyle(el),
-              descriptor: buildDescriptor(el),
-            });
           }}
           threads={threads}
           activeThread={activeThread}
@@ -2525,6 +2316,199 @@ export default function Editor() {
             }
           }}
         />}
+
+        <div className={s.right}>
+          {!isDesignFiles && <Toolbar
+            mode={mode}
+            onMode={(m) => {
+              setMode(m);
+              // Selection persists across edit ↔ export so the popover can use
+              // it as the capture target. Clear only when leaving both.
+              if (m !== "edit" && m !== "export") setSelected(null);
+              if (m !== "comment") setCommentTarget(null);
+            }}
+            zoom={zoom}
+            onZoom={setZoom}
+            showZoom={activeTab.display === "frame"}
+            display={activeTab.display}
+            onDisplay={(d) =>
+              setTabs((prev) =>
+                prev.map((t) => (t.id === activeTabId ? { ...t, display: d } : t))
+              )
+            }
+            viewport={activeTab.viewport ?? DEFAULT_VIEWPORT}
+            onViewport={(vp) =>
+              setTabs((prev) =>
+                prev.map((t) => (t.id === activeTabId ? { ...t, viewport: vp } : t))
+              )
+            }
+            onClearStrokes={() => clearStrokes(activeTab.route)}
+            exportScale={exportScale}
+            onExportScale={setExportScale}
+            exportFormat={exportFormat}
+            onExportFormat={(f) => {
+              setExportFormat(f);
+              // JPG can't carry alpha — flip background to white when JPG is picked.
+              if (f === "jpg" && exportBg === "transparent") setExportBg("white");
+            }}
+            exportBg={exportBg}
+            onExportBg={setExportBg}
+            videoResolution={videoResolution}
+            onVideoResolution={setVideoResolution}
+            videoQuality={videoQuality}
+            onVideoQuality={setVideoQuality}
+            videoDuration={videoDuration}
+            onVideoDuration={setVideoDuration}
+            videoFps={videoFps}
+            onVideoFps={setVideoFps}
+            videoBg={videoBg}
+            onVideoBg={setVideoBg}
+            exportSelected={selected}
+            exportCapturing={exportCapturing}
+            onCaptureExport={onCaptureExport}
+            onWalkExportParent={onWalkExportParent}
+            tweakBridge={tweakBridge}
+            onAskTweaks={() => {
+              // Build the AI prompt that asks Claude to add live-tweak
+              // controls to the current page. The host (this editor) wires
+              // everything in once the page posts __edit_mode_available, so
+              // the prompt only needs to instruct on:
+              //   1. the EDITMODE-BEGIN/END marker block (so source rewrites
+              //      can find + patch the JSON)
+              //   2. the existing tweaks-panel.jsx in the project
+              //   3. wiring TWEAK_DEFAULTS keys into the rendered output
+              // The dialog lets the user edit before sending.
+              const prompt = [
+                `For the active page \`${activeTab.route}\` in this sandbox project,`,
+                `add live-tweak controls so I can adjust the salient values (text, colors,`,
+                `font sizes, spacing, etc.) without touching code.`,
+                ``,
+                `**How it works in this project:**`,
+                `- The page is plain HTML + CDN React + Babel-Standalone (no build step).`,
+                `- There is already a \`tweaks-panel.jsx\` at the project root that exports`,
+                `  \`useTweaks(DEFAULTS, "storageKey")\` and \`<TweaksPanel>\`. Use them — don't`,
+                `  re-implement.`,
+                `- Define \`const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{...}/*EDITMODE-END*/;\``,
+                `  inside the page (or a small companion .jsx). The marker comments are`,
+                `  load-bearing — the editor's host bridge reads them to write knob changes`,
+                `  back to source. The block must be valid JSON, exactly one per file.`,
+                `- Wire the values from \`useTweaks\` into the rendered output, and render`,
+                `  \`<TweaksPanel>\` with \`<TweakText>\`/\`<TweakSelect>\`/\`<TweakSlider>\`/`,
+                `  \`<TweakToggle>\` children for each key.`,
+                ``,
+                `**Scope:**`,
+                `- Only edit files inside this project directory.`,
+                `- Pick 5–10 high-leverage knobs — don't try to expose every value.`,
+                `- Keep the panel small (floating bottom-right is the established pattern).`,
+                ``,
+                `When done, the editor's "Edit live" toolbar toggle will appear and clicking`,
+                `it will open your panel. Each knob change writes back to source automatically.`,
+              ].join("\n");
+              setTweaksPreviewPrompt(prompt);
+            }}
+            overrideCount={overrideCountForActive}
+            onReset={async () => {
+              await clearRouteEverywhere(activeTab.route);
+              const ifr = iframeRef.current;
+              if (ifr) ifr.src = ifr.src;
+            }}
+            onSaveInspectorEdits={async () => {
+              // Fast path: write inspector edits to _inspector_edits.css in
+              // the project (no AI). Page reloads via vite watcher and the
+              // saved styles apply via the auto-injected <link>.
+              const overrides = readRoute(activeTab.route);
+              if (Object.keys(overrides).length === 0) return;
+              try {
+                const res = await fetch(
+                  `/api/projects/${encodeURIComponent(activeProject.id)}/inspector-css`,
+                  {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ route: activeTab.route, edits: overrides }),
+                  },
+                );
+                if (!res.ok) {
+                  const j = await res.json().catch(() => ({}));
+                  throw new Error(j?.error ?? `HTTP ${res.status}`);
+                }
+                // Drop the localStorage layer — the CSS file owns the styles
+                // now. Reload the iframe + cache-bust the link so the new
+                // rules apply immediately.
+                clearRoute(activeTab.route);
+                const ifr = iframeRef.current;
+                if (ifr) {
+                  DmBridge.injectInspectorCSS(ifr, Date.now());
+                  ifr.src = ifr.src;
+                }
+                trackEvent("inspector_save", { count: String(Object.keys(overrides).length) }, activeProject.id);
+              } catch (err) {
+                alert(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
+              }
+            }}
+            onBakeToSource={async () => {
+              // Slow path: ask Claude to walk the source and rewrite the
+              // original JSX / CSS so the overrides become permanent (i.e.
+              // can be deleted from _inspector_edits.css). Use sparingly —
+              // this is what you'd hit before shipping a design.
+              const overrides = readRoute(activeTab.route);
+              const entries = Object.entries(overrides);
+              if (entries.length === 0) {
+                alert("No inspector edits to bake on this route.");
+                return;
+              }
+              // Enrich each override with semantic info pulled from the live
+              // iframe so Claude has something to grep for. The selector
+              // alone (especially `[data-dm-ref="…"]`) carries nothing
+              // source-side.
+              const doc = iframeRef.current?.contentDocument;
+              const summary = entries
+                .map(([sel, props]) => {
+                  const propsBlock = Object.entries(props).map(([k, v]) => `    ${k}: ${v};`).join("\n");
+                  const el = doc ? (doc.querySelector(sel) as HTMLElement | null) : null;
+                  if (!el) {
+                    return `  selector: \`${sel}\`\n${propsBlock}`;
+                  }
+                  const tag = el.tagName.toLowerCase();
+                  const cls = (typeof el.className === "string" ? el.className : "")
+                    .split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
+                  const inner = (el.innerText ?? "").trim().replace(/\s+/g, " ").slice(0, 120);
+                  const parent = el.parentElement;
+                  const parentTag = parent ? parent.tagName.toLowerCase() : "";
+                  const parentCls = parent && typeof parent.className === "string"
+                    ? parent.className.split(/\s+/).filter(Boolean).slice(0, 4).join(" ")
+                    : "";
+                  const lines = [
+                    `  selector: \`${sel}\``,
+                    `  tag: <${tag}>${cls ? ` class="${cls}"` : ""}`,
+                  ];
+                  if (inner) lines.push(`  text: ${JSON.stringify(inner)}`);
+                  if (parentTag) lines.push(`  parent: <${parentTag}>${parentCls ? ` class="${parentCls}"` : ""}`);
+                  lines.push(propsBlock);
+                  return lines.join("\n");
+                })
+                .join("\n\n");
+              setChatTabSwitchKey((k) => k + 1);
+              await runTurn({
+                text:
+                  `Bake the following editor-overrides into the source for route \`${activeTab.route}\`. ` +
+                  `For each item, find the element in the corresponding JSX or CSS module by its tag + ` +
+                  `class names + inner text + parent context (the positional CSS selector is a fallback ` +
+                  `only — don't grep for it). Apply each style permanently in source, then confirm with ` +
+                  `one short sentence so I can clear the overrides.\n\n` +
+                  `Touch only files inside this sandbox project. Don't run shell commands.\n\n` +
+                  `**Overrides to persist:**\n\n` + summary,
+                attachments: [],
+                target: null,
+              });
+              // Clear BOTH localStorage and _inspector_edits.css. Without
+              // the CSS-file clear, the !important rules would continue to
+              // shadow whatever Claude just wrote into source.
+              await clearRouteEverywhere(activeTab.route);
+              const ifr = iframeRef.current;
+              if (ifr) ifr.src = ifr.src;
+            }}
+          />}
+          <div className={s.rightBody}>
         {isDesignFiles ? (
           <FileBrowserView
             projectId={activeProject.id}
@@ -2780,6 +2764,8 @@ export default function Editor() {
           </Suspense>
         )}
         </>)}
+          </div>
+        </div>
 
       </div>
 
@@ -2901,7 +2887,6 @@ function TabBar({
   return (
     <div className={s.tabbar} ref={tabbarRef}>
       <ProjectTitle value={projectTitle} onChange={onRenameProject} />
-      <ProjectSwitcher />
       <div
         className={`${s.tab} ${activeId === DESIGN_FILES_TAB_ID ? s.active : ""}`}
         onClick={() => onActivate(DESIGN_FILES_TAB_ID)}
@@ -2966,9 +2951,9 @@ function TabBar({
           title="Settings"
           aria-label="Open settings"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="8" cy="8" r="2" />
-            <path d="M8 1.5v2 M8 12.5v2 M14.5 8h-2 M3.5 8h-2 M12.6 3.4l-1.4 1.4 M4.8 11.2l-1.4 1.4 M12.6 12.6l-1.4-1.4 M4.8 4.8L3.4 3.4" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
           </svg>
         </button>
         <Link to="/projects" className={s.present} title="Back to projects" aria-label="Back to projects">
@@ -2980,10 +2965,6 @@ function TabBar({
           </svg>
           Projects
         </Link>
-        <button className={s.share} onClick={() => alert("Share is a stub for now")}>
-          Share
-        </button>
-        <span className={s.avatar} aria-hidden="true">·</span>
       </div>
     </div>
   );
@@ -3653,6 +3634,8 @@ function Toolbar({
         </button>
       )}
 
+      <div className={s.toolDivider} aria-hidden="true" />
+
       <button
         className={s.iconBtn}
         title="Ask AI to add tweak controls for this file"
@@ -3778,13 +3761,16 @@ function Toolbar({
       )}
 
       {showZoom && (
-        <button
-          className={`${s.iconBtn} ${s.zoomBtn}`}
-          onClick={() => onZoom(zoom === 0.5 ? 0.75 : zoom === 0.75 ? 1 : 0.5)}
-          title="Cycle zoom: 50% → 75% → 100%"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
+        <>
+          <div className={s.toolDivider} aria-hidden="true" />
+          <button
+            className={`${s.iconBtn} ${s.zoomBtn}`}
+            onClick={() => onZoom(zoom === 0.5 ? 0.75 : zoom === 0.75 ? 1 : 0.5)}
+            title="Cycle zoom: 50% → 75% → 100%"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+        </>
       )}
 
     </div>

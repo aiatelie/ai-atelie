@@ -1,7 +1,8 @@
 /* ConfirmDialog.tsx — themed replacement for window.confirm. Reuses
- * the dialog primitives from projects.module.css so it visually matches
- * NewProjectDialog. Defaults to a destructive (red) confirm button —
- * pass `tone="primary"` for non-destructive prompts.
+ * the dialog primitives from projects.module.css so it visually
+ * matches the rest of the projects chrome. Defaults to a destructive
+ * (red) confirm button — pass `tone="primary"` for non-destructive
+ * prompts.
  */
 
 import { useEffect, useRef } from "react";
