@@ -211,6 +211,29 @@ EOF
 
 After creation, output the PR URL. Then prune `.evidence/` to the last 5 runs.
 
+## Step 7 — Attach baseline-journey evidence to the PR body
+
+Every PR ships with the canonical baseline journeys' evidence in the
+PR body — separate from the per-task verification artifacts above.
+The journey suite is what proves the surrounding product still works
+even though your change was scoped:
+
+```sh
+bun run journeys
+```
+
+This runs `home-loads` + `create-project` + `agent-edits-canvas` +
+`cleanup-snapshot` (each its own ≤90-second-to-8-minute spec),
+ffmpeg-compresses the videos, uploads them, and rewrites the
+`<!-- journey-evidence:start -->` / `<!-- journey-evidence:end -->`
+block in the current PR's body. Idempotent: re-runs replace the
+block instead of appending. Per-journey isolation: a timeout in one
+journey doesn't kill the rest.
+
+If `bun run journeys` reports a failure, decide via the cuj-guardian
+triage whether it's a real regression or a stale assertion. Don't
+ship until the suite is green or the failure is documented.
+
 ## Anti-patterns
 
 - "Verified by inspection" — not allowed. Either run `verify-with-playwright` or explicitly state the surface has no UI.
