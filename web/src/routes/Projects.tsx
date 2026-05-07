@@ -50,10 +50,12 @@ export default function Projects() {
   };
 
   /** Owns the create flow. The sidebar form calls this and lets any
-   *  thrown error bubble up so it can render the inline alert. */
-  const handleCreate = async (name: string) => {
+   *  thrown error bubble up so it can render the inline alert. The
+   *  form also threads through the user's aesthetic-skill picks at
+   *  creation time so the manifest persists their initial intent. */
+  const handleCreate = async (name: string, activeSkills: string[]) => {
     const trimmed = name.trim() || "Untitled project";
-    const p = await createProject(trimmed);
+    const p = await createProject(trimmed, activeSkills);
     setActiveProject(p.id);
     // Land directly in the editor. When the project has no real files
     // yet, the editor renders an empty-project chat layout (no canvas,

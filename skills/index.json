@@ -6,22 +6,51 @@
       "name": "frontend-design",
       "display": "Frontend design",
       "description": "Aesthetic direction for designs outside an existing brand system",
+      "kind": "aesthetic",
       "body_status": "reconstructed",
       "body_sources": [
         "https://claude.com/blog/improving-frontend-design-through-skills"
       ]
     },
     {
+      "name": "design-aesthetic-presets",
+      "display": "Aesthetic presets",
+      "description": "Pick one of eleven named aesthetic directions before writing any code, then execute it with discipline",
+      "kind": "aesthetic",
+      "body_status": "original",
+      "body_sources": []
+    },
+    {
+      "name": "design-critique",
+      "display": "Design critique",
+      "description": "Run a structured anti-slop audit on the design just produced before declaring done",
+      "kind": "aesthetic",
+      "body_status": "original",
+      "body_sources": []
+    },
+    {
+      "name": "design-md-author",
+      "display": "DESIGN.md author",
+      "description": "Read or write a Google-spec DESIGN.md at the project root — the cross-tool aesthetic spec that grounds every prompt in this project",
+      "kind": "aesthetic",
+      "body_status": "original",
+      "body_sources": [
+        "https://github.com/google-labs-code/design.md"
+      ]
+    },
+    {
       "name": "interactive-prototype",
       "display": "Interactive prototype",
-      "description": "Working app with real interactions",
-      "body_status": "stub",
+      "description": "Build a clickable, hi-fi prototype of a product or flow — not a wireframe, not a static mock",
+      "kind": "capability",
+      "body_status": "reconstructed",
       "body_sources": []
     },
     {
       "name": "make-tweakable",
       "display": "Make tweakable",
       "description": "Add in-design tweak controls",
+      "kind": "capability",
       "body_status": "verbatim",
       "body_sources": []
     },
@@ -35,8 +64,9 @@
     {
       "name": "animated-video",
       "display": "Animated video",
-      "description": "Timeline-based motion design",
-      "body_status": "stub",
+      "description": "Timeline-based motion design — animated explainer-style HTML artifacts where time advances and elements enter or exit on a schedule",
+      "kind": "capability",
+      "body_status": "reconstructed",
       "body_sources": []
     },
     {
@@ -64,6 +94,7 @@
       "name": "export",
       "display": "Export",
       "description": "Export a selected element as PNG / JPEG / OGraf for video editors. Provider-agnostic — the AI calls capabilities by id, the host's adapter (MCP today, OpenAI-tools later) routes the call.",
+      "kind": "capability",
       "body_status": "original",
       "body_sources": []
     }

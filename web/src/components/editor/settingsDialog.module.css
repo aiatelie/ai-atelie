@@ -564,3 +564,142 @@
   text-decoration: none;
 }
 .aboutLinks a:hover { text-decoration: underline; }
+
+/* ─── Skills section ───────────────────────────────────────────
+ * Visual parity with NewProjectForm's design-skills picker so the
+ * "active set" feels like the same component across surfaces. The
+ * row treatment (custom check, brand-tinted active state, full-row
+ * click target) is duplicated rather than extracted because the two
+ * surfaces have different containers and different secondary
+ * sections (homepage has a hint, settings has the read-only
+ * Capabilities group); a shared component would have to grow more
+ * props than it would save. */
+.skillsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+.skillsGroup:last-child { margin-bottom: 0; }
+.skillsGroupLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-65);
+  font-weight: 600;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+.skillsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skillRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  border: 1px solid var(--ink-08);
+  background: var(--surface-2);
+  position: relative;
+}
+.skillRow:hover {
+  background: var(--ink-04);
+  border-color: var(--ink-12);
+}
+.skillRow:has(input:checked) {
+  background: var(--brand-bg);
+  border-color: var(--brand-border);
+}
+.skillRow:has(input:checked):hover {
+  background: var(--brand-hover);
+}
+.skillRow input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.skillCheck {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  border: 1.5px solid var(--ink-25);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+.skillRow:has(input:checked) .skillCheck {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.skillCheckMark {
+  width: 11px;
+  height: 11px;
+  color: var(--on-brand);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.12s, transform 0.12s;
+}
+.skillRow:has(input:checked) .skillCheckMark {
+  opacity: 1;
+  transform: scale(1);
+}
+.skillBody { flex: 1; min-width: 0; }
+.skillName {
+  display: block;
+  font-weight: 600;
+  color: var(--ink-92);
+  font-size: 14px;
+  letter-spacing: -0.005em;
+}
+.skillRow:has(input:checked) .skillName {
+  color: var(--brand-strong-fg);
+}
+.skillDesc {
+  display: block;
+  color: var(--ink-65);
+  font-size: 12.5px;
+  margin-top: 4px;
+  line-height: 1.45;
+}
+.skillRow:has(input:checked) .skillDesc {
+  color: var(--ink-78);
+}
+
+/* Capability rows are read-only — no checkbox, just a "thunder"-style
+ * lozenge to communicate "always-on", and softer surface so the eye
+ * separates them from the toggleable aesthetic group above. */
+.capabilityRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--ink-08);
+  background: var(--surface-warm);
+}
+.capabilityBadge {
+  flex-shrink: 0;
+  margin-top: 1px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-50);
+  text-transform: uppercase;
+  padding: 4px 7px;
+  background: var(--ink-04);
+  border-radius: 999px;
+  border: 1px solid var(--ink-08);
+  white-space: nowrap;
+}

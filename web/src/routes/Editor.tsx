@@ -458,6 +458,14 @@ export default function Editor() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Which section of SettingsDialog to land on. Defaults to the Theme
+  // tab on plain "open settings" clicks; the ActiveSkillsStrip flips it
+  // to "skills" when the user clicks the strip to edit their selection.
+  const [settingsSection, setSettingsSection] = useState<"theme" | "skills" | "notifications" | "adapters" | "about">("theme");
+  const openSkillsSettings = useCallback(() => {
+    setSettingsSection("skills");
+    setSettingsOpen(true);
+  }, []);
   const [tweaksPreviewPrompt, setTweaksPreviewPrompt] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const dmRef = useRef<DmBridge | null>(null);
@@ -2456,6 +2464,7 @@ export default function Editor() {
               toast.error(`Undo failed: ${err instanceof Error ? err.message : String(err)}`);
             }
           }}
+          onOpenSkillsSettings={openSkillsSettings}
         />
 
         <div className={s.right}>
@@ -2914,7 +2923,18 @@ export default function Editor() {
 
       {settingsOpen && (
         <Suspense fallback={null}>
-          <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+          <SettingsDialog
+            open={settingsOpen}
+            onClose={() => {
+              setSettingsOpen(false);
+              // Reset to the default section on close so the next plain
+              // open lands on Theme, not whatever was last visited via
+              // openSkillsSettings.
+              setSettingsSection("theme");
+            }}
+            initialSection={settingsSection}
+            projectId={activeProject?.id}
+          />
         </Suspense>
       )}
 
@@ -4178,6 +4198,20 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
     const onClick = (e: MouseEvent) => {
       const target = e.target as Element | null;
       if (!target || target.nodeType !== 1) return;
+      // On canvas-mode pages (DesignCanvas), don't intercept clicks on
+      // the canvas's own chrome. The editor attaches `click` in capture
+      // phase (see addEventListener at the bottom of this effect), so
+      // without a guard it would eat events meant for the canvas's own
+      // handlers — the drag-grip, expand button, kebab menu, and inline
+      // label/title editors would all silently stop working.
+      //
+      // Skip anything inside an inline-editable canvas control:
+      if (target.closest(".dc-editable")) return;
+      // Skip anything inside a [data-dc-slot] (an artboard) BUT outside
+      // .dc-card. .dc-card holds user-authored content (still
+      // selectable for chat/inspect); everything else inside the slot
+      // — label, grip, expand, kebab — is canvas chrome.
+      if (target.closest("[data-dc-slot]") && !target.closest(".dc-card")) return;
       e.preventDefault();
       e.stopPropagation();
       const sel = cssPath(target);
@@ -4493,7 +4527,19 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
       if (raf) cancelAnimationFrame(raf);
       if (settleRaf) cancelAnimationFrame(settleRaf);
     };
-  }, [pinnedSelector, zoom, tab.id, paintHover, isPanMode]);
+    // iframeReady + reloadKey are load-bearing: when the iframe element
+    // remounts (e.g. the canvas-snap toggling display from "frame" to
+    // "fill" on first __page_is_canvas, or a force-reload bumping
+    // reloadKey), `doc`/`win`/`mo` above bind to the *prior*
+    // contentDocument. Without re-subscribing, transform writes from the
+    // freshly-mounted DesignCanvas's pan/zoom land on a detached
+    // documentElement and the overlay drifts off the element. Adding both
+    // to the deps array forces a clean re-attach on every iframe identity
+    // change. (Symptom this fixed: select an element, drag-pan the
+    // canvas, the parent-side selection rectangle stayed put while the
+    // element moved underneath it — the MutationObserver was firing on a
+    // ghost.)
+  }, [pinnedSelector, zoom, tab.id, paintHover, isPanMode, iframeReady, reloadKey]);
 
   // Coordinate scale for the overlay. In framed mode the iframe is
   // visually scaled by `zoom`, so iframe-content rects need to be

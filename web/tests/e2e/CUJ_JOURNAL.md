@@ -26,6 +26,22 @@ See [`.claude/skills/cuj-guardian/SKILL.md`](../../../.claude/skills/cuj-guardia
 
 ---
 
+## 2026-05-07 — PR #88 — repaired-selector (home-shows-demo: poll for non-empty iframe)
+
+- **Change kind**: `repaired-selector` (assertion shape changed; user-observable success criterion identical).
+- **Before**: step waits for the iframe, then calls `body.innerText({ timeout: 8_000 })` once and asserts the returned string is >20 chars. Playwright's `innerText` only retries on element attach, NOT on empty-string content — so it returns `""` the moment the body element exists, which is well before the demo's CDN-loaded React (`react@18.3.1`, `@babel/standalone`, then `design-canvas.jsx` + `Banner.jsx`) has had a chance to mount and paint.
+- **After**: replace the one-shot read with `expect.poll(...)` over the same `body.innerText` call, with `timeout: 12_000` and `intervals: [500, 1000, 2000]`. Same final assertion (length > 20), retried until satisfied or the timeout fires.
+- **Why**: PR #88's parallel-agent investigation surfaced this as the root cause of `home-shows-demo` failing in the journey run on the worktree dev server. The test wasn't broken on the parent's dev server because the React boot was apparently happening fast enough there to clear the 8s window. The fix is robust against either machine's timing.
+- **Proof of value**: ran the spec against the worktree dev server before the change → red on the empty-string assertion within ~9s. After the change → green within ~3-5s once React mounts. The assertion still catches a *genuinely* empty iframe (e.g. if the demo project's `index.html` were missing or unreachable) — `expect.poll` only retries empty results; it does not weaken the >20-char floor.
+
+## 2026-05-07 — PR #88 — repaired-selector (5 specs: PROJECTS_DIR resolution)
+
+- **Change kind**: `repaired-selector` (path constant replaced; assertions unchanged).
+- **Before**: `create-hello-world-banner`, `agent-edits-canvas`, `canvas-variations`, `comment-translate`, and `switch-model` each declared `const PROJECTS_DIR = "/Users/kadu/developer/aiatilie/ai-atelie/web/projects";` — an absolute path baked to one machine's parent repo root.
+- **After**: `const PROJECTS_DIR = path.resolve(import.meta.dirname, "../../..", "projects");` — same physical location when run from the parent repo's checkout, but also resolves correctly from any git worktree at `.claude/worktrees/<name>/`.
+- **Why**: when journeys run from a worktree, the API server (running from the worktree) writes new projects into the worktree's `web/projects/`, but the spec was checking the parent's `web/projects/` and either tripping on stale `p_*` ids from prior parent runs OR failing to find what the API just wrote. The fix makes the path follow the spec file, which always sits at `<repo-being-tested>/web/tests/e2e/journeys/<name>.spec.ts`.
+- **Proof of value**: ran `grep -rn "/Users/kadu" web/tests/e2e/` after the change → zero matches. Ran a single spec from the worktree → the snapshot-before assertion (which was failing on collisions with the parent's stale dirs) now passes against the worktree's freshly-empty projects dir.
+
 ## 2026-05-07 — PR pending — evolved (split into journeys/ suite)
 
 - **Change kind**: `evolved` (single spec → four-journey suite).

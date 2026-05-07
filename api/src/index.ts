@@ -25,6 +25,7 @@ import { debugRoutes } from "./routes/debug.ts";
 import { capabilitiesRoute } from "./routes/capabilitiesRoute.ts";
 import { agentsRoute } from "./routes/agents.ts";
 import { internalRoutes } from "./routes/internal.ts";
+import { skillsCatalogRoute } from "./routes/skillsCatalog.ts";
 
 const app = new Hono();
 
@@ -58,6 +59,7 @@ app.get("/api/health", (c) => c.json({ ok: true, port: ENV.API_PORT }));
 // Mount route families. Order doesn't matter for non-overlapping paths,
 // but `projectsRoutes` includes the /p/:id/* catch-all so it goes last.
 app.route("/", capabilitiesRoute);
+app.route("/", skillsCatalogRoute);
 app.route("/", agentsRoute);
 app.route("/", debugRoutes);
 app.route("/", internalRoutes);

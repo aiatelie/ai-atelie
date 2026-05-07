@@ -18,6 +18,7 @@ import { previewReminder, splitSystemReminders } from "./systemReminder";
 import { ELAPSED_TICK_MS, SLOW_RUN_THRESHOLD_MS, formatElapsed } from "./elapsed";
 import { dayLabel, fullDateTime, relativeTime, shouldShowDaySeparator } from "./time";
 import { ElicitForm } from "./ElicitForm";
+import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
@@ -186,6 +187,7 @@ export function ChatTab({
   onCancelQueued,
   showCanvasToggle,
   projectId,
+  onOpenSkillsSettings,
 }: {
   threads: ChatThread[];
   activeThread: ChatThread | null;
@@ -219,8 +221,16 @@ export function ChatTab({
    *  iframe screenshot for the next turn. Editor enables this; Onboard
    *  doesn't (no iframe). */
   showCanvasToggle?: boolean;
-  /** Active project — drives the `@`-mention file picker. Omit to disable. */
+  /** Active project id. Drives both the `@`-mention file picker (file
+   *  search lives per-project) AND the ActiveSkillsStrip (which fetches
+   *  its own manifest to render the toggle pills). Optional: routes
+   *  that render ChatTab outside an active-project context (Onboard)
+   *  omit it; the file picker disables and the strip silently hides. */
   projectId?: string;
+  /** Open Settings to the Skills section. Wired by the parent (Editor);
+   *  the active-skills-strip click handler calls this. Optional — when
+   *  absent, the strip still renders but the click does nothing. */
+  onOpenSkillsSettings?: () => void;
 }) {
   // Seed-text signal for "edit this user message and resend": when the
   // pencil is clicked on a user bubble, we truncate the thread from that
@@ -265,6 +275,10 @@ export function ChatTab({
           onCancel={onCancelQueued ?? (() => {})}
         />
       )}
+      <ActiveSkillsStrip
+        projectId={projectId}
+        onEdit={onOpenSkillsSettings ?? (() => {})}
+      />
       <Composer
         disabled={!!activeThread && (isAssistantPending(activeThread) || !!pendingElicit)}
         hasQueued={!!queuedMessage}

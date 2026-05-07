@@ -17,8 +17,10 @@
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { basename, extname } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { ENV } from "../env.ts";
 import { parseAnyDataUrl } from "../services/utils.ts";
 import { broadcastShared } from "../services/sseChannels.ts";
 import { getRepos, type ProjectManifest } from "../storage/repos/index.ts";
@@ -139,6 +141,71 @@ const STARTER_HTML = `<!doctype html>
 <script src="${REACT_CDN}"></script>
 <script src="${REACT_DOM_CDN}"></script>
 <script src="${BABEL_CDN}"></script>
+
+<!-- DesignCanvas wraps the project in a pannable / zoomable workspace
+     that follows the host editor's theme and persists artboard state
+     to the project-meta API. The agent can later add more artboards
+     for side-by-side variations, or replace this wrapper with a plain
+     page if the design genuinely is a single static surface. -->
+<script type="text/babel" src="design-canvas.jsx"></script>
+</head>
+<body style="margin:0">
+<div id="root"></div>
+<script type="text/babel">
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    React.createElement(DesignCanvas, null,
+      React.createElement(DCSection, { id: "main", title: "__NAME__" },
+        React.createElement(DCArtboard, { id: "v1", label: "First", width: 800, height: 500 },
+          React.createElement(
+            "div",
+            {
+              style: {
+                padding: 48,
+                fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 12,
+              },
+            },
+            React.createElement(
+              "h1",
+              { style: { fontSize: 36, margin: 0, letterSpacing: -0.5 } },
+              "__NAME__",
+            ),
+            React.createElement(
+              "p",
+              { style: { color: "#555", margin: 0, fontSize: 15 } },
+              "Empty canvas. Tell the AI what to build.",
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+</script>
+</body>
+</html>
+`;
+
+/* Fallback used when mcp/starters/DesignCanvas.jsx can't be read — same
+ * shape as the pre-canvas-default starter. New projects still work, they
+ * just don't get pan/zoom out of the box. The route logs the underlying
+ * error so an operator can find the install issue. */
+const STARTER_HTML_FALLBACK = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>__NAME__</title>
+<link rel="stylesheet" href="style.css" />
+
+<script src="${REACT_CDN}"></script>
+<script src="${REACT_DOM_CDN}"></script>
+<script src="${BABEL_CDN}"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -163,6 +230,31 @@ const STARTER_CSS = `/* __NAME__ — base styles. Edit freely. */
 html, body { margin: 0; padding: 0; background: var(--cream); color: var(--ink); font-family: ui-sans-serif, system-ui, sans-serif; }
 `;
 
+/* The canonical DesignCanvas starter is read once on first project create
+ * and cached for the rest of the process lifetime. Living in mcp/starters/
+ * means the same source ships to every project — both via this route at
+ * create time AND via the `mcp__starters__copy_starter` tool when the
+ * agent drops it into an existing project. The two pathways stay byte-
+ * identical because they both read the same file. */
+let designCanvasSource: string | null = null;
+async function loadDesignCanvasStarter(): Promise<string> {
+  if (designCanvasSource !== null) return designCanvasSource;
+  try {
+    designCanvasSource = await readFile(
+      join(ENV.MCP_DIR, "starters", "DesignCanvas.jsx"),
+      "utf8",
+    );
+  } catch (err) {
+    // If the starter is missing for any reason (broken install, atypical
+    // layout), fall through to a plain index.html — the new project still
+    // works, just without the canvas wrapper. We log loudly so the
+    // operator can find it.
+    console.warn(`[projects.create] could not read DesignCanvas.jsx: ${err instanceof Error ? err.message : err}`);
+    designCanvasSource = "";
+  }
+  return designCanvasSource;
+}
+
 function newProjectId(): string {
   return "p_" + randomBytes(4).toString("hex");
 }
@@ -177,17 +269,40 @@ projectsRoutes.get("/api/projects", async (c) => {
 });
 
 projectsRoutes.post("/api/projects/create", async (c) => {
-  let body: { name?: string; id?: string };
+  let body: { name?: string; id?: string; active_skills?: unknown };
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
   const name = (body.name ?? "Untitled").trim() || "Untitled";
   const id = body.id && ID_RE.test(body.id) ? body.id : newProjectId();
+  // Validate active_skills at the boundary: array of non-empty strings,
+  // capped at a reasonable max so a malformed body can't bloat the
+  // manifest. Anything else falls through to the repo's default
+  // (all four aesthetic skills checked).
+  let activeSkills: string[] | undefined;
+  if (Array.isArray(body.active_skills)) {
+    const cleaned = body.active_skills
+      .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+      .slice(0, 32);
+    if (cleaned.length > 0) activeSkills = cleaned;
+  }
   try {
+    // Read the canonical DesignCanvas starter so every fresh project lands
+    // with pan/zoom + theme + state-persistence wired in from prompt #1.
+    // Empty string = could not read (logged); ProjectRepo.create() will
+    // skip the file and the index.html falls back to a plain page render.
+    const designCanvas = await loadDesignCanvasStarter();
+    // If we have the starter, use the DesignCanvas-wrapped index.html.
+    // Otherwise, generate a minimal plain page so the project still works.
+    const indexHtml = designCanvas
+      ? STARTER_HTML.replace(/__NAME__/g, name)
+      : STARTER_HTML_FALLBACK.replace(/__NAME__/g, name);
     const manifest = await getRepos().projects.create({
       id,
       name,
-      indexHtml: STARTER_HTML.replace(/__NAME__/g, name),
+      indexHtml,
       styleCss: STARTER_CSS.replace(/__NAME__/g, name),
+      designCanvas: designCanvas || undefined,
+      activeSkills,
     });
     broadcastShared("projects");
     return c.json({ id, manifest });

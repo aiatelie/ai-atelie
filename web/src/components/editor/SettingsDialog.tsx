@@ -12,11 +12,10 @@
  * sidebar. ModelPicker still routes "⚙ Manage adapters" through this
  * dialog — it just opens directly to the Adapters section. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import s from "./settingsDialog.module.css";
 import { useAgents, rescanAgents, type AgentInfo } from "../../data/agents";
 import {
-  getTheme, setTheme, themes, type ThemePreference,
   getDesign, setDesign, clearDesign, designs, type Design, type DesignMeta,
 } from "../../lib/theme";
 import {
@@ -34,11 +33,11 @@ import {
   type FailureSoundId,
 } from "../../lib/notifications";
 
-type SectionId = "appearance" | "design" | "notifications" | "adapters" | "about";
+type SectionId = "theme" | "skills" | "notifications" | "adapters" | "about";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
-  { id: "appearance", label: "Appearance" },
-  { id: "design", label: "Design" },
+  { id: "theme", label: "Theme" },
+  { id: "skills", label: "Skills" },
   { id: "notifications", label: "Notifications" },
   { id: "adapters", label: "Adapters" },
   { id: "about", label: "About" },
@@ -47,11 +46,16 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 export function SettingsDialog({
   open,
   onClose,
-  initialSection = "appearance",
+  initialSection = "theme",
+  projectId,
 }: {
   open: boolean;
   onClose: () => void;
   initialSection?: SectionId;
+  /** Active project the dialog should scope project-level sections to
+   *  (currently: Skills). Optional — when absent, project-level
+   *  sections render an empty-state. */
+  projectId?: string;
 }) {
   const [section, setSection] = useState<SectionId>(initialSection);
 
@@ -86,8 +90,8 @@ export function SettingsDialog({
           </nav>
 
           <div className={s.content}>
-            {section === "appearance" && <AppearanceSection />}
-            {section === "design" && <DesignSection />}
+            {section === "theme" && <ThemeSection />}
+            {section === "skills" && <SkillsSection projectId={projectId} />}
             {section === "notifications" && <NotificationsSection />}
             {section === "adapters" && <AdaptersSection />}
             {section === "about" && <AboutSection />}
@@ -98,43 +102,7 @@ export function SettingsDialog({
   );
 }
 
-function AppearanceSection() {
-  const [active, setActive] = useState<ThemePreference>(() => getTheme());
-  const onPick = (pref: ThemePreference) => {
-    setTheme(pref);
-    setActive(pref);
-  };
-  return (
-    <section className={s.section}>
-      <h3 className={s.sectionTitle}>Appearance</h3>
-      <p className={s.sectionDesc}>
-        Theme preference for the editor chrome. <strong>System</strong> follows
-        your OS Light/Dark setting and flips live. <strong>Retro</strong> is a
-        decorative cream-and-navy skin.
-      </p>
-      <div
-        className={s.segControl}
-        role="group"
-        aria-label="Theme"
-        style={{ ["--seg-cols" as string]: themes.length } as React.CSSProperties}
-      >
-        {themes.map((th) => (
-          <button
-            key={th.name}
-            type="button"
-            className={`${s.segBtn} ${th.name === active ? s.segBtnActive : ""}`}
-            aria-pressed={th.name === active}
-            onClick={() => onPick(th.name)}
-          >
-            {th.label}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function DesignSection() {
+function ThemeSection() {
   const [active, setActive] = useState<Design | null>(() => getDesign());
   const onPick = (d: Design) => {
     setDesign(d);
@@ -150,22 +118,22 @@ function DesignSection() {
 
   return (
     <section className={s.section}>
-      <h3 className={s.sectionTitle}>Design</h3>
+      <h3 className={s.sectionTitle}>Theme</h3>
       <p className={s.sectionDesc}>
-        A decorative palette overlay on top of your <strong>Appearance</strong>
-        choice. Designs sit independently of Light/Dark — pick one to repaint
-        the chrome with a different identity, or reset to revert to the
-        underlying theme.
+        Pick a theme to repaint the editor chrome — and the canvas surface
+        around your designs — with a different identity. Themes are split
+        into Light and Dark variants; pick whichever fits how you want the
+        app to feel. Reset to fall back to the default cream-and-rust look.
       </p>
 
       <div className={s.designStatus}>
         <span className={s.designStatusLabel}>
           {active ? (
             <>
-              Design: <strong>{designs.find((d) => d.name === active)?.label}</strong>
+              Theme: <strong>{designs.find((d) => d.name === active)?.label}</strong>
             </>
           ) : (
-            <>No design — using your Appearance theme.</>
+            <>No theme picked — using the default.</>
           )}
         </span>
         <button
@@ -174,7 +142,7 @@ function DesignSection() {
           onClick={onReset}
           disabled={!active}
         >
-          Reset to theme
+          Reset to default
         </button>
       </div>
 
@@ -238,6 +206,199 @@ function DesignSwatchCard({
       </span>
       <span className={s.themeCardLabel}>{design.label}</span>
     </button>
+  );
+}
+
+/** Inline check glyph for the SkillsSection custom checkbox visual.
+ *  Mirrors the one in NewProjectForm so both surfaces feel like the
+ *  same component — same rounded corners, same tick path, same stroke
+ *  weight. Native <input type="checkbox"> is kept for accessibility +
+ *  form semantics; this glyph just paints the visible state. */
+function SkillCheckGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 8.5l3 3 6.5-7" />
+    </svg>
+  );
+}
+
+/* SkillsSection — per-project skill catalog viewer.
+ *
+ * Two groups:
+ *   - Aesthetic skills (kind: "aesthetic") — toggleable; persisted to
+ *     manifest.design.active_skills via PATCH /api/projects/:id/manifest.
+ *     These govern HOW the agent designs (frontend-design, presets,
+ *     critique, DESIGN.md author).
+ *   - Capabilities (kind: "capability") — read-only display. The agent
+ *     reaches for these when the user asks for the matching action
+ *     (export, make-tweakable). Always-on; no user toggle.
+ *
+ * Stubs (no `kind` field, body_status: "stub") are intentionally
+ * hidden — they're working-theory placeholders, not user-facing yet.
+ *
+ * Reads `<SKILLS_DIR>/index.json` via /api/skills/catalog. The catalog
+ * ships pre-baked with the app; per-project aesthetic selection is the
+ * user's choice. */
+type CatalogEntry = {
+  name: string;
+  display: string;
+  description: string;
+  kind?: "aesthetic" | "capability";
+  body_status: "verbatim" | "reconstructed" | "stub" | "original";
+  body_sources: string[];
+};
+
+type CatalogResponse = { skills: CatalogEntry[] };
+
+type ManifestDesign = { active_skills?: string[]; design_md?: string };
+
+function SkillsSection({ projectId }: { projectId?: string }) {
+  const [catalog, setCatalog] = useState<CatalogEntry[] | null>(null);
+  const [active, setActive] = useState<string[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Fetch the catalog once — it's stable per app build.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/skills/catalog")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j: CatalogResponse) => { if (!cancelled) setCatalog(j.skills ?? []); })
+      .catch((err) => { if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err)); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Fetch the project's current selection. Re-runs when projectId changes.
+  useEffect(() => {
+    if (!projectId) { setActive(null); return; }
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/manifest`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((m: { design?: ManifestDesign }) => {
+        if (cancelled) return;
+        setActive(m.design?.active_skills ?? ["frontend-design"]);
+      })
+      .catch((err) => { if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err)); });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  const toggle = async (name: string) => {
+    if (!projectId || !active) return;
+    const next = active.includes(name)
+      ? active.filter((s) => s !== name)
+      : [...active, name];
+    // Optimistic update — restore on error.
+    const previous = active;
+    setActive(next);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/manifest`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ design: { active_skills: next } }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      setActive(previous);
+      setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!projectId) {
+    return (
+      <section className={s.section}>
+        <h3 className={s.sectionTitle}>Skills</h3>
+        <p className={s.sectionDesc}>
+          Open a project to choose which design skills are active for it.
+        </p>
+      </section>
+    );
+  }
+
+  const aestheticSkills = catalog?.filter((e) => e.kind === "aesthetic") ?? [];
+  const capabilitySkills = catalog?.filter((e) => e.kind === "capability") ?? [];
+
+  return (
+    <section className={s.section}>
+      <h3 className={s.sectionTitle}>Skills</h3>
+      <p className={s.sectionDesc}>
+        Pick which <strong>aesthetic skills</strong> the agent prefers when
+        generating into this project's canvas. Capabilities below are always
+        available — the agent invokes them when you ask for the matching
+        action. Saved to <code>manifest.json</code> as
+        <code> design.active_skills</code>.
+      </p>
+
+      {loadError && (
+        <p className={s.sectionDesc} style={{ color: "var(--danger-fg)" }}>
+          {loadError}
+        </p>
+      )}
+
+      {!catalog || !active ? (
+        <p className={s.sectionDesc}>Loading…</p>
+      ) : (
+        <>
+          <div className={s.skillsGroup}>
+            <div className={s.skillsGroupLabel}>Aesthetic direction</div>
+            <ul className={s.skillsList}>
+              {aestheticSkills.map((entry) => {
+                const isActive = active.includes(entry.name);
+                return (
+                  <li key={entry.name}>
+                    <label className={s.skillRow}>
+                      <input
+                        type="checkbox"
+                        checked={isActive}
+                        disabled={saving}
+                        onChange={() => toggle(entry.name)}
+                      />
+                      <span className={s.skillCheck} aria-hidden="true">
+                        <SkillCheckGlyph className={s.skillCheckMark} />
+                      </span>
+                      <span className={s.skillBody}>
+                        <span className={s.skillName}>{entry.display}</span>
+                        <span className={s.skillDesc}>{entry.description}</span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          {capabilitySkills.length > 0 && (
+            <div className={s.skillsGroup}>
+              <div className={s.skillsGroupLabel}>Capabilities (always on)</div>
+              <ul className={s.skillsList}>
+                {capabilitySkills.map((entry) => (
+                  <li key={entry.name}>
+                    <div className={s.capabilityRow}>
+                      <span className={s.capabilityBadge}>On</span>
+                      <span className={s.skillBody}>
+                        <span className={s.skillName}>{entry.display}</span>
+                        <span className={s.skillDesc}>{entry.description}</span>
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

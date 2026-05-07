@@ -27,7 +27,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, copyFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, basename, dirname, resolve } from "node:path";
+import { join, basename, dirname, resolve, relative, isAbsolute } from "node:path";
 import process from "node:process";
 
 // ─── Journey catalog ────────────────────────────────────────────────
@@ -464,19 +464,25 @@ async function main() {
     ensureDir(TASK_STAGING);
   }
   for (const t of opts.tasks) {
-    if (!existsSync(t.spec)) {
-      console.error(`--task spec not found: ${t.spec}`);
+    // Resolve task specs against REPO_ROOT (not the invoker's cwd) so the
+    // runner works the same whether it's launched from the worktree root,
+    // a sibling worktree, or a tooling helper that doesn't chdir first.
+    const sourceSpec = isAbsolute(t.spec) ? t.spec : resolve(REPO_ROOT, t.spec);
+    if (!existsSync(sourceSpec)) {
+      console.error(`--task spec not found: ${t.spec} (resolved to ${sourceSpec})`);
       process.exit(2);
     }
-    const slug = basename(t.spec).replace(/\.spec\.ts$/, "").replace(/\.test\.ts$/, "").replace(/\.ts$/, "");
+    const slug = basename(sourceSpec).replace(/\.spec\.ts$/, "").replace(/\.test\.ts$/, "").replace(/\.ts$/, "");
     const stagedSpec = join(TASK_STAGING, `${slug}.spec.ts`);
-    copyFileSync(t.spec, stagedSpec);
+    copyFileSync(sourceSpec, stagedSpec);
     selected.push({
       id: slug,
       title: t.title || slug.replace(/-/g, " "),
       description: t.description || "Per-PR feature evidence.",
       // Run from the staging path so Playwright's testDir picks it up.
-      spec: stagedSpec.replace(REPO_ROOT + "/", ""),
+      // path.relative is portable (handles trailing slashes, separators)
+      // and always yields a path Playwright can resolve from REPO_ROOT.
+      spec: relative(REPO_ROOT, stagedSpec),
       section: "task",
       baseline: false,
     });

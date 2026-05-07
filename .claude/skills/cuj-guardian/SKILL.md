@@ -140,12 +140,14 @@ When Step 5 says "go":
 
 ## Anti-patterns the agent must refuse
 
-- **Liar**: a test that runs but asserts nothing meaningful (e.g. only `await page.goto('/')` then exits). Refuse.
-- **Secret Catcher**: a test that catches all exceptions silently. Refuse.
-- **Dodger**: a test that asserts side effects only (logs, network calls) but never the user-visible outcome. Refuse.
-- **Mute-on-flaky**: adding `test.skip` or `--grep-invert <test name>` to make CI green. Refuse.
-- **Assertion stuffing / reward hacking**: copying assertion strings from product source into the test (so it always passes by tautology). Refuse and surface — see https://metr.org/blog/2025-06-05-recent-reward-hacking/ .
-- **Loosening without replacement**: see Step 5.
+Each item below names a failure mode, then names the move to make instead. Refusing alone is half the work — the contributor needs to know where to land.
+
+- **Liar** — a test that runs but asserts nothing meaningful (e.g. only `await page.goto('/')` then exits). Refuse. **INSTEAD**: derive at least one assertion from the acceptance criteria; if none can be derived, the criteria are too vague to test — escalate to the maintainer rather than ship a no-op.
+- **Secret Catcher** — a test that catches all exceptions silently. Refuse. **INSTEAD**: let exceptions propagate. Catch only a specific recoverable condition, and pair it with an explicit `expect(...)` that proves the recovery worked.
+- **Dodger** — a test that asserts side effects only (logs, network calls) but never the user-visible outcome. Refuse. **INSTEAD**: assert what the user sees on screen — DOM text, iframe contents, pixel snapshot, file written — as the load-bearing assertion. Side-effect checks belong as supporting evidence, not as the only proof.
+- **Mute-on-flaky** — adding `test.skip` or `--grep-invert <test name>` to make CI green. Refuse. **INSTEAD**: walk the five-step triage protocol above. If the test is genuinely broken, fix it. If the feature is broken, fix the feature. If neither is true today, file a flake issue with the run logs and leave the test running — flakes are data.
+- **Assertion stuffing / reward hacking** — copying assertion strings from product source into the test (so it always passes by tautology). Refuse and surface — see https://metr.org/blog/2025-06-05-recent-reward-hacking/ . **INSTEAD**: derive assertions from the acceptance criteria or the issue body, never from the product source the test is meant to check.
+- **Loosening without replacement** — covered in Step 5. **INSTEAD**: replace any removed assertion with a new one of equal or greater strength against the new behaviour.
 
 ## Self-check before commit
 

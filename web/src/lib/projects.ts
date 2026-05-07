@@ -393,11 +393,17 @@ export async function hydrateProjectFromServer(id: string): Promise<Project | nu
  *  newly-created project out of cache. Without this guard the CUJ
  *  bounces a fresh-browser test off into the demo project's editor
  *  because mergeServerWithLocal drops local-only projects. */
-export async function createProject(name: string): Promise<Project> {
+export async function createProject(name: string, activeSkills?: string[]): Promise<Project> {
+  // activeSkills is optional — when omitted, the API picks a sensible
+  // default (all aesthetic skills checked). When the user makes an
+  // explicit choice in NewProjectForm, we pass it through so the
+  // manifest captures their initial intent.
+  const body: { name: string; active_skills?: string[] } = { name };
+  if (activeSkills) body.active_skills = activeSkills;
   const r = await fetch("/api/projects/create", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(body),
   });
   if (!r.ok) {
     const j = await r.json().catch(() => ({}));

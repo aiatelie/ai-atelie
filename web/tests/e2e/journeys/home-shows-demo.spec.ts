@@ -33,17 +33,29 @@ test.describe("Journey: home shows demo", () => {
     await page.waitForURL(/\/editor.*p=demo/, { timeout: 15_000 });
 
     // Iframe canvas paints — content varies, but it must be non-empty.
+    // The demo's index.html mounts React from CDN scripts; its body is
+    // empty until those resolve, which can take a few seconds on a cold
+    // run. Use `expect.poll` so we retry on empty-string instead of
+    // letting innerText's one-shot catch swallow the race.
     await page.waitForSelector("iframe", { timeout: 15_000 });
-    const iframeText = await page
-      .frameLocator("iframe")
-      .first()
-      .locator("body")
-      .innerText({ timeout: 8_000 })
-      .catch(() => "");
-    expect(
-      iframeText.trim().length,
-      `demo iframe should render non-empty content (got first 200: ${iframeText.slice(0, 200)})`,
-    ).toBeGreaterThan(20);
+    await expect
+      .poll(
+        async () =>
+          (
+            await page
+              .frameLocator("iframe")
+              .first()
+              .locator("body")
+              .innerText({ timeout: 1000 })
+              .catch(() => "")
+          ).trim().length,
+        {
+          timeout: 12_000,
+          intervals: [500, 1000, 2000],
+          message: "demo iframe should render non-empty content",
+        },
+      )
+      .toBeGreaterThan(20);
 
     await page.screenshot({ path: FINAL_SCREENSHOT, fullPage: false });
   });

@@ -68,27 +68,94 @@ function ensureDcStyles() {
   document.head.appendChild(tag);
 }
 
-/* Persistence */
+/* Persistence
+ *
+ * Primary: AI Atelie host meta API at /api/projects/:id/meta/canvas-state.
+ * Server-side per-project, etag-concurrent, travels across browsers and
+ * devices. Active when the canvas runs at /p/<projectId>/<entry> (i.e.
+ * inside the host editor).
+ *
+ * Fallback: localStorage. Active when the canvas is opened outside the host
+ * (downloaded standalone, file://, served from a different origin) — the
+ * projectId can't be resolved and the API isn't reachable. State stays in
+ * the browser where it was last edited; better than dropping it on the
+ * floor.
+ *
+ * The state shape on the wire is { sections: { ... } } either way, so
+ * switching modes between save/load is harmless. */
 
 const STORAGE_KEY = "design-canvas.state";
+const META_KEY = "canvas-state";
 
-function readSaved() {
+/** /p/<projectId>/<entry> → projectId, or null when running outside the
+ *  AI Atelie host route. Same id shape the projects API uses. */
+function dcProjectId() {
+  if (typeof location === "undefined") return null;
+  const m = location.pathname.match(/^\/p\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+/** Read state. Tries the host meta API first (if a projectId is in the URL),
+ *  falls back to localStorage. Returns `{ sections, etag }` for the API path
+ *  or `{ sections }` for the localStorage path; etag is only used for
+ *  optimistic concurrency on subsequent writes. */
+async function readSaved() {
   if (typeof window === "undefined") return null;
+  const id = dcProjectId();
+  if (id) {
+    try {
+      const res = await fetch(`/api/projects/${id}/meta/${META_KEY}`);
+      if (res.ok) {
+        const etag = res.headers.get("etag");
+        const parsed = await res.json();
+        const sections = (parsed && parsed.sections) || null;
+        if (sections) return { sections, etag };
+      }
+      // 404 (no meta yet) is the normal fresh-project path — fall through
+      // to the localStorage fallback so prior in-browser scratch (e.g. from
+      // a project that hadn't been hooked up to the host yet) isn't lost.
+    } catch { /* network error → fall through */ }
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return (parsed && parsed.sections) || null;
+    const sections = (parsed && parsed.sections) || null;
+    return sections ? { sections } : null;
   } catch {
     return null;
   }
 }
 
-function writeSaved(sections) {
-  if (typeof window === "undefined") return;
+/** Write state. Same precedence as readSaved: host API when projectId is
+ *  available, localStorage otherwise. The etag is threaded through writes so
+ *  a concurrent edit (second canvas on the same project, direct API write)
+ *  surfaces as 412 — we drop the conflicting write rather than retry, and
+ *  the next state mutation re-reads via the next read cycle. Returns the
+ *  fresh etag on success so the caller can roll the ref forward. */
+async function writeSaved(sections, ifMatch) {
+  if (typeof window === "undefined") return null;
+  const id = dcProjectId();
+  if (id) {
+    try {
+      const headers = { "content-type": "application/json" };
+      if (ifMatch) headers["if-match"] = ifMatch;
+      const res = await fetch(`/api/projects/${id}/meta/${META_KEY}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ sections }),
+      });
+      if (res.ok) return res.headers.get("etag");
+      // 412 = concurrent write (etag mismatch); drop this one. 5xx = server
+      // ate the write — also drop. In both cases the in-memory state is
+      // intact and the next debounced write picks up where this one stopped.
+      return null;
+    } catch { /* network error → fall through to localStorage */ }
+  }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ sections }));
-  } catch { /* ignore */ }
+  } catch { /* quota / private mode — drop */ }
+  return null;
 }
 
 /* Context */
@@ -112,19 +179,34 @@ function DesignCanvas({ children, minScale, maxScale, style }) {
   const [state, setState] = useState({ sections: {}, focus: null });
   const [ready, setReady] = useState(false);
   const skipNextWrite = useRef(false);
+  // Track the host meta blob's etag so writes use If-Match and don't
+  // clobber a concurrent edit. Null when running outside the host (the
+  // localStorage fallback path doesn't need concurrency control).
+  const etagRef = useRef(null);
 
   useEffect(() => {
-    const saved = readSaved();
-    if (saved) {
-      skipNextWrite.current = true;
-      setState((s) => ({ ...s, sections: saved }));
-    }
-    setReady(true);
+    let cancelled = false;
+    readSaved().then((saved) => {
+      if (cancelled) return;
+      if (saved && saved.sections) {
+        skipNextWrite.current = true;
+        setState((s) => ({ ...s, sections: saved.sections }));
+        if (saved.etag) etagRef.current = saved.etag;
+      }
+      setReady(true);
+    });
+    // Belt-and-suspenders: even on a slow network, render the fresh-project
+    // canvas after 150ms so the user isn't staring at a blank viewport.
+    const t = window.setTimeout(() => { if (!cancelled) setReady(true); }, 150);
+    return () => { cancelled = true; window.clearTimeout(t); };
   }, []);
 
   useEffect(() => {
     if (skipNextWrite.current) { skipNextWrite.current = false; return; }
-    const t = window.setTimeout(() => writeSaved(state.sections), 250);
+    const t = window.setTimeout(async () => {
+      const fresh = await writeSaved(state.sections, etagRef.current);
+      if (fresh) etagRef.current = fresh;
+    }, 250);
     return () => window.clearTimeout(t);
   }, [state.sections]);
 
@@ -211,6 +293,39 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
   const vpRef = useRef(null);
   const worldRef = useRef(null);
   const tf = useRef({ x: 0, y: 0, scale: 1 });
+
+  // Theme tokens — overridable at runtime by the host editor via a
+  // `__dc_set_theme` postMessage. Defaults match the standalone DC palette
+  // so the canvas looks right when opened outside the host (downloaded
+  // standalone, file://, etc.). Inside the AI Atelie editor, the host sends
+  // current tokens immediately after `__page_is_canvas` and re-broadcasts
+  // whenever the user picks a new theme in Settings → Theme.
+  const [tokens, setTokens] = useState({ bg: DC.bg, grid: DC.grid });
+  useEffect(() => {
+    const onMsg = (e) => {
+      const d = e.data;
+      if (!d || d.type !== "__dc_set_theme" || !d.tokens) return;
+      // Filter to non-empty strings so an upstream null/undefined doesn't
+      // wipe a default that's currently working.
+      const next = {};
+      for (const k of Object.keys(d.tokens)) {
+        const v = d.tokens[k];
+        if (typeof v === "string" && v.trim().length > 0) next[k] = v.trim();
+      }
+      if (Object.keys(next).length === 0) return;
+      setTokens((cur) => ({ ...cur, ...next }));
+      // Mirror to global CSS vars so any future inline `var(--dc-bg, …)`
+      // reads in user-authored content also pick up the theme.
+      if (typeof document !== "undefined") {
+        const root = document.documentElement;
+        for (const [k, v] of Object.entries(next)) {
+          root.style.setProperty(`--dc-${k}`, v);
+        }
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
 
   const apply = useCallback(() => {
     const { x, y, scale } = tf.current;
@@ -310,21 +425,45 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
     vp.addEventListener("pointerup", onPointerUp);
     vp.addEventListener("pointercancel", onPointerUp);
 
-    // On first paint, fit the content to the viewport so wide
-    // banners (1584px) aren't clipped at scale 1.
-    requestAnimationFrame(() => {
+    // Fit content to viewport so wide banners (1584px) aren't clipped at
+    // scale 1. The world is empty until DesignCanvas's readSaved() resolves
+    // (async since the project-meta migration), so a one-shot rAF measure
+    // would see ~0px width and skip the fit, leaving content offscreen.
+    // Watch for the world's first non-trivial width via ResizeObserver,
+    // run the fit once, then disconnect — we don't want this firing again
+    // during user pan/zoom (which doesn't change the world's intrinsic
+    // size) or during artboard resizes (the user is already in control).
+    let didInitialFit = false;
+    const fitToViewport = () => {
       const w = worldRef.current;
       if (!w) return;
-      const r = vp.getBoundingClientRect();
       const wb = w.getBoundingClientRect();
-      const fit = Math.min((r.width - 80) / Math.max(wb.width, 1), 1);
+      // Wait for the world to actually have content. Empty wrapper has
+      // tiny intrinsic width; the first real artboard makes it jump.
+      if (wb.width < 100) return;
+      didInitialFit = true;
+      const r = vp.getBoundingClientRect();
+      const fit = Math.min((r.width - 80) / wb.width, 1);
       if (fit < 1) {
         tf.current.scale = fit;
         tf.current.x = (r.width - wb.width * fit) / 2;
         tf.current.y = 30;
         apply();
       }
-    });
+    };
+    let fitObs = null;
+    if (worldRef.current) {
+      fitObs = new ResizeObserver(() => {
+        if (didInitialFit) return;
+        fitToViewport();
+        if (didInitialFit) fitObs?.disconnect();
+      });
+      fitObs.observe(worldRef.current);
+    }
+    // Belt-and-suspenders: try once on mount in case the world already
+    // has content (synchronous render path, e.g. localStorage fallback or
+    // a project that was opened before — read serves cached state).
+    requestAnimationFrame(() => { if (!didInitialFit) fitToViewport(); });
 
     return () => {
       vp.removeEventListener("wheel", onWheel);
@@ -335,10 +474,16 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
       vp.removeEventListener("pointermove", onPointerMove);
       vp.removeEventListener("pointerup", onPointerUp);
       vp.removeEventListener("pointercancel", onPointerUp);
+      fitObs?.disconnect();
     };
   }, [apply, minScale, maxScale]);
 
-  const gridSvg = `url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(DC.grid)}' stroke-width='1'/%3E%3C/svg%3E")`;
+  // useMemo so the data URL only re-encodes when the grid color actually
+  // changes — keeps theme switches from churning unrelated work.
+  const gridSvg = useMemo(
+    () => `url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(tokens.grid)}' stroke-width='1'/%3E%3C/svg%3E")`,
+    [tokens.grid],
+  );
 
   return (
     <div
@@ -347,7 +492,7 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
       style={{
         height: "100vh",
         width: "100vw",
-        background: DC.bg,
+        background: tokens.bg,
         backgroundImage: gridSvg,
         backgroundRepeat: "repeat",
         backgroundPosition: "0 0",
@@ -420,13 +565,13 @@ function DCSection({ id, title, subtitle, children, gap = 48 }) {
           style={{
             fontSize: 28,
             fontWeight: 600,
-            color: DC.title,
+            color: `var(--dc-title, ${DC.title})`,
             letterSpacing: -0.4,
             marginBottom: 6,
             display: "inline-block",
           }}
         />
-        {subtitle && <div style={{ fontSize: 16, color: DC.subtitle }}>{subtitle}</div>}
+        {subtitle && <div style={{ fontSize: 16, color: `var(--dc-subtitle, ${DC.subtitle})` }}>{subtitle}</div>}
       </div>
       <div
         style={{
@@ -479,6 +624,86 @@ function DCArtboardFrame({
   const id = rawId != null ? rawId : rawLabel;
   const ref = useRef(null);
 
+  // Live drag-reorder. The dragged card sticks to the cursor; siblings slide
+  // into their would-be positions in real time via translateX. The DOM
+  // order only changes once on drop (via onReorder) — during drag we
+  // mutate inline transforms imperatively so React doesn't re-render the
+  // section tree on every mousemove.
+  const onGripDown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const me = ref.current;
+    if (!me) return;
+    // translateX is applied in local (pre-zoom) space, but pointer deltas
+    // are screen-space — divide by the world's current scale so the
+    // dragged card tracks the cursor at any zoom level. world's scale is
+    // (rendered width) / (offset width).
+    const scale = me.getBoundingClientRect().width / me.offsetWidth || 1;
+    const peers = Array.from(
+      document.querySelectorAll(`[data-dc-section="${sectionId}"] [data-dc-slot]`),
+    );
+    const homes = peers.map((el) => ({
+      el,
+      id: el.dataset.dcSlot,
+      x: el.getBoundingClientRect().left,
+    }));
+    const slotXs = homes.map((h) => h.x);
+    const startIdx = order.indexOf(id);
+    const startX = e.clientX;
+    let liveOrder = order.slice();
+    me.classList.add("dc-dragging");
+
+    const layout = () => {
+      for (const h of homes) {
+        if (h.id === id) continue;
+        const slot = liveOrder.indexOf(h.id);
+        h.el.style.transform = `translateX(${(slotXs[slot] - h.x) / scale}px)`;
+      }
+    };
+
+    const move = (ev) => {
+      const dx = ev.clientX - startX;
+      me.style.transform = `translateX(${dx / scale}px)`;
+      const cur = homes[startIdx].x + dx;
+      let nearest = 0,
+        best = Infinity;
+      for (let i = 0; i < slotXs.length; i++) {
+        const d = Math.abs(slotXs[i] - cur);
+        if (d < best) {
+          best = d;
+          nearest = i;
+        }
+      }
+      if (liveOrder.indexOf(id) !== nearest) {
+        liveOrder = order.filter((k) => k !== id);
+        liveOrder.splice(nearest, 0, id);
+        layout();
+      }
+    };
+
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      const finalSlot = liveOrder.indexOf(id);
+      me.classList.remove("dc-dragging");
+      me.style.transform = `translateX(${(slotXs[finalSlot] - homes[startIdx].x) / scale}px)`;
+      // After the settle transition, kill transitions + clear transforms +
+      // commit the reorder in the same frame so there's no visual snap-back.
+      setTimeout(() => {
+        for (const h of homes) {
+          h.el.style.transition = "none";
+          h.el.style.transform = "";
+        }
+        if (liveOrder.join("|") !== order.join("|")) onReorder(liveOrder);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          for (const h of homes) h.el.style.transition = "";
+        }));
+      }, 180);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  };
+
   return (
     <div ref={ref} data-dc-slot={id} style={{ position: "relative", flexShrink: 0 }}>
       <div
@@ -488,15 +713,29 @@ function DCArtboardFrame({
           bottom: "100%",
           left: -4,
           marginBottom: 4,
-          color: DC.label,
+          color: `var(--dc-label, ${DC.label})`,
         }}
       >
+        <div
+          className="dc-grip"
+          onPointerDown={onGripDown}
+          title="Drag to reorder"
+        >
+          <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor" aria-hidden="true">
+            <circle cx="2" cy="2" r="1.1" />
+            <circle cx="7" cy="2" r="1.1" />
+            <circle cx="2" cy="6.5" r="1.1" />
+            <circle cx="7" cy="6.5" r="1.1" />
+            <circle cx="2" cy="11" r="1.1" />
+            <circle cx="7" cy="11" r="1.1" />
+          </svg>
+        </div>
         <div className="dc-labeltext" onClick={onFocus} title="Click to focus">
           <DCEditable
             value={label}
             onChange={onRename}
             onClick={(e) => e.stopPropagation()}
-            style={{ fontSize: 15, fontWeight: 500, color: DC.label, lineHeight: 1 }}
+            style={{ fontSize: 15, fontWeight: 500, color: `var(--dc-label, ${DC.label})`, lineHeight: 1 }}
           />
         </div>
       </div>

@@ -2,6 +2,7 @@
 name: make-tweakable
 display: Make tweakable
 description: Add in-design tweak controls
+kind: capability
 body_status: verbatim
 ---
 
