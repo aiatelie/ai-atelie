@@ -110,14 +110,16 @@ function ghPRBody(n) {
 }
 
 function ghEditPRBody(n, body) {
-  const tmp = join(tmpdir(), `pr-${n}-body-${Date.now()}.md`);
-  writeFileSync(tmp, body);
-  try {
-    const r = spawnSync("gh", ["pr", "edit", String(n), "--body-file", tmp], { encoding: "utf-8" });
-    if (r.status !== 0) throw new Error(`gh pr edit failed: ${r.stderr}`);
-  } finally {
-    try { rmSync(tmp); } catch { /* ignore */ }
-  }
+  // Use the REST API directly. `gh pr edit` triggers extra GraphQL
+  // calls (fetching project associations) that fail on repos which
+  // never opted into the deprecated Projects-classic. The REST PATCH
+  // doesn't carry that baggage.
+  const r = spawnSync(
+    "gh",
+    ["api", "-X", "PATCH", `/repos/${TARGET_REPO}/pulls/${n}`, "-f", `body=${body}`],
+    { encoding: "utf-8" },
+  );
+  if (r.status !== 0) throw new Error(`gh api PATCH /pulls/${n} failed: ${r.stderr}`);
 }
 
 function ensureDir(p) { mkdirSync(p, { recursive: true }); }
@@ -217,9 +219,11 @@ function runOne(journey, evidenceDir) {
   };
 
   // Final screenshot — deterministic path the spec writes to.
+  // Filename intentionally distinct from the video's so the upload
+  // helper's ext-stripping URL matcher can tell them apart.
   const finalPng = join(TEST_RESULTS, `journeys-${journey.id}-final.png`);
   if (existsSync(finalPng)) {
-    const dst = join(journeyDir, `${journey.id}.png`);
+    const dst = join(journeyDir, `${journey.id}-screenshot.png`);
     copyFileSync(finalPng, dst);
     result.artifacts.screenshot = dst;
   }
@@ -228,7 +232,7 @@ function runOne(journey, evidenceDir) {
   // the evidence dir under a stable filename so downstream code can
   // find it even if Playwright re-slugs the directory.
   if (summary.videoPath && existsSync(summary.videoPath)) {
-    const dst = join(journeyDir, `${journey.id}.webm`);
+    const dst = join(journeyDir, `${journey.id}-video.webm`);
     const compressed = compressVideo(summary.videoPath, dst);
     result.artifacts.video = dst;
     result.artifacts.videoCompressed = compressed.compressed;
