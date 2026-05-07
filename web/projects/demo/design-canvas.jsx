@@ -565,13 +565,13 @@ function DCSection({ id, title, subtitle, children, gap = 48 }) {
           style={{
             fontSize: 28,
             fontWeight: 600,
-            color: DC.title,
+            color: `var(--dc-title, ${DC.title})`,
             letterSpacing: -0.4,
             marginBottom: 6,
             display: "inline-block",
           }}
         />
-        {subtitle && <div style={{ fontSize: 16, color: DC.subtitle }}>{subtitle}</div>}
+        {subtitle && <div style={{ fontSize: 16, color: `var(--dc-subtitle, ${DC.subtitle})` }}>{subtitle}</div>}
       </div>
       <div
         style={{
@@ -633,7 +633,7 @@ function DCArtboardFrame({
           bottom: "100%",
           left: -4,
           marginBottom: 4,
-          color: DC.label,
+          color: `var(--dc-label, ${DC.label})`,
         }}
       >
         <div className="dc-labeltext" onClick={onFocus} title="Click to focus">
@@ -641,7 +641,7 @@ function DCArtboardFrame({
             value={label}
             onChange={onRename}
             onClick={(e) => e.stopPropagation()}
-            style={{ fontSize: 15, fontWeight: 500, color: DC.label, lineHeight: 1 }}
+            style={{ fontSize: 15, fontWeight: 500, color: `var(--dc-label, ${DC.label})`, lineHeight: 1 }}
           />
         </div>
       </div>
