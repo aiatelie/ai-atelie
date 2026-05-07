@@ -68,27 +68,94 @@ function ensureDcStyles() {
   document.head.appendChild(tag);
 }
 
-/* Persistence */
+/* Persistence
+ *
+ * Primary: AI Atelie host meta API at /api/projects/:id/meta/canvas-state.
+ * Server-side per-project, etag-concurrent, travels across browsers and
+ * devices. Active when the canvas runs at /p/<projectId>/<entry> (i.e.
+ * inside the host editor).
+ *
+ * Fallback: localStorage. Active when the canvas is opened outside the host
+ * (downloaded standalone, file://, served from a different origin) — the
+ * projectId can't be resolved and the API isn't reachable. State stays in
+ * the browser where it was last edited; better than dropping it on the
+ * floor.
+ *
+ * The state shape on the wire is { sections: { ... } } either way, so
+ * switching modes between save/load is harmless. */
 
 const STORAGE_KEY = "design-canvas.state";
+const META_KEY = "canvas-state";
 
-function readSaved() {
+/** /p/<projectId>/<entry> → projectId, or null when running outside the
+ *  AI Atelie host route. Same id shape the projects API uses. */
+function dcProjectId() {
+  if (typeof location === "undefined") return null;
+  const m = location.pathname.match(/^\/p\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+/** Read state. Tries the host meta API first (if a projectId is in the URL),
+ *  falls back to localStorage. Returns `{ sections, etag }` for the API path
+ *  or `{ sections }` for the localStorage path; etag is only used for
+ *  optimistic concurrency on subsequent writes. */
+async function readSaved() {
   if (typeof window === "undefined") return null;
+  const id = dcProjectId();
+  if (id) {
+    try {
+      const res = await fetch(`/api/projects/${id}/meta/${META_KEY}`);
+      if (res.ok) {
+        const etag = res.headers.get("etag");
+        const parsed = await res.json();
+        const sections = (parsed && parsed.sections) || null;
+        if (sections) return { sections, etag };
+      }
+      // 404 (no meta yet) is the normal fresh-project path — fall through
+      // to the localStorage fallback so prior in-browser scratch (e.g. from
+      // a project that hadn't been hooked up to the host yet) isn't lost.
+    } catch { /* network error → fall through */ }
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return (parsed && parsed.sections) || null;
+    const sections = (parsed && parsed.sections) || null;
+    return sections ? { sections } : null;
   } catch {
     return null;
   }
 }
 
-function writeSaved(sections) {
-  if (typeof window === "undefined") return;
+/** Write state. Same precedence as readSaved: host API when projectId is
+ *  available, localStorage otherwise. The etag is threaded through writes so
+ *  a concurrent edit (second canvas on the same project, direct API write)
+ *  surfaces as 412 — we drop the conflicting write rather than retry, and
+ *  the next state mutation re-reads via the next read cycle. Returns the
+ *  fresh etag on success so the caller can roll the ref forward. */
+async function writeSaved(sections, ifMatch) {
+  if (typeof window === "undefined") return null;
+  const id = dcProjectId();
+  if (id) {
+    try {
+      const headers = { "content-type": "application/json" };
+      if (ifMatch) headers["if-match"] = ifMatch;
+      const res = await fetch(`/api/projects/${id}/meta/${META_KEY}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ sections }),
+      });
+      if (res.ok) return res.headers.get("etag");
+      // 412 = concurrent write (etag mismatch); drop this one. 5xx = server
+      // ate the write — also drop. In both cases the in-memory state is
+      // intact and the next debounced write picks up where this one stopped.
+      return null;
+    } catch { /* network error → fall through to localStorage */ }
+  }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ sections }));
-  } catch { /* ignore */ }
+  } catch { /* quota / private mode — drop */ }
+  return null;
 }
 
 /* Context */
@@ -112,19 +179,34 @@ function DesignCanvas({ children, minScale, maxScale, style }) {
   const [state, setState] = useState({ sections: {}, focus: null });
   const [ready, setReady] = useState(false);
   const skipNextWrite = useRef(false);
+  // Track the host meta blob's etag so writes use If-Match and don't
+  // clobber a concurrent edit. Null when running outside the host (the
+  // localStorage fallback path doesn't need concurrency control).
+  const etagRef = useRef(null);
 
   useEffect(() => {
-    const saved = readSaved();
-    if (saved) {
-      skipNextWrite.current = true;
-      setState((s) => ({ ...s, sections: saved }));
-    }
-    setReady(true);
+    let cancelled = false;
+    readSaved().then((saved) => {
+      if (cancelled) return;
+      if (saved && saved.sections) {
+        skipNextWrite.current = true;
+        setState((s) => ({ ...s, sections: saved.sections }));
+        if (saved.etag) etagRef.current = saved.etag;
+      }
+      setReady(true);
+    });
+    // Belt-and-suspenders: even on a slow network, render the fresh-project
+    // canvas after 150ms so the user isn't staring at a blank viewport.
+    const t = window.setTimeout(() => { if (!cancelled) setReady(true); }, 150);
+    return () => { cancelled = true; window.clearTimeout(t); };
   }, []);
 
   useEffect(() => {
     if (skipNextWrite.current) { skipNextWrite.current = false; return; }
-    const t = window.setTimeout(() => writeSaved(state.sections), 250);
+    const t = window.setTimeout(async () => {
+      const fresh = await writeSaved(state.sections, etagRef.current);
+      if (fresh) etagRef.current = fresh;
+    }, 250);
     return () => window.clearTimeout(t);
   }, [state.sections]);
 
