@@ -447,6 +447,14 @@ export default function Editor() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Which section of SettingsDialog to land on. Defaults to the Theme
+  // tab on plain "open settings" clicks; the ActiveSkillsStrip flips it
+  // to "skills" when the user clicks the strip to edit their selection.
+  const [settingsSection, setSettingsSection] = useState<"theme" | "skills" | "notifications" | "adapters" | "about">("theme");
+  const openSkillsSettings = useCallback(() => {
+    setSettingsSection("skills");
+    setSettingsOpen(true);
+  }, []);
   const [tweaksPreviewPrompt, setTweaksPreviewPrompt] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const dmRef = useRef<DmBridge | null>(null);
@@ -2368,6 +2376,7 @@ export default function Editor() {
               toast.error(`Undo failed: ${err instanceof Error ? err.message : String(err)}`);
             }
           }}
+          onOpenSkillsSettings={openSkillsSettings}
         />
 
         <div className={s.right}>
@@ -2828,7 +2837,14 @@ export default function Editor() {
         <Suspense fallback={null}>
           <SettingsDialog
             open={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
+            onClose={() => {
+              setSettingsOpen(false);
+              // Reset to the default section on close so the next plain
+              // open lands on Theme, not whatever was last visited via
+              // openSkillsSettings.
+              setSettingsSection("theme");
+            }}
+            initialSection={settingsSection}
             projectId={activeProject?.id}
           />
         </Suspense>

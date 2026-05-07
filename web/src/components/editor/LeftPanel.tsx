@@ -110,6 +110,12 @@ type Props = {
    *  chrome are hidden by the parent so this becomes a focused intake
    *  conversation. Flips false the moment Claude writes the first file. */
   emptyState?: boolean;
+
+  /** Open Settings to the Skills section. Threaded into ChatTab so the
+   *  ActiveSkillsStrip rendered above the composer can route its click
+   *  to the right surface. Optional — Onboard / other surfaces without
+   *  a Settings dialog can omit it; the strip falls back to a no-op. */
+  onOpenSkillsSettings?: () => void;
 };
 
 export function LeftPanel(props: Props) {
@@ -123,7 +129,7 @@ export function LeftPanel(props: Props) {
     captureRouteScreenshot,
     autoResolvePromptIds, onAutoResolveConfirm, onAutoResolveDismiss,
     chatTabSwitchKey, composerContext, onClearComposerContext,
-    emptyState,
+    emptyState, onOpenSkillsSettings,
   } = props;
 
   const [tab, setTab] = useState<Tab>("chat");
@@ -287,6 +293,8 @@ export function LeftPanel(props: Props) {
           queuedMessage={queuedMessage}
           onCancelQueued={onCancelQueued}
           showCanvasToggle
+          projectId={projectId}
+          onOpenSkillsSettings={onOpenSkillsSettings}
         />
       )}
       {tab === "comments" && (
