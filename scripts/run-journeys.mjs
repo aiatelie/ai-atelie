@@ -122,6 +122,37 @@ function ghEditPRBody(n, body) {
   if (r.status !== 0) throw new Error(`gh api PATCH /pulls/${n} failed: ${r.stderr}`);
 }
 
+/** Issue-comment IDs on the PR before upload starts. We diff against
+ *  this snapshot after upload to find the comment that
+ *  upload-evidence.mjs created as a side effect (it submits one to
+ *  "claim" the uploaded assets). Once the body references the asset
+ *  URLs, the comment is redundant and we delete it so the PR's
+ *  conversation tab stays clean. */
+function ghCommentIds(n) {
+  const r = spawnSync(
+    "gh",
+    ["api", `/repos/${TARGET_REPO}/issues/${n}/comments`, "--jq", ".[].id"],
+    { encoding: "utf-8" },
+  );
+  if (r.status !== 0) return new Set();
+  return new Set(
+    r.stdout
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => Number(s)),
+  );
+}
+
+function ghDeleteComment(id) {
+  const r = spawnSync(
+    "gh",
+    ["api", "-X", "DELETE", `/repos/${TARGET_REPO}/issues/comments/${id}`],
+    { encoding: "utf-8" },
+  );
+  return r.status === 0;
+}
+
 function ensureDir(p) { mkdirSync(p, { recursive: true }); }
 
 function fmtDuration(ms) {
@@ -378,6 +409,10 @@ async function main() {
     process.exit(1);
   }
 
+  // Snapshot comment ids so we can identify (and later delete) the
+  // claim-comment upload-evidence.mjs creates as a side effect.
+  const commentIdsBefore = ghCommentIds(prNumber);
+
   // Upload.
   console.error(`uploading ${filesToUpload.length} files…`);
   let uploads;
@@ -406,6 +441,21 @@ async function main() {
   } else {
     ghEditPRBody(prNumber, newBody);
     console.error(`PR #${prNumber} body updated with journey-evidence block.`);
+  }
+
+  // The body now references every asset URL, so the claim-comment
+  // upload-evidence.mjs created as a side effect is redundant.
+  // Delete it so the PR's conversation tab doesn't accumulate one
+  // raw-evidence comment per `bun run journeys` invocation. The
+  // assets stay alive because the body references them.
+  const commentIdsAfter = ghCommentIds(prNumber);
+  const newComments = [...commentIdsAfter].filter((id) => !commentIdsBefore.has(id));
+  for (const id of newComments) {
+    if (ghDeleteComment(id)) {
+      console.error(`removed claim-comment #${id}`);
+    } else {
+      console.error(`warn: could not remove claim-comment #${id} (assets stay alive regardless)`);
+    }
   }
 
   process.exit(results.every((r) => r.status === "passed") ? 0 : 1);
