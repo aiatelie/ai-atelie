@@ -8,6 +8,22 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.1.6
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.5...v0.1.6)
+
+### Features
+
+- **web:** Home redesign — atelier rulebook + 3-column shell + editor polish ([#78](https://github.com/aiatelie/ai-atelie/pull/78))
+
+### Bug Fixes
+
+- **web:** Unclip ProjectSwitcher menu, restore Projects back link, refresh deps ([#68](https://github.com/aiatelie/ai-atelie/pull/68))
+
+### ❤️ Contributors
+
+- Kadu Maverick ([@whatiskadudoing](https://github.com/whatiskadudoing))
+
 ## v0.1.5
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.4...v0.1.5)
