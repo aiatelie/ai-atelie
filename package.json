@@ -20,7 +20,8 @@
     "test:e2e": "bunx playwright test --grep-invert @cuj",
     "test:cuj": "bunx playwright test --grep @cuj",
     "setup:attach": "bun scripts/setup-attach-session.mjs",
-    "upload:evidence": "bun scripts/upload-evidence.mjs"
+    "upload:evidence": "bun scripts/upload-evidence.mjs",
+    "journeys": "bun scripts/run-journeys.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
