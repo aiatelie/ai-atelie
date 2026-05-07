@@ -43,6 +43,13 @@ const JOURNEYS = [
     baseline: true,
   },
   {
+    id: "home-shows-demo",
+    title: "Home shows demo",
+    description: "We always ship a working demo. The tile is on /projects and clicking it opens the editor with a non-empty iframe canvas.",
+    spec: "web/tests/e2e/journeys/home-shows-demo.spec.ts",
+    baseline: true,
+  },
+  {
     id: "create-project",
     title: "Create project",
     description: "Name + Create lands in /editor with a fresh `p_*` id; the project dir exists on disk and the iframe canvas mounts.",
