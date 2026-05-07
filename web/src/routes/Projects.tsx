@@ -18,7 +18,6 @@ import s from "../components/projects/projects.module.css";
 import { NewProjectForm } from "../components/projects/NewProjectForm";
 import { ConfirmDialog } from "../components/projects/ConfirmDialog";
 import { Skeleton } from "../components/feedback";
-import { ThemeMenu } from "../components/theme";
 import {
   createProject,
   deleteProject,
@@ -69,7 +68,6 @@ export default function Projects() {
           <NewProjectForm onSubmit={handleCreate} />
           <div className={s.sidebarFoot}>
             <span className={s.footerChip}>Local-first · stored on disk</span>
-            <ThemeMenu />
           </div>
         </aside>
 

@@ -3,17 +3,16 @@
 // Two orthogonal axes drive the editor chrome:
 //
 //   • THEME  — System / Light / Dark / Retro. Lives in Settings →
-//     Appearance (4-pill segmented control, unchanged from before)
-//     and the ThemeMenu foot-pill in the /projects sidebar foot.
+//     Appearance (4-pill segmented control, unchanged from before).
 //   • DESIGN — null + 12 decorative palettes. Lives in Settings →
-//     Design only — there is no foot-pill for it; design switching
-//     is a Settings-only journey.
+//     Design only — both pickers are Settings-only journeys.
 //
 // Picking a theme always clears the design (so the click is visible);
 // picking a design overlays on top of the theme. These tests capture
-// (a) the theme foot-pill staying as a 4-item list, and (b) the
-// chrome reskinning under representative designs applied via
-// localStorage["editor.design"] (proves the CSS pipeline works).
+// (a) the Settings dialog at Appearance + Design (showing all 12
+// swatches with mini previews), (b) a design picked from the dialog
+// reskinning the chrome, and (c) a sweep of representative designs
+// applied programmatically as a CSS pipeline smoke.
 //
 // Worktree-only: a parent dev server holds :5173, so the spec points
 // at :5180 by default. Override with PR_THEME_GRID_BASE_URL.
@@ -32,36 +31,77 @@ test.describe("PR theme + design — visual evidence", () => {
     });
   });
 
-  test("theme foot-pill is the only theme chip in /projects", async ({ page }) => {
+  /** Drive: /projects → click a project card → /editor → click gear.
+   *  Returns once the Settings dialog is visible. */
+  async function openSettings(page: import("@playwright/test").Page) {
     await page.goto(`${BASE_URL}/projects`, { waitUntil: "domcontentloaded" });
-    const trigger = page.getByRole("button", { name: /^Theme\s/ });
-    await expect(trigger).toBeVisible();
-    // No Design pill — design is Settings-only.
-    await expect(page.getByRole("button", { name: /^Design\s/ })).toHaveCount(0);
-    await trigger.click();
-    await expect(page.getByRole("menuitemradio", { name: /^System$/i })).toBeVisible();
-    await expect(page.getByRole("menuitemradio", { name: /^Light$/i })).toBeVisible();
-    await expect(page.getByRole("menuitemradio", { name: /^Dark$/i })).toBeVisible();
-    await expect(page.getByRole("menuitemradio", { name: /^Retro$/i })).toBeVisible();
-    // Palette names are NOT in the theme menu.
-    await expect(page.getByRole("menuitemradio", { name: /^Violet$/i })).toHaveCount(0);
+    // Pick any existing project. The cards render their name as a div
+    // with class containing "cardName" — use the first one.
+    const firstCard = page.locator("[class*='card']").first();
+    await firstCard.click();
+    await page.waitForURL(/\/editor/);
+    // Wait for the settings gear to appear in the toolbar.
+    const gear = page.getByRole("button", { name: /open settings/i });
+    await expect(gear).toBeVisible({ timeout: 10_000 });
+    await gear.click();
+    await expect(page.getByRole("dialog", { name: /settings/i })).toBeVisible();
+  }
+
+  test("settings → appearance pills are unchanged", async ({ page }) => {
+    await openSettings(page);
+    // The dialog opens to Appearance by default. Confirm all 4 pills.
+    await expect(page.getByRole("button", { name: /^System$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Light$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Dark$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Retro$/ })).toBeVisible();
     await page.waitForTimeout(250);
-    await page.screenshot({ path: `${SHOT_DIR}/01-theme-pill-open.png`, fullPage: true });
+    await page.screenshot({ path: `${SHOT_DIR}/01-settings-appearance.png`, fullPage: true });
+  });
+
+  test("settings → design shows all 12 swatches in two groups", async ({ page }) => {
+    await openSettings(page);
+    // Switch to Design section via the sidebar nav.
+    await page.getByRole("button", { name: /^Design$/ }).click();
+    // Spot-check coverage: one from each group.
+    await expect(page.getByRole("button", { name: /^Violet$/, pressed: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Hornet$/, pressed: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Reset to theme$/i })).toBeVisible();
+    await page.waitForTimeout(300);
+    // Top of the dialog — visible group labels, status row, light grid.
+    await page.screenshot({ path: `${SHOT_DIR}/02a-settings-design-top.png`, fullPage: true });
+    // Scroll the dialog content to the bottom so the dark row is in view
+    // for the second capture. The Settings dialog scrolls its inner
+    // .content div, not the page body.
+    await page.evaluate(() => {
+      const content = document.querySelector("[role=dialog] [class*=content]") as HTMLElement | null;
+      if (content) content.scrollTop = content.scrollHeight;
+    });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${SHOT_DIR}/02b-settings-design-bottom.png`, fullPage: true });
+  });
+
+  test("settings → design picking phosphor reskins chrome live", async ({ page }) => {
+    await openSettings(page);
+    await page.getByRole("button", { name: /^Design$/ }).click();
+    await page.getByRole("button", { name: /^Phosphor$/ }).click();
+    // Active card now reflects the pick.
+    await expect(page.getByRole("button", { name: /^Phosphor$/, pressed: true })).toBeVisible();
+    // The dialog itself should reskin since it consumes the same tokens.
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${SHOT_DIR}/03-settings-design-phosphor-active.png`, fullPage: true });
   });
 
   for (const designId of ["violet", "vinyl", "phosphor", "hornet"] as const) {
     test(`projects route reskins under ${designId} design`, async ({ page }) => {
       await page.goto(`${BASE_URL}/projects`, { waitUntil: "domcontentloaded" });
       await expect(page.locator("input[placeholder*='YouTube banner']")).toBeVisible();
-      // Drive via the actual storage key — proves setDesign() persists
-      // and the palette CSS pipeline applies through data-theme.
       await page.evaluate((id) => {
         localStorage.setItem("editor.design", id);
         document.documentElement.setAttribute("data-theme", id);
       }, designId);
       await page.waitForTimeout(450);
       await page.screenshot({
-        path: `${SHOT_DIR}/02-${designId}.png`,
+        path: `${SHOT_DIR}/04-${designId}.png`,
         fullPage: true,
       });
     });
@@ -75,6 +115,6 @@ test.describe("PR theme + design — visual evidence", () => {
       document.documentElement.removeAttribute("data-theme");
     });
     await page.waitForTimeout(300);
-    await page.screenshot({ path: `${SHOT_DIR}/03-baseline-light.png`, fullPage: true });
+    await page.screenshot({ path: `${SHOT_DIR}/05-baseline-light.png`, fullPage: true });
   });
 });

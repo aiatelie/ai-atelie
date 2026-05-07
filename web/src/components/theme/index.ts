@@ -1,1 +1,0 @@
-export { ThemeMenu } from "./ThemeMenu";
