@@ -4110,6 +4110,20 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
     const onClick = (e: MouseEvent) => {
       const target = e.target as Element | null;
       if (!target || target.nodeType !== 1) return;
+      // On canvas-mode pages (DesignCanvas), don't intercept clicks on
+      // the canvas's own chrome. The editor attaches `click` in capture
+      // phase (see addEventListener at the bottom of this effect), so
+      // without a guard it would eat events meant for the canvas's own
+      // handlers — the drag-grip, expand button, kebab menu, and inline
+      // label/title editors would all silently stop working.
+      //
+      // Skip anything inside an inline-editable canvas control:
+      if (target.closest(".dc-editable")) return;
+      // Skip anything inside a [data-dc-slot] (an artboard) BUT outside
+      // .dc-card. .dc-card holds user-authored content (still
+      // selectable for chat/inspect); everything else inside the slot
+      // — label, grip, expand, kebab — is canvas chrome.
+      if (target.closest("[data-dc-slot]") && !target.closest(".dc-card")) return;
       e.preventDefault();
       e.stopPropagation();
       const sel = cssPath(target);
