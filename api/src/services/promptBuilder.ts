@@ -100,11 +100,64 @@ loop-vs-one-shot, transparent-vs-bg are common branches worth surfacing.
   • Don't pad with disclaimers ("I hope this helps", "Let me know if…").
 `.trim();
 
+import { readFile } from "node:fs/promises";
+import { resolve as resolvePath } from "node:path";
+
 import { ENV } from "../env.ts";
 import { dataUrlToImage } from "./utils.ts";
 import { saveAttachmentToProject, saveScreenshot } from "./attachments.ts";
 import { projectDirOf, readProjectManifest } from "./projectStore.ts";
 import type { CommentPayload } from "./types.ts";
+
+/** Default skill selection when a manifest has no `design.active_skills`
+ *  field — covers existing manifests authored before the design field
+ *  was added. Treated as a soft default; the agent still has access to
+ *  every skill in `skills/`, but the active selection signals user
+ *  intent. */
+const DEFAULT_ACTIVE_SKILLS = ["frontend-design"];
+
+/** Cap how much of a project's DESIGN.md we paste into the system
+ *  prompt. Keeps the prompt within practical bounds even if the user
+ *  drops in a maximalist 200KB spec. The truncation message points the
+ *  agent at the file so it can read more if needed. */
+const DESIGN_MD_MAX_BYTES = 16 * 1024;
+
+/** Extract `design.active_skills` from a manifest, falling back to the
+ *  default if missing or malformed. Defensive — the manifest is read as
+ *  `unknown` and may predate the schema field. */
+function getActiveSkills(manifest: unknown): string[] {
+  const m = manifest as { design?: { active_skills?: unknown } } | null;
+  const list = m?.design?.active_skills;
+  if (Array.isArray(list) && list.length > 0 && list.every((s) => typeof s === "string")) {
+    return list as string[];
+  }
+  return DEFAULT_ACTIVE_SKILLS;
+}
+
+/** Resolve the project-relative DESIGN.md path from the manifest, or
+ *  fall back to the canonical `DESIGN.md` at the project root. */
+function getDesignMdPath(manifest: unknown): string {
+  const m = manifest as { design?: { design_md?: unknown } } | null;
+  const p = m?.design?.design_md;
+  return typeof p === "string" && p.length > 0 ? p : "DESIGN.md";
+}
+
+/** Read the project's DESIGN.md if present, with traversal guard and a
+ *  size cap. Returns null when the file is missing, unreadable, or
+ *  resolves outside the project root. */
+async function readProjectDesignMd(projectDir: string, relPath: string): Promise<string | null> {
+  const abs = resolvePath(projectDir, relPath);
+  if (!abs.startsWith(projectDir + "/")) return null;
+  try {
+    const buf = await readFile(abs, "utf8");
+    if (buf.length > DESIGN_MD_MAX_BYTES) {
+      return buf.slice(0, DESIGN_MD_MAX_BYTES) + `\n\n[…truncated; full spec at ${relPath}]`;
+    }
+    return buf;
+  } catch {
+    return null;
+  }
+}
 
 function formatElementBlock(p: CommentPayload): string[] {
   const out: string[] = [];
@@ -209,6 +262,34 @@ async function buildSandboxPrompt(
       ``,
     );
   }
+
+  // Project design spec (Google-spec DESIGN.md), when the user authored one.
+  // Treated as the source of truth for aesthetic decisions in this project —
+  // every UI choice should conform unless the user explicitly overrides.
+  const designMd = await readProjectDesignMd(projectDir, getDesignMdPath(manifest));
+  if (designMd) {
+    lines.push(
+      `## Project design spec`,
+      ``,
+      `This project has a \`DESIGN.md\` at the root. Treat it as the source of truth for aesthetic decisions — colors, typography, components, do's-and-don'ts. Every UI choice must conform unless the user explicitly tells you to override.`,
+      ``,
+      designMd,
+      ``,
+    );
+  }
+
+  // Active skill selection — soft prompt-level filter. The full skill
+  // catalog is still mounted via additionalDirectories and remains
+  // invokable, but the active set signals user intent for this project.
+  const activeSkills = getActiveSkills(manifest);
+  lines.push(
+    `## Active design skills for this project`,
+    ``,
+    `The user has selected these skills as active: ${activeSkills.map((s) => `\`${s}\``).join(", ")}.`,
+    `Prefer these when generating. The full catalog is still available — invoke other skills only when the active set genuinely doesn't fit the request.`,
+    ``,
+  );
+
   if (p.scopeFile) {
     lines.push(
       `**Scope:** edit ONLY \`${p.scopeFile}\`. The user is previewing this single component on a canvas — don't touch other files.`,
