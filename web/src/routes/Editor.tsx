@@ -32,7 +32,6 @@ import { CommentBubble, type CommentTarget, type Attachment } from "../component
 import { CommentPins } from "../components/editor/CommentPins";
 import { LeftPanel } from "../components/editor/LeftPanel";
 import { FileBrowserView, PageIcon, ComponentIcon, AssetIcon } from "../components/editor/FileBrowserView";
-import { ProjectSwitcher } from "../components/editor/ProjectSwitcher";
 
 // Lazy-loaded heavy components — pulled out of the initial bundle and
 // fetched only when the user actually opens them. Each lazy() returns a
@@ -1408,9 +1407,8 @@ export default function Editor() {
   // touching any file (the "ask 5-10 questions before building"
   // workflow). Strip the flag immediately so a refresh doesn't re-fire
   // the intake.
-  // Track per-project so creating a second project from the in-editor
-  // ProjectSwitcher (without remounting the route) still fires intake
-  // for the new project.
+  // Track per-project so an in-place project switch (without
+  // remounting the route) still fires intake for the new project.
   const intakeFiredFor = useRef<Set<string>>(new Set());
   const [chatTabSwitchKey, setChatTabSwitchKey] = useState(0);
   // Per-project flag: this project hasn't yet received the intake brief.
@@ -2342,22 +2340,6 @@ export default function Editor() {
             setActiveTabId(tab.id);
             trackEvent("tab_open", { route, source: "files-panel" }, activeProject.id);
           }}
-          doc={iframeRef.current?.contentDocument ?? null}
-          selectedSelector={selected?.selector}
-          onHoverNode={(sel) => canvasFrameRef.current?.paintHoverBySelector(sel)}
-          onSelectNode={(sel) => {
-            const doc = iframeRef.current?.contentDocument;
-            if (!doc) return;
-            const el = resolveCssPath(doc, sel) as HTMLElement | null;
-            if (!el) return;
-            setMode("edit");
-            setSelected({
-              selector: sel,
-              tag: el.tagName.toLowerCase(),
-              computed: doc.defaultView!.getComputedStyle(el),
-              descriptor: buildDescriptor(el),
-            });
-          }}
           threads={threads}
           activeThread={activeThread}
           activeFile={activeTab.route}
@@ -2901,7 +2883,6 @@ function TabBar({
   return (
     <div className={s.tabbar} ref={tabbarRef}>
       <ProjectTitle value={projectTitle} onChange={onRenameProject} />
-      <ProjectSwitcher />
       <div
         className={`${s.tab} ${activeId === DESIGN_FILES_TAB_ID ? s.active : ""}`}
         onClick={() => onActivate(DESIGN_FILES_TAB_ID)}
