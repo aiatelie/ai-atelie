@@ -349,7 +349,13 @@ function renderTableSection(heading, rows, uploads) {
     const screenshotCell = screenshotUrl
       ? `<img src="${screenshotUrl}" alt="${escapeCell(r.title)} final" width="320" />`
       : "—";
-    const videoCell = videoUrl ? `[${basename(r.artifacts.video)}](${videoUrl})` : "—";
+    // GitHub honors <video> in PR bodies, including inside table cells,
+    // so we render a real inline player instead of a markdown link.
+    // `controls` lets the reviewer scrub; `muted` keeps autoplay safe;
+    // `preload="metadata"` keeps the table cheap to first-paint.
+    const videoCell = videoUrl
+      ? `<video controls muted preload="metadata" width="320" src="${videoUrl}"></video>`
+      : "—";
     lines.push(`| ${titleCell} | ${description || "—"} | ${screenshotCell} | ${videoCell} |`);
   }
   lines.push("");
@@ -369,22 +375,6 @@ function renderMarkdown(results, uploads) {
   }
   if (task.length > 0) {
     lines.push(renderTableSection("Task evidence", task, uploads));
-  }
-  // Bare-URL section so GitHub auto-renders inline `<video>` players.
-  // Markdown links inside table cells render as plain anchors only.
-  const inlineUrls = [...results]
-    .filter((r) => r.artifacts.video)
-    .map((r) => urlFor(uploads, basename(r.artifacts.video)))
-    .filter((u) => u);
-  if (inlineUrls.length > 0) {
-    lines.push("<details>");
-    lines.push("<summary>Inline video players (bare URLs · auto-play)</summary>");
-    lines.push("");
-    for (const u of inlineUrls) {
-      lines.push(u);
-      lines.push("");
-    }
-    lines.push("</details>");
   }
   return lines.join("\n").trim();
 }
