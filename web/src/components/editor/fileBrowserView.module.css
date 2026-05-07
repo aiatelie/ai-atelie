@@ -22,8 +22,8 @@
 .crumb {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 18px;
+  gap: 10px;
+  padding: 14px 24px;
   border-bottom: 1px solid var(--ink-08);
   background: var(--app-bg);
   position: sticky;
@@ -68,25 +68,27 @@
   padding-top: 2px;
 }
 .sectionLabel {
-  padding: 12px 24px 4px;
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
+  padding: 18px 24px 6px;
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-44);
+  color: var(--ink-50);
   font-weight: var(--weight-semi);
 }
+.sectionLabel + .row { padding-top: 6px; }
 
 .row {
   display: grid;
   grid-template-columns: 20px 1fr auto auto;
   align-items: center;
-  gap: 10px;
-  padding: 5px 24px;
+  gap: 12px;
+  padding: 6px 24px;
   cursor: pointer;
   border-bottom: 1px solid transparent;
   border-left: 3px solid transparent;
   padding-left: 21px; /* 24 - 3 to keep icon column aligned */
-  min-height: 30px;
+  min-height: 36px;
+  transition: background var(--motion-fast) var(--ease-out-expressive);
 }
 .row:hover { background: var(--ink-04); }
 .rowActive {
@@ -108,7 +110,9 @@
   background: var(--brand-bg);
 }
 .rowEditorActive .name { color: var(--brand-fg); font-weight: var(--weight-semi); }
-.rowEditorActive:hover { background: var(--brand-bg); }
+.rowEditorActive .sub { color: var(--brand-fg); opacity: 0.72; }
+.rowEditorActive .modified { color: var(--brand-fg); opacity: 0.6; }
+.rowEditorActive:hover { background: var(--brand-bg); filter: brightness(0.98); }
 /* A file open in some other tab — subtle, just informational. */
 .rowOpen .name { color: var(--ink-92); }
 .dotOpen {
@@ -168,7 +172,7 @@
 }
 .sub {
   font-size: var(--text-xs);
-  color: var(--ink-44);
+  color: var(--ink-55);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -176,6 +180,7 @@
   font-size: var(--text-xs);
   color: var(--ink-44);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .empty {
@@ -205,16 +210,24 @@
 .folderRow svg { width: 14px; height: 14px; color: var(--ink-64); }
 
 .dropHint {
-  margin: 32px 24px 24px;
-  padding: 18px;
-  border: 1.5px dashed var(--ink-10);
-  border-radius: var(--radius-md);
+  margin: 28px 24px 24px;
+  padding: 20px 16px;
+  border: 1px dashed var(--ink-12);
+  border-radius: var(--radius-lg);
   text-align: center;
   font-size: var(--text-sm);
-  color: var(--ink-44);
+  color: var(--ink-50);
   display: flex;
   flex-direction: column;
   gap: 6px;
+  background: var(--ink-02);
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
+}
+.shellDrop .dropHint {
+  border-color: var(--brand);
+  background: var(--brand-bg);
 }
 .dropHintLabel {
   font-weight: var(--weight-semi);
@@ -255,12 +268,14 @@
 .previewFrame {
   /* Render the page at a "design viewport" then visually scale it down,
    * so we show the full page (no cropping) instead of a tiny mobile
-   * breakpoint inside the actual ~330px-wide preview rectangle. */
+   * breakpoint inside the actual ~330px-wide preview rectangle.
+   * --preview-scale is set on .previewBody from a ResizeObserver in JS,
+   * because CSS can't derive a unitless scale factor from a length. */
   width: 1280px;
   height: 800px;
   border: 0;
   background: var(--surface);
-  transform: scale(calc(100cqi / 1280));
+  transform: scale(var(--preview-scale, 0.25));
   transform-origin: top left;
   pointer-events: none;
 }

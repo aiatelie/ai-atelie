@@ -5,7 +5,7 @@
  *
  * Clicking a row activates the file in the preview pane. The "Open"
  * button (or double-click) opens it as a regular editor tab via the
- * onOpenRoute callback the caller already uses for FilesPanel.
+ * onOpenRoute callback supplied by the caller.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -417,9 +417,8 @@ function FileContextMenu({
   );
 }
 
-/** Same routing rule the FilesPanel used: pages open as their path,
- *  components open through the synthetic /_preview/ wrapper, everything
- *  else is a download. */
+/** Pages open as their path, components open through the synthetic
+ *  /_preview/ wrapper, everything else is a download. */
 function routeFor(f: SandboxFile): string {
   if (f.kind === "component") return `_preview/${f.path}`;
   return f.path;
@@ -508,6 +507,23 @@ function FilePreview({
   // Local nonce so the user can manually refresh the preview without
   // touching anything else. Bumped by clicking the ↻ button.
   const [refreshTick, setRefreshTick] = useState(0);
+  // Scale factor for the iframe. CSS can't derive a unitless number
+  // from a length, so we measure previewBody and write the ratio into a
+  // custom property the iframe rule reads.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const apply = (w: number) => {
+      el.style.setProperty("--preview-scale", String(w / 1280));
+    };
+    apply(el.clientWidth);
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) apply(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [file?.path]);
 
   if (!file) {
     return (
@@ -522,7 +538,7 @@ function FilePreview({
   const copy = (text: string) => navigator.clipboard?.writeText(text).catch(() => { /* ignore */ });
   return (
     <aside className={s.preview}>
-      <div className={s.previewBody}>
+      <div className={s.previewBody} ref={bodyRef}>
         <PreviewSurface file={file} url={previewUrl} projectId={projectId} cacheKey={cacheKey} />
         <button
           className={s.previewRefresh}
