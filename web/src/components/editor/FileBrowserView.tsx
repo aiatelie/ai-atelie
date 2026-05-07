@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import s from "./fileBrowserView.module.css";
-import { readRecents, pushRecent } from "./recents";
+import { readRecents, pushRecent, writeRecents } from "./recents";
 import { readFolderState, writeFolderState } from "./folderState";
 import { EmptyState } from "../feedback";
 import { toast } from "../toast";
@@ -54,6 +54,10 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
     () => readFolderState(projectId),
   );
   const [dropOver, setDropOver] = useState(false);
+  // Counter that survives nested-element dragenter/dragleave events.
+  // Naive setDropOver(true)/(false) on enter/leave flickers each time
+  // the cursor crosses a child boundary; tracking depth fixes it. */
+  const dragDepthRef = useRef(0);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ file: SandboxFile; x: number; y: number } | null>(null);
   // Path of the row currently flashing from a reveal request. Cleared on a timer.
@@ -80,6 +84,18 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
           if (stillThere) return stillThere;
         }
         return next.files.find((f) => f.kind === "page") ?? next.files[0] ?? null;
+      });
+      // Drop recents that point at files which no longer exist on the
+      // server (renamed, deleted, garbage-collected). Without this, the
+      // Recent section silently hides those entries forever via the
+      // existing tree-presence filter — but the localStorage entry
+      // sticks around and crowds out fresh paths.
+      setRecents((prev) => {
+        const present = new Set(next.files.map((f) => f.path));
+        const pruned = prev.filter((p) => present.has(p));
+        if (pruned.length === prev.length) return prev;
+        writeRecents(projectId, pruned);
+        return pruned;
       });
     } catch { /* ignore */ }
   }, [projectId]);
@@ -256,14 +272,25 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
   return (
     <div
       className={`${s.shell} ${dropOver ? s.shellDrop : ""}`}
-      onDragOver={(e) => { e.preventDefault(); setDropOver(true); }}
+      onDragEnter={(e) => {
+        // Only count drags that actually carry files. Internal drags
+        // (e.g. row reordering, chat composer chips) shouldn't trigger
+        // the upload overlay.
+        if (!e.dataTransfer.types.includes("Files")) return;
+        dragDepthRef.current += 1;
+        if (dragDepthRef.current === 1) setDropOver(true);
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+      }}
       onDragLeave={(e) => {
-        // Only clear when truly leaving the shell — children fire dragleave too.
-        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-        setDropOver(false);
+        if (!e.dataTransfer.types.includes("Files")) return;
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) setDropOver(false);
       }}
       onDrop={async (e) => {
         e.preventDefault();
+        dragDepthRef.current = 0;
         setDropOver(false);
         if (e.dataTransfer.files.length) await uploadFiles(e.dataTransfer.files);
       }}
@@ -499,6 +526,17 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
         onClose={() => setPasteOpen(false)}
         onSubmit={(filename, content) => writePastedFile(filename, content)}
       />
+      {dropOver && (
+        <div className={s.dropOverlay} aria-hidden="true">
+          <div className={s.dropOverlayCard}>
+            <span className={s.dropOverlayIcon} aria-hidden="true">↑</span>
+            <span className={s.dropOverlayLabel}>Drop to upload</span>
+            <span className={s.dropOverlayBody}>
+              Images, docs, references — Claude will use them as context.
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

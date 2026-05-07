@@ -2,6 +2,7 @@
  * Left column: file list. Right column: preview pane. */
 
 .shell {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 360px;
   width: 100%;
@@ -11,6 +12,54 @@
   color: var(--ink-92);
 }
 .shellDrop { background: var(--brand-bg); }
+
+/* ─── Drop overlay ──────────────────────────────────────────────── */
+@keyframes fbvDropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--brand-bg) 92%, transparent);
+  border: 2px dashed var(--brand);
+  border-radius: var(--radius-lg);
+  margin: 8px;
+  pointer-events: none;
+  animation: fbvDropIn var(--motion-fast) var(--ease-out-expressive);
+}
+.dropOverlayCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 28px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  max-width: 360px;
+}
+.dropOverlayIcon {
+  font-size: 26px;
+  color: var(--brand);
+  line-height: 1;
+}
+.dropOverlayLabel {
+  font: var(--weight-semi) var(--text-lg) var(--font-system);
+  color: var(--ink-92);
+}
+.dropOverlayBody {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink-65);
+  max-width: 36ch;
+}
 
 /* ─── File list ────────────────────────────────────────────────── */
 .list {
