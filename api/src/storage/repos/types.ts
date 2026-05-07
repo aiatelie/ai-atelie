@@ -15,6 +15,23 @@ export type ProjectManifestComponent = {
   name: string;
 };
 
+/** Per-project design intelligence — which catalog skills are active
+ *  for this project, plus the path to its aesthetic spec if any.
+ *
+ *  Optional. Absent = legacy default (frontend-design only, no DESIGN.md).
+ *  See `skills/index.json` for the catalog of available skill names. */
+export type ProjectDesignSelection = {
+  /** Skill names from the catalog the agent should treat as active for
+   *  this project. Order is priority for name collisions. Default when
+   *  absent: ["frontend-design"]. */
+  active_skills?: string[];
+  /** Project-relative path to a Google-spec DESIGN.md, if the user
+   *  authored or imported one. Convention: "DESIGN.md" at the project
+   *  root. The agent reads this and prepends it to the system prompt
+   *  when present. */
+  design_md?: string;
+};
+
 export type ProjectManifest = {
   schemaVersion: 1;
   id: string;
@@ -25,6 +42,10 @@ export type ProjectManifest = {
   pages: ProjectManifestPage[];
   components?: ProjectManifestComponent[];
   entry: string;
+  /** Design intelligence selection — see `ProjectDesignSelection`.
+   *  Optional and additive: existing manifests without this field are
+   *  treated as the default selection. */
+  design?: ProjectDesignSelection;
 };
 
 export type ProjectSummary = {

@@ -90,6 +90,7 @@ export class ProjectRepo {
       pages: [{ file: "index.html", label: "index.html", title: input.name }],
       components: [],
       entry: "index.html",
+      design: { active_skills: ["frontend-design"] },
     };
     await this.driver.createProject(input.id);
     const files = this.driver.project(input.id).files;
