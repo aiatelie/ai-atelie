@@ -294,6 +294,39 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
   const worldRef = useRef(null);
   const tf = useRef({ x: 0, y: 0, scale: 1 });
 
+  // Theme tokens — overridable at runtime by the host editor via a
+  // `__dc_set_theme` postMessage. Defaults match the standalone DC palette
+  // so the canvas looks right when opened outside the host (downloaded
+  // standalone, file://, etc.). Inside the AI Atelie editor, the host sends
+  // current tokens immediately after `__page_is_canvas` and re-broadcasts
+  // whenever the user picks a new theme in Settings → Theme.
+  const [tokens, setTokens] = useState({ bg: DC.bg, grid: DC.grid });
+  useEffect(() => {
+    const onMsg = (e) => {
+      const d = e.data;
+      if (!d || d.type !== "__dc_set_theme" || !d.tokens) return;
+      // Filter to non-empty strings so an upstream null/undefined doesn't
+      // wipe a default that's currently working.
+      const next = {};
+      for (const k of Object.keys(d.tokens)) {
+        const v = d.tokens[k];
+        if (typeof v === "string" && v.trim().length > 0) next[k] = v.trim();
+      }
+      if (Object.keys(next).length === 0) return;
+      setTokens((cur) => ({ ...cur, ...next }));
+      // Mirror to global CSS vars so any future inline `var(--dc-bg, …)`
+      // reads in user-authored content also pick up the theme.
+      if (typeof document !== "undefined") {
+        const root = document.documentElement;
+        for (const [k, v] of Object.entries(next)) {
+          root.style.setProperty(`--dc-${k}`, v);
+        }
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
   const apply = useCallback(() => {
     const { x, y, scale } = tf.current;
     const el = worldRef.current;
@@ -420,7 +453,12 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
     };
   }, [apply, minScale, maxScale]);
 
-  const gridSvg = `url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(DC.grid)}' stroke-width='1'/%3E%3C/svg%3E")`;
+  // useMemo so the data URL only re-encodes when the grid color actually
+  // changes — keeps theme switches from churning unrelated work.
+  const gridSvg = useMemo(
+    () => `url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(tokens.grid)}' stroke-width='1'/%3E%3C/svg%3E")`,
+    [tokens.grid],
+  );
 
   return (
     <div
@@ -429,7 +467,7 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
       style={{
         height: "100vh",
         width: "100vw",
-        background: DC.bg,
+        background: tokens.bg,
         backgroundImage: gridSvg,
         backgroundRepeat: "repeat",
         backgroundPosition: "0 0",

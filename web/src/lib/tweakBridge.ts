@@ -13,6 +13,16 @@
  *   { type: '__activate_edit_mode' }     → show the in-page Tweaks panel
  *   { type: '__deactivate_edit_mode' }   → hide it
  *
+ * Sends to canvas-mode iframes only:
+ *   { type: '__dc_set_theme', tokens }   → push current theme tokens so the
+ *                                          canvas chrome (bg, grid, label
+ *                                          colors) reflects the user's
+ *                                          choice in Settings → Theme. Sent
+ *                                          on `__page_is_canvas` arrival
+ *                                          and on every change to the host
+ *                                          `<html data-theme>` attribute.
+ *                                          See `mcp/CANVAS_PROTOCOL.md`.
+ *
  * On `__edit_mode_set_keys`, POSTs `/api/projects/:id/tweak` which
  * rewrites the EDITMODE-marked JSON block in the active route's source
  * file. The iframe will reload via vite HMR with the new defaults.
@@ -98,6 +108,10 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
       }
       if (data.type === "__page_is_canvas") {
         setIsCanvas(true);
+        // Push the current theme immediately so the canvas's first paint
+        // matches the host. The canvas's own listener handles subsequent
+        // updates triggered by the MutationObserver below.
+        sendThemeToIframe(iframeRef);
         return;
       }
       if (data.type === "__edit_mode_set_keys") {
@@ -131,6 +145,18 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
     try { w.postMessage({ type }, "*"); } catch { /* ignore */ }
   }, [iframeRef]);
 
+  // Re-broadcast the current theme to the iframe whenever the host's
+  // <html data-theme> attribute changes — i.e. the user picked a different
+  // theme in Settings → Theme. Active only while isCanvas is true so we
+  // don't pay the observer cost on non-canvas pages.
+  useEffect(() => {
+    if (!isCanvas) return;
+    const html = document.documentElement;
+    const obs = new MutationObserver(() => sendThemeToIframe(iframeRef));
+    obs.observe(html, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, [isCanvas, iframeRef]);
+
   const toggle = useCallback(() => {
     setEditing((cur) => {
       const next = !cur;
@@ -145,4 +171,33 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
   }, [sendToIframe]);
 
   return { available, editing, isCanvas, toggle, deactivate };
+}
+
+/** Snapshot the host's current theme tokens and post them to a canvas
+ *  iframe as `__dc_set_theme`. Called on `__page_is_canvas` arrival and
+ *  every time the host's `<html data-theme>` changes. The canvas's
+ *  DCViewport listens for this and applies the tokens as CSS variables on
+ *  the design-canvas root, with hex fallbacks if any token resolves empty.
+ *
+ *  Token names are the canvas-side keys (`bg`, `grid`, `label`, …). Each
+ *  maps to a host token chosen for visual proximity to the role the
+ *  canvas uses it for — the canvas background tracks the app background,
+ *  the grid tracks the faintest ink stop, label/title/subtitle track the
+ *  ink scale by emphasis. */
+function sendThemeToIframe(iframeRef: React.RefObject<HTMLIFrameElement | null>): void {
+  const w = iframeRef.current?.contentWindow;
+  if (!w) return;
+  if (typeof getComputedStyle === "undefined") return;
+  const cs = getComputedStyle(document.documentElement);
+  const read = (name: string) => cs.getPropertyValue(name).trim();
+  const tokens = {
+    bg: read("--app-bg"),
+    grid: read("--ink-06"),
+    label: read("--ink-65"),
+    title: read("--ink-92"),
+    subtitle: read("--ink-55"),
+    surface: read("--surface"),
+    brand: read("--brand"),
+  };
+  try { w.postMessage({ type: "__dc_set_theme", tokens }, "*"); } catch { /* ignore */ }
 }
