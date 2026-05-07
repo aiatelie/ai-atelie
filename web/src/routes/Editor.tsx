@@ -32,6 +32,7 @@ import { CommentBubble, type CommentTarget, type Attachment } from "../component
 import { CommentPins } from "../components/editor/CommentPins";
 import { LeftPanel } from "../components/editor/LeftPanel";
 import { FileBrowserView, PageIcon, ComponentIcon, AssetIcon } from "../components/editor/FileBrowserView";
+import { toast } from "../components/toast";
 
 // Lazy-loaded heavy components — pulled out of the initial bundle and
 // fetched only when the user actually opens them. Each lazy() returns a
@@ -1691,7 +1692,7 @@ export default function Editor() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-          alert(`Video export failed: ${err?.error ?? `HTTP ${res.status}`}`);
+          toast.error(`Video export failed: ${err?.error ?? `HTTP ${res.status}`}`);
           return;
         }
         const artifact = await res.json();
@@ -1744,12 +1745,11 @@ export default function Editor() {
           }
         }
         if (!lottie) {
-          alert(
-            "No Lottie player found anywhere on this page.\n\n" +
-            "The page needs a <lottie-player> or <dotlottie-player> tag " +
-            "with a `src` attribute. If your design loads Lottie via " +
-            "lottie-web's loadAnimation() (no DOM marker), the source " +
-            "URL can't be detected automatically.",
+          toast.warn(
+            "No Lottie player found on this page. Add a <lottie-player> or " +
+              "<dotlottie-player> tag with a src attribute, or load via DOM " +
+              "so the source URL can be detected.",
+            { durationMs: 6000 },
           );
           return;
         }
@@ -1770,7 +1770,7 @@ export default function Editor() {
           });
           if (!res.ok) {
             const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-            alert(`Lottie export failed: ${err?.error ?? `HTTP ${res.status}`}`);
+            toast.error(`Lottie export failed: ${err?.error ?? `HTTP ${res.status}`}`);
             return;
           }
           const artifact = await res.json();
@@ -1780,7 +1780,7 @@ export default function Editor() {
           );
         } catch (err) {
           console.error("[export] Lottie fetch failed:", err);
-          alert(`Lottie fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+          toast.error(`Lottie fetch failed: ${err instanceof Error ? err.message : String(err)}`);
         }
         return;
       }
@@ -1804,7 +1804,7 @@ export default function Editor() {
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
           console.error("[export] OGraf failed:", err);
-          alert(`OGraf export failed: ${err?.error ?? `HTTP ${res.status}`}`);
+          toast.error(`OGraf export failed: ${err?.error ?? `HTTP ${res.status}`}`);
           return;
         }
         // Server saved the bundle to web/projects/<id>/exports/. Surface
@@ -1874,7 +1874,7 @@ export default function Editor() {
         console.warn("[export] used client-side fallback (no server) — file not saved to project library");
       } catch (err) {
         console.error("[export] capture failed", err);
-        alert("Export failed — see console for details.");
+        toast.error("Export failed. Check the console for details.");
       }
     } finally {
       setExportCapturing(false);
@@ -2295,7 +2295,7 @@ export default function Editor() {
                   : t
               ));
             } catch (err) {
-              alert(`Undo failed: ${err instanceof Error ? err.message : String(err)}`);
+              toast.error(`Undo failed: ${err instanceof Error ? err.message : String(err)}`);
             }
           }}
         />
@@ -2425,7 +2425,7 @@ export default function Editor() {
                 }
                 trackEvent("inspector_save", { count: String(Object.keys(overrides).length) }, activeProject.id);
               } catch (err) {
-                alert(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
+                toast.error(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
               }
             }}
             onBakeToSource={async () => {
@@ -2436,7 +2436,7 @@ export default function Editor() {
               const overrides = readRoute(activeTab.route);
               const entries = Object.entries(overrides);
               if (entries.length === 0) {
-                alert("No inspector edits to bake on this route.");
+                toast.info("Nothing to bake — your inspector edits are already in source.");
                 return;
               }
               // Enrich each override with semantic info pulled from the live

@@ -9,6 +9,7 @@ import Editor from "./routes/Editor";
 import Projects from "./routes/Projects";
 import { hydrateProjectFromServer } from "./lib/projects";
 import { registerNotificationServiceWorker } from "./lib/notifications";
+import { ToastRegion } from "./components/toast";
 
 // Register the notifications SW so completion pings persist past tab close
 // and click handlers can refocus the originating tab. Failure is non-fatal.
@@ -49,6 +50,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/editor" element={<Editor />} />
         <Route path="*" element={<Navigate to="/projects" replace />} />
       </Routes>
+      <ToastRegion />
     </BrowserRouter>
   </StrictMode>
 );

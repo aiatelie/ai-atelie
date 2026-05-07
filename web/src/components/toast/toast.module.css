@@ -1,0 +1,94 @@
+/* Toast region — bottom-right, single column, capped width.
+ * Each toast is its own card with tone-based accent + close affordance.
+ * Animations honor prefers-reduced-motion. */
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.region {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.region:empty { display: none; }
+
+.toast {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: 4px 1fr auto;
+  align-items: stretch;
+  gap: 10px;
+  background: var(--surface);
+  color: var(--ink-92);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  font-family: var(--font-system);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  overflow: hidden;
+  animation: toastIn var(--motion-fast) var(--ease-out-expressive);
+}
+
+.accent { background: var(--ink-50); }
+.toastInfo .accent    { background: var(--ink-50); }
+.toastSuccess .accent { background: var(--success, var(--brand)); }
+.toastWarn .accent    { background: var(--brand-warm-strong, var(--brand)); }
+.toastError .accent   { background: var(--brand-warm-strong, var(--brand)); }
+
+.body {
+  padding: 10px 4px 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.message {
+  color: var(--ink-92);
+  word-break: break-word;
+}
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.action {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--brand-fg);
+  font: var(--weight-semi) var(--text-sm) var(--font-system);
+  padding: 0;
+  cursor: pointer;
+}
+.action:hover { text-decoration: underline; }
+
+.close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-50);
+  width: 28px;
+  align-self: stretch;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.close:hover { color: var(--ink-92); background: var(--ink-04); }
+.close:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
