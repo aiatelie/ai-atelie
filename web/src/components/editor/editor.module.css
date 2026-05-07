@@ -760,6 +760,21 @@
  *   2. Outlines don't fight `transform: scale(zoom)` on the iframe.
  *   3. Clicks always land on iframe content, never on the outline. */
 .frame { position: relative; }
+.canvasFirstPaint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  z-index: 2;
+  pointer-events: none;
+  animation: canvasFirstPaintFade 200ms ease-out;
+}
+@keyframes canvasFirstPaintFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 .frameOverlay {
   position: absolute;
   inset: 0;

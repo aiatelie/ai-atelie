@@ -32,6 +32,8 @@ import { CommentBubble, type CommentTarget, type Attachment } from "../component
 import { CommentPins } from "../components/editor/CommentPins";
 import { LeftPanel } from "../components/editor/LeftPanel";
 import { FileBrowserView, PageIcon, ComponentIcon, AssetIcon } from "../components/editor/FileBrowserView";
+import { toast } from "../components/toast";
+import { Spinner } from "../components/feedback";
 
 // Lazy-loaded heavy components — pulled out of the initial bundle and
 // fetched only when the user actually opens them. Each lazy() returns a
@@ -1606,10 +1608,39 @@ export default function Editor() {
   // Cmd/Ctrl+/ opens the keyboard-shortcuts cheat sheet. Same suppression
   // rule — typing "/" in chat composer mustn't hijack into this modal.
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /** Persist any pending inspector overrides for the active route to
+   *  the project's _inspector_edits.css. Shared by the Inspector save
+   *  button and the Cmd/Ctrl+S keyboard shortcut. */
+  const saveInspectorEdits = useCallback(async () => {
+    const overrides = readRoute(activeTab.route);
+    if (Object.keys(overrides).length === 0) return;
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(activeProject.id)}/inspector-css`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ route: activeTab.route, edits: overrides }),
+        },
+      );
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      clearRoute(activeTab.route);
+      const ifr = iframeRef.current;
+      if (ifr) DmBridge.injectInspectorCSS(ifr, Date.now());
+      canvasFrameRef.current?.reloadFrame();
+      trackEvent("inspector_save", { count: String(Object.keys(overrides).length) }, activeProject.id);
+      toast.success("Inspector edits saved.");
+    } catch (err) {
+      toast.error(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [activeProject.id, activeTab.route]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
-      const inField = tag === "INPUT" || tag === "TEXTAREA";
+      const inField = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement | null)?.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && (e.key === "p" || e.key === "P")) {
         if (inField) return;
         e.preventDefault();
@@ -1622,10 +1653,34 @@ export default function Editor() {
         setShortcutsOpen((v) => !v);
         return;
       }
+      // ? (Shift+/) — open the shortcuts cheat sheet without a modifier.
+      // Suppressed inside any input so users can still type "?" in chat.
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (inField) return;
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+        return;
+      }
+      // Cmd/Ctrl+B — toggle the LeftPanel collapsed state. Dispatched as
+      // a window event so the panel listens without prop-drilling.
+      if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
+        if (inField) return;
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("leftpanel:toggle"));
+        return;
+      }
+      // Cmd/Ctrl+S — flush pending inspector edits. Always wins over the
+      // browser's "Save Page As" since the user explicitly bound it.
+      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        if (inField) return;
+        void saveInspectorEdits();
+        return;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [saveInspectorEdits]);
   // Reactive stroke list for the active route — drives the Draw bar's
   // Send/Undo enabled-state and the composite-on-send pipeline.
   const routeStrokes = useStrokes(activeTab.route);
@@ -1691,7 +1746,7 @@ export default function Editor() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-          alert(`Video export failed: ${err?.error ?? `HTTP ${res.status}`}`);
+          toast.error(`Video export failed: ${err?.error ?? `HTTP ${res.status}`}`);
           return;
         }
         const artifact = await res.json();
@@ -1744,12 +1799,11 @@ export default function Editor() {
           }
         }
         if (!lottie) {
-          alert(
-            "No Lottie player found anywhere on this page.\n\n" +
-            "The page needs a <lottie-player> or <dotlottie-player> tag " +
-            "with a `src` attribute. If your design loads Lottie via " +
-            "lottie-web's loadAnimation() (no DOM marker), the source " +
-            "URL can't be detected automatically.",
+          toast.warn(
+            "No Lottie player found on this page. Add a <lottie-player> or " +
+              "<dotlottie-player> tag with a src attribute, or load via DOM " +
+              "so the source URL can be detected.",
+            { durationMs: 6000 },
           );
           return;
         }
@@ -1770,7 +1824,7 @@ export default function Editor() {
           });
           if (!res.ok) {
             const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-            alert(`Lottie export failed: ${err?.error ?? `HTTP ${res.status}`}`);
+            toast.error(`Lottie export failed: ${err?.error ?? `HTTP ${res.status}`}`);
             return;
           }
           const artifact = await res.json();
@@ -1780,7 +1834,7 @@ export default function Editor() {
           );
         } catch (err) {
           console.error("[export] Lottie fetch failed:", err);
-          alert(`Lottie fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+          toast.error(`Lottie fetch failed: ${err instanceof Error ? err.message : String(err)}`);
         }
         return;
       }
@@ -1804,7 +1858,7 @@ export default function Editor() {
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
           console.error("[export] OGraf failed:", err);
-          alert(`OGraf export failed: ${err?.error ?? `HTTP ${res.status}`}`);
+          toast.error(`OGraf export failed: ${err?.error ?? `HTTP ${res.status}`}`);
           return;
         }
         // Server saved the bundle to web/projects/<id>/exports/. Surface
@@ -1874,7 +1928,7 @@ export default function Editor() {
         console.warn("[export] used client-side fallback (no server) — file not saved to project library");
       } catch (err) {
         console.error("[export] capture failed", err);
-        alert("Export failed — see console for details.");
+        toast.error("Export failed. Check the console for details.");
       }
     } finally {
       setExportCapturing(false);
@@ -2131,28 +2185,11 @@ export default function Editor() {
       />
 
       <div className={s.stage}>
-        {!isDesignFiles && <LeftPanel
+        <LeftPanel
           projectId={activeProject.id}
-          onOpenRoute={(route, label) => {
-            const existing = tabs.find((t) => t.route === route);
-            if (existing) {
-              setActiveTabId(existing.id);
-              return;
-            }
-            const tab: Tab = {
-              id: uniqueTabId(),
-              label: routeToLabel(route) || label,
-              route,
-              display: defaultDisplay(route),
-            };
-            setTabs((prev) => [...prev, tab]);
-            setActiveTabId(tab.id);
-            trackEvent("tab_open", { route, source: "files-panel" }, activeProject.id);
-          }}
           threads={threads}
           activeThread={activeThread}
           activeFile={activeTab.route}
-          openRoutes={openRoutes}
           composerContext={
             // Show the picked element whenever there IS one — both Edit
             // (inspector mode) and Select (no tool) populate `selected`,
@@ -2312,10 +2349,10 @@ export default function Editor() {
                   : t
               ));
             } catch (err) {
-              alert(`Undo failed: ${err instanceof Error ? err.message : String(err)}`);
+              toast.error(`Undo failed: ${err instanceof Error ? err.message : String(err)}`);
             }
           }}
-        />}
+        />
 
         <div className={s.right}>
           {!isDesignFiles && <Toolbar
@@ -2409,42 +2446,9 @@ export default function Editor() {
             overrideCount={overrideCountForActive}
             onReset={async () => {
               await clearRouteEverywhere(activeTab.route);
-              const ifr = iframeRef.current;
-              if (ifr) ifr.src = ifr.src;
+              canvasFrameRef.current?.reloadFrame();
             }}
-            onSaveInspectorEdits={async () => {
-              // Fast path: write inspector edits to _inspector_edits.css in
-              // the project (no AI). Page reloads via vite watcher and the
-              // saved styles apply via the auto-injected <link>.
-              const overrides = readRoute(activeTab.route);
-              if (Object.keys(overrides).length === 0) return;
-              try {
-                const res = await fetch(
-                  `/api/projects/${encodeURIComponent(activeProject.id)}/inspector-css`,
-                  {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ route: activeTab.route, edits: overrides }),
-                  },
-                );
-                if (!res.ok) {
-                  const j = await res.json().catch(() => ({}));
-                  throw new Error(j?.error ?? `HTTP ${res.status}`);
-                }
-                // Drop the localStorage layer — the CSS file owns the styles
-                // now. Reload the iframe + cache-bust the link so the new
-                // rules apply immediately.
-                clearRoute(activeTab.route);
-                const ifr = iframeRef.current;
-                if (ifr) {
-                  DmBridge.injectInspectorCSS(ifr, Date.now());
-                  ifr.src = ifr.src;
-                }
-                trackEvent("inspector_save", { count: String(Object.keys(overrides).length) }, activeProject.id);
-              } catch (err) {
-                alert(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
-              }
-            }}
+            onSaveInspectorEdits={saveInspectorEdits}
             onBakeToSource={async () => {
               // Slow path: ask Claude to walk the source and rewrite the
               // original JSX / CSS so the overrides become permanent (i.e.
@@ -2453,7 +2457,7 @@ export default function Editor() {
               const overrides = readRoute(activeTab.route);
               const entries = Object.entries(overrides);
               if (entries.length === 0) {
-                alert("No inspector edits to bake on this route.");
+                toast.info("Nothing to bake — your inspector edits are already in source.");
                 return;
               }
               // Enrich each override with semantic info pulled from the live
@@ -2504,8 +2508,7 @@ export default function Editor() {
               // the CSS-file clear, the !important rules would continue to
               // shadow whatever Claude just wrote into source.
               await clearRouteEverywhere(activeTab.route);
-              const ifr = iframeRef.current;
-              if (ifr) ifr.src = ifr.src;
+              canvasFrameRef.current?.reloadFrame();
             }}
           />}
           <div className={s.rightBody}>
@@ -3801,6 +3804,10 @@ type RectLike = { x: number; y: number; w: number; h: number };
 export type CanvasFrameHandle = {
   /** Show the hover outline at the given selector. Pass null to hide. */
   paintHoverBySelector: (sel: string | null) => void;
+  /** Force-refresh the iframe by bumping a reload-key into its src.
+   *  Use this instead of `ifr.src = ifr.src`, which Chromium can no-op
+   *  when the URL is identical. */
+  reloadFrame: () => void;
 };
 
 const CanvasFrame = forwardRef<CanvasFrameHandle, {
@@ -3830,10 +3837,21 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
 }, handleRef) {
   // Sandbox tab → /p/<id>/<route>. tab.route is project-relative (e.g.
   // "index.html" or "_preview/Button.jsx"). Otherwise treat route as a
-  // SPA path (legacy fallback during the migration window).
-  const iframeSrc = projectId
+  // SPA path (legacy fallback during the migration window). The
+  // reloadKey appended to the URL is a force-refresh signal — bumping
+  // it changes the URL identity so Chromium doesn't no-op the reload.
+  const [reloadKey, setReloadKey] = useState(0);
+  const baseSrc = projectId
     ? `/p/${encodeURIComponent(projectId)}/${tab.route.replace(/^\/+/, "")}`
     : tab.route;
+  const iframeSrc = reloadKey > 0
+    ? `${baseSrc}${baseSrc.includes("?") ? "&" : "?"}r=${reloadKey}`
+    : baseSrc;
+  // Until the iframe's first onLoad fires, render a soft placeholder so
+  // the canvas isn't a blank rectangle during cold loads (project /
+  // tab switches, forced reloads).
+  const [iframeReady, setIframeReady] = useState(false);
+  useEffect(() => { setIframeReady(false); }, [baseSrc, reloadKey]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // State mirror of the iframe element — children that want to subscribe to
   // postMessage events scoped to this iframe (e.g. IframeErrorOverlay) need
@@ -3872,6 +3890,7 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
     const ifr = iframeRef.current;
     const doc = ifr?.contentDocument;
     if (!ifr || !doc) return;
+    setIframeReady(true);
     applyOverrides(doc, tab.route);
     applySharedAssetsToDoc(doc);
     DmBridge.inject(ifr);
@@ -3994,6 +4013,7 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
       const el = resolveCssPath(doc, sel) as HTMLElement | null;
       paintHover(el);
     },
+    reloadFrame: () => setReloadKey((k) => k + 1),
   }), [paintHover]);
 
   // Hook click-to-select / hover-outline whenever mode or active tab change.
@@ -4367,6 +4387,7 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
           title={tab.label}
           onLoad={onLoad}
         />
+        {!iframeReady && <CanvasFirstPaint />}
         {overlay}
         <Suspense fallback={null}>
           <IframeErrorOverlay iframe={iframeEl} />
@@ -4397,6 +4418,7 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
           transformOrigin: "top left",
         }}
       />
+      {!iframeReady && <CanvasFirstPaint />}
       {overlay}
       <Suspense fallback={null}>
         <IframeErrorOverlay iframe={iframeEl} />
@@ -4404,6 +4426,17 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
     </div>
   );
 });
+
+/** Soft placeholder shown over the iframe until its first onLoad
+ *  fires. Avoids a stark blank rectangle during cold loads (initial
+ *  mount, project switch, tab switch, forced reload). */
+function CanvasFirstPaint() {
+  return (
+    <div className={s.canvasFirstPaint} aria-hidden="true">
+      <Spinner size={18} label="Loading preview" />
+    </div>
+  );
+}
 
 /* ─── Iframe-side helpers ────────────────────────────────────── */
 function getActiveDoc(): Document | null {

@@ -8,12 +8,15 @@
  * for the onboarding full-page chat to reuse without forking.
  */
 
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import s from "./chat.module.css";
 import type { Attachment } from "./CommentBubble";
 import { ModelPicker, loadModelId, saveModelId, useModelPickerFlag } from "./ModelPicker";
 import { getModel } from "../../data/modelPresets";
 import { Markdown, DiffBlock } from "./Markdown";
+import { previewReminder, splitSystemReminders } from "./systemReminder";
+import { ELAPSED_TICK_MS, SLOW_RUN_THRESHOLD_MS, formatElapsed } from "./elapsed";
+import { dayLabel, fullDateTime, relativeTime, shouldShowDaySeparator } from "./time";
 import { ElicitForm } from "./ElicitForm";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
@@ -688,6 +691,13 @@ function Composer({
           if (files.length) await addFiles(files);
         }}
         onKeyDown={(e) => {
+          // Cmd/Ctrl+Enter is always send, regardless of slash-menu state.
+          // It's the universal "submit" gesture across chat tools.
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            submit();
+            return;
+          }
           if (showSlash) {
             if (e.key === "ArrowDown") { e.preventDefault(); setSlashIndex((i) => Math.min(i + 1, slashMatches.length - 1)); return; }
             if (e.key === "ArrowUp")   { e.preventDefault(); setSlashIndex((i) => Math.max(i - 1, 0)); return; }
@@ -705,7 +715,7 @@ function Composer({
             ? hasQueued
               ? "1 queued — typing replaces it"
               : "Reply will queue · sent when current turn ends"
-            : "Reply to thread · paste or drop to attach"
+            : "Describe what you want — drop images or paste references"
         }
         rows={1}
       />
@@ -760,23 +770,23 @@ function Composer({
                 ? hasQueued
                   ? "Replace queued message · fires when current turn ends"
                   : "Queue this message · fires when current turn ends"
-                : "Enter to send · Shift+Enter for newline"
+                : "Enter to send · Shift+Enter for newline · ⌘/Ctrl+Enter also sends"
             }
           >
             ↑
           </button>
         )}
       </div>
+      <div className={s.composerHint} aria-hidden="true">
+        <kbd className={s.kbd}>Enter</kbd> to send ·{" "}
+        <kbd className={s.kbd}>Shift</kbd>+<kbd className={s.kbd}>Enter</kbd> newline ·{" "}
+        paste images · drop files
+      </div>
     </form>
   );
 }
 
 
-
-function formatTime(ts: number): string {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
 
 /** Bubble shown above the composer when the user typed a message while
  *  the active turn was still streaming. The route holds the message in
@@ -964,20 +974,26 @@ function ChatBody({
           </div>
         </div>
       ) : (
-        visible.map(({ m, i }) => (
-          <Bubble
-            key={i}
-            m={m}
-            index={i}
-            messages={thread!.messages}
-            threadId={threadId}
-            onUndo={onUndo}
-            onRetry={onRetry}
-            onDeleteMessage={onDeleteMessage}
-            onRestore={onRestore}
-            onEditMessage={onEditMessage}
-          />
-        ))
+        visible.map(({ m, i }, vi) => {
+          const prev = vi > 0 ? visible[vi - 1].m : undefined;
+          const showDay = shouldShowDaySeparator(prev?.ts, m.ts);
+          return (
+            <Fragment key={i}>
+              {showDay && <DaySeparator ts={m.ts} />}
+              <Bubble
+                m={m}
+                index={i}
+                messages={thread!.messages}
+                threadId={threadId}
+                onUndo={onUndo}
+                onRetry={onRetry}
+                onDeleteMessage={onDeleteMessage}
+                onRestore={onRestore}
+                onEditMessage={onEditMessage}
+              />
+            </Fragment>
+          );
+        })
       )}
       <div ref={bottomRef} />
     </div>
@@ -1190,7 +1206,11 @@ function Bubble({
               </svg>
             </button>
           </div>
-          <div className={s.bubbleMetaRight}>{formatTime(m.ts)}</div>
+          <div className={s.bubbleMetaRight}>
+            <time dateTime={new Date(m.ts).toISOString()} title={fullDateTime(m.ts)}>
+              {relativeTime(m.ts)}
+            </time>
+          </div>
         </div>
         {lightbox}
       </div>
@@ -1241,9 +1261,9 @@ function Bubble({
         ) : (
           <div className={s.text}>
             {m.content ? (
-              <Markdown text={m.content} />
+              <AssistantContent text={m.content} />
             ) : m.pending ? (
-              <LiveStatus tools={m.tools} />
+              <LiveStatus tools={m.tools} since={m.ts} />
             ) : (
               <span className={s.dim}>(no response)</span>
             )}
@@ -1295,11 +1315,27 @@ function Bubble({
         )}
       </div>
       <div className={s.bubbleMetaLeft}>
-        {formatTime(m.ts)}
+        <time
+          dateTime={new Date(m.ts).toISOString()}
+          title={fullDateTime(m.ts)}
+        >
+          {relativeTime(m.ts)}
+        </time>
         {!m.pending && !m.error && (
           <CostBadge messages={messages} index={index} />
         )}
       </div>
+    </div>
+  );
+}
+
+/** Thin horizontal rule with a centered day label. Drops in between
+ *  bubbles whose timestamps cross a local-day boundary so a multi-day
+ *  thread doesn't read as one continuous wall. */
+function DaySeparator({ ts }: { ts: number }) {
+  return (
+    <div className={s.daySeparator} role="separator" aria-label={fullDateTime(ts)}>
+      <span className={s.daySeparatorLabel}>{dayLabel(ts)}</span>
     </div>
   );
 }
@@ -1317,6 +1353,43 @@ function StreamingDots() {
 /** Collapsible reasoning block. Auto-collapsed once the reply text starts
  *  arriving (so the final answer is the focal point); auto-open while the
  *  model is still thinking and there's no text yet. */
+/** Renders assistant prose, lifting any echoed `<system-reminder>`
+ *  blocks into a collapsed details element so harness internals don't
+ *  leak into the conversation. The surrounding prose still flows
+ *  through the markdown pipeline. */
+function AssistantContent({ text }: { text: string }) {
+  const segments = useMemo(() => splitSystemReminders(text), [text]);
+  if (segments.length === 0) return <Markdown text={text} />;
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.kind === "text" ? (
+          <Markdown key={i} text={seg.text} />
+        ) : (
+          <SystemReminderBlock key={i} body={seg.text} />
+        )
+      )}
+    </>
+  );
+}
+
+function SystemReminderBlock({ body }: { body: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className={s.reminderBlock}
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary className={s.reminderSummary}>
+        <span className={s.reminderTag} aria-hidden="true">system</span>
+        <span className={s.reminderPreview}>{previewReminder(body)}</span>
+      </summary>
+      <div className={s.reminderBody}>{body}</div>
+    </details>
+  );
+}
+
 function ThinkingBlock({ text, pending }: { text: string; pending: boolean }) {
   const [open, setOpen] = useState(pending);
   return (
@@ -1407,7 +1480,7 @@ function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean })
  *  doing right now even when it hasn't yet sent prose. As soon as text
  *  starts streaming, this gets replaced by the actual content (handled
  *  by the parent's m.content check). */
-function LiveStatus({ tools }: { tools: ToolCall[] }) {
+function LiveStatus({ tools, since }: { tools: ToolCall[]; since?: number }) {
   const last = tools.length > 0 ? tools[tools.length - 1] : null;
   // Derive verb from the tool's semantic kind so this preview stays
   // aligned with the chip color below it (single source of truth in
@@ -1426,7 +1499,31 @@ function LiveStatus({ tools }: { tools: ToolCall[] }) {
       <span className={s.liveStatusLabel}>
         {target ? `${verb} ${target}…` : "Thinking…"}
       </span>
+      {since !== undefined && <ElapsedSince since={since} />}
     </div>
+  );
+}
+
+/** Live elapsed-time readout for an in-flight stream. Ticks every
+ *  ELAPSED_TICK_MS so the user sees forward motion; after
+ *  SLOW_RUN_THRESHOLD_MS, swaps to a slow-run hint that reminds the
+ *  user they can stop the run from the composer footer. */
+function ElapsedSince({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), ELAPSED_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+  const elapsedMs = Math.max(0, now - since);
+  const slow = elapsedMs >= SLOW_RUN_THRESHOLD_MS;
+  return (
+    <span
+      className={`${s.liveStatusElapsed} ${slow ? s.liveStatusElapsedSlow : ""}`}
+      title={slow ? "Long-running turn — use the Stop button below if needed" : undefined}
+      aria-live="off"
+    >
+      {formatElapsed(elapsedMs / 1000)}
+    </span>
   );
 }
 

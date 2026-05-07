@@ -2,6 +2,7 @@
  * Left column: file list. Right column: preview pane. */
 
 .shell {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 360px;
   width: 100%;
@@ -11,6 +12,54 @@
   color: var(--ink-92);
 }
 .shellDrop { background: var(--brand-bg); }
+
+/* ─── Drop overlay ──────────────────────────────────────────────── */
+@keyframes fbvDropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--brand-bg) 92%, transparent);
+  border: 2px dashed var(--brand);
+  border-radius: var(--radius-lg);
+  margin: 8px;
+  pointer-events: none;
+  animation: fbvDropIn var(--motion-fast) var(--ease-out-expressive);
+}
+.dropOverlayCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 28px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  max-width: 360px;
+}
+.dropOverlayIcon {
+  font-size: 26px;
+  color: var(--brand);
+  line-height: 1;
+}
+.dropOverlayLabel {
+  font: var(--weight-semi) var(--text-lg) var(--font-system);
+  color: var(--ink-92);
+}
+.dropOverlayBody {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink-65);
+  max-width: 36ch;
+}
 
 /* ─── File list ────────────────────────────────────────────────── */
 .list {
@@ -22,8 +71,8 @@
 .crumb {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 18px;
+  gap: 10px;
+  padding: 14px 24px;
   border-bottom: 1px solid var(--ink-08);
   background: var(--app-bg);
   position: sticky;
@@ -49,6 +98,33 @@
   color: var(--ink-64);
   font-size: var(--text-md);
 }
+.crumbActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+}
+.crumbAction {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out-expressive),
+              color var(--motion-fast) var(--ease-out-expressive),
+              border-color var(--motion-fast) var(--ease-out-expressive);
+}
+.crumbAction:hover {
+  background: var(--ink-04);
+  color: var(--ink-92);
+}
+.crumbAction:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -1px;
+}
 .search {
   margin-left: auto;
   appearance: none;
@@ -68,25 +144,54 @@
   padding-top: 2px;
 }
 .sectionLabel {
-  padding: 12px 24px 4px;
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
+  padding: 18px 24px 6px;
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-44);
+  color: var(--ink-50);
   font-weight: var(--weight-semi);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+.sectionLabel + .row { padding-top: 6px; }
+.sectionCount {
+  font: var(--weight-semi) 10px var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-55);
+  background: var(--ink-04);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.showMore {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 8px 24px 12px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: color var(--motion-fast) var(--ease-out-expressive);
+}
+.showMore:hover { color: var(--ink-92); }
 
 .row {
   display: grid;
-  grid-template-columns: 20px 1fr auto auto;
+  grid-template-columns: 20px 1fr auto auto auto;
   align-items: center;
-  gap: 10px;
-  padding: 5px 24px;
+  gap: 12px;
+  padding: 6px 24px;
   cursor: pointer;
   border-bottom: 1px solid transparent;
   border-left: 3px solid transparent;
   padding-left: 21px; /* 24 - 3 to keep icon column aligned */
-  min-height: 30px;
+  min-height: 36px;
+  transition: background var(--motion-fast) var(--ease-out-expressive);
 }
 .row:hover { background: var(--ink-04); }
 .rowActive {
@@ -108,7 +213,9 @@
   background: var(--brand-bg);
 }
 .rowEditorActive .name { color: var(--brand-fg); font-weight: var(--weight-semi); }
-.rowEditorActive:hover { background: var(--brand-bg); }
+.rowEditorActive .sub { color: var(--brand-fg); opacity: 0.72; }
+.rowEditorActive .modified { color: var(--brand-fg); opacity: 0.6; }
+.rowEditorActive:hover { background: var(--brand-bg); filter: brightness(0.98); }
 /* A file open in some other tab — subtle, just informational. */
 .rowOpen .name { color: var(--ink-92); }
 .dotOpen {
@@ -152,6 +259,28 @@
   color: var(--ink-44);
 }
 
+/* Per-kind icon tinting. data-kind is keyed off the file extension by
+ * iconKindFor(); we override only the few that benefit from a distinct
+ * glyph color so the list scans by hue. Falls back gracefully — any
+ * unknown data-kind picks up the parent .iconAsset / .iconComponent
+ * styles. */
+.icon[data-kind="image"] {
+  background: var(--success-alt-bg, var(--ink-04));
+  border-color: var(--success-alt-border, var(--ink-10));
+  color: var(--success-fg, var(--ink-65));
+}
+.icon[data-kind="video"],
+.icon[data-kind="audio"] {
+  background: var(--icon-bg-cool, var(--ink-04));
+  border-color: var(--icon-bg-blue-soft, var(--ink-10));
+  color: var(--icon-bg-blue-strong, var(--ink-65));
+}
+.icon[data-kind="pdf"] {
+  background: var(--brand-warm-soft, var(--ink-04));
+  border-color: var(--brand-warm-border, var(--ink-10));
+  color: var(--brand-warm-strong, var(--brand));
+}
+
 .meta {
   display: flex;
   align-items: baseline;
@@ -168,7 +297,7 @@
 }
 .sub {
   font-size: var(--text-xs);
-  color: var(--ink-44);
+  color: var(--ink-55);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -176,6 +305,7 @@
   font-size: var(--text-xs);
   color: var(--ink-44);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .empty {
@@ -205,16 +335,24 @@
 .folderRow svg { width: 14px; height: 14px; color: var(--ink-64); }
 
 .dropHint {
-  margin: 32px 24px 24px;
-  padding: 18px;
-  border: 1.5px dashed var(--ink-10);
-  border-radius: var(--radius-md);
+  margin: 28px 24px 24px;
+  padding: 20px 16px;
+  border: 1px dashed var(--ink-12);
+  border-radius: var(--radius-lg);
   text-align: center;
   font-size: var(--text-sm);
-  color: var(--ink-44);
+  color: var(--ink-50);
   display: flex;
   flex-direction: column;
   gap: 6px;
+  background: var(--ink-02);
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
+}
+.shellDrop .dropHint {
+  border-color: var(--brand);
+  background: var(--brand-bg);
 }
 .dropHintLabel {
   font-weight: var(--weight-semi);
@@ -255,12 +393,14 @@
 .previewFrame {
   /* Render the page at a "design viewport" then visually scale it down,
    * so we show the full page (no cropping) instead of a tiny mobile
-   * breakpoint inside the actual ~330px-wide preview rectangle. */
+   * breakpoint inside the actual ~330px-wide preview rectangle.
+   * --preview-scale is set on .previewBody from a ResizeObserver in JS,
+   * because CSS can't derive a unitless scale factor from a length. */
   width: 1280px;
   height: 800px;
   border: 0;
   background: var(--surface);
-  transform: scale(calc(100cqi / 1280));
+  transform: scale(var(--preview-scale, 0.25));
   transform-origin: top left;
   pointer-events: none;
 }
@@ -403,5 +543,53 @@
   color: var(--ink-92);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  text-decoration: none;
+  display: block;
 }
 .menuItem:hover { background: var(--ink-04); }
+.menuItemDanger {
+  color: var(--brand-warm-strong, var(--brand));
+}
+.menuItemDanger:hover {
+  background: var(--brand-warm-soft);
+  color: var(--brand-warm-strong, var(--brand));
+}
+.menuDivider {
+  height: 1px;
+  background: var(--ink-08);
+  margin: 4px 6px;
+}
+
+/* Hover-revealed kebab on each row. Always visible when the row is
+ * preview-selected (rowActive) or the menu is anchored to it; hidden
+ * on idle rows so they don't feel busy. */
+.kebab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-50);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-left: 6px;
+  visibility: hidden;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive);
+}
+.row:hover .kebab,
+.rowActive .kebab,
+.rowEditorActive .kebab { visibility: visible; }
+.kebab:hover { background: var(--ink-08); color: var(--ink-92); }
+.kebab:focus-visible {
+  visibility: visible;
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}

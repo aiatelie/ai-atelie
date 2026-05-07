@@ -417,8 +417,9 @@
   justify-content: center;
 }
 .assistantLabel {
-  font: 600 11.5px var(--font-system);
-  color: var(--ink-50);
+  font: var(--weight-semi) var(--text-sm) var(--font-system);
+  color: var(--ink-65);
+  letter-spacing: 0.01em;
 }
 
 .bubbleUser {
@@ -548,16 +549,38 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.liveStatusElapsed {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ink-44);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--ink-04);
+  transition: color var(--motion-fast) var(--ease-out-expressive),
+              background var(--motion-fast) var(--ease-out-expressive);
+}
+.liveStatusElapsedSlow {
+  color: var(--brand-warm-strong, var(--brand));
+  background: var(--brand-warm-soft);
 }
 .text > p:first-child { margin-top: 0; }
 .text > p:last-child { margin-bottom: 0; }
 .dim { color: var(--ink-40); font-style: italic; }
 .errText {
-  color: var(--brand-fg);
+  color: var(--ink-78);
   background: var(--brand-warm-soft);
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 12.5px;
+  border: 1px solid var(--brand-warm-border, var(--ink-08));
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 .caret {
   display: inline-block;
@@ -1120,6 +1143,87 @@
   overflow-y: auto;
 }
 
+/* ─── Day separator (between bubbles crossing a day boundary) ─── */
+.daySeparator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 4px;
+  user-select: none;
+  color: var(--ink-44);
+  font: var(--weight-medium) 10.5px var(--font-system);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.daySeparator::before,
+.daySeparator::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--ink-08);
+}
+.daySeparatorLabel {
+  flex-shrink: 0;
+  color: var(--ink-55);
+}
+
+/* ─── System-reminder block (echoed by the model, collapsible) ─── */
+.reminderBlock {
+  margin: 6px 0;
+  border: 1px solid var(--ink-06);
+  border-radius: var(--radius-sm);
+  background: var(--ink-02);
+  overflow: hidden;
+}
+.reminderSummary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  font: var(--weight-medium) 11px var(--font-system);
+  color: var(--ink-55);
+}
+.reminderSummary::-webkit-details-marker { display: none; }
+.reminderSummary::before {
+  content: "▸";
+  font-size: 9px;
+  display: inline-block;
+  transition: transform var(--motion-fast) var(--ease-out-expressive);
+  color: var(--ink-44);
+}
+.reminderBlock[open] > .reminderSummary::before { transform: rotate(90deg); }
+.reminderTag {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-50);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--ink-04);
+  flex-shrink: 0;
+}
+.reminderPreview {
+  color: var(--ink-50);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.reminderBody {
+  padding: 0 12px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-55);
+  white-space: pre-wrap;
+  line-height: 1.5;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
 /* ─── Elicitation form (Claude asks a structured question) ─── */
 .elicitCard {
   margin: 12px;
@@ -1286,10 +1390,30 @@
 .composer {
   border-top: 1px solid var(--ink-08);
   background: var(--surface);
-  padding: 10px 12px;
+  padding: 10px 12px 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.composerHint {
+  font: var(--weight-medium) 10.5px var(--font-system);
+  color: var(--ink-44);
+  letter-spacing: 0.005em;
+  user-select: none;
+  padding: 0 2px;
+}
+.kbd {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px solid var(--ink-12);
+  border-radius: 4px;
+  background: var(--ink-04);
+  color: var(--ink-65);
+  vertical-align: 1px;
 }
 .composerDrag { outline: 2px dashed var(--brand); outline-offset: -4px; }
 .composerField {
@@ -1361,7 +1485,11 @@
   flex-shrink: 0;
 }
 .composerSend:hover { background: var(--ink-strong-hover); }
-.composerSend:disabled { opacity: 0.35; cursor: not-allowed; }
+.composerSend:disabled {
+  background: var(--ink-10);
+  color: var(--ink-44);
+  cursor: not-allowed;
+}
 
 .composerStop {
   width: 30px;
@@ -2103,18 +2231,26 @@
 
 .retryBtn {
   appearance: none;
-  border: 1px solid var(--brand-strong);
-  background: var(--brand-bg);
-  color: var(--brand-fg);
-  border-radius: 6px;
+  border: 1px solid var(--ink-15);
+  background: transparent;
+  color: var(--ink-78);
+  border-radius: var(--radius-sm);
   padding: 4px 10px;
-  font: 500 11px var(--font-system);
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
 }
-.retryBtn:hover { background: var(--brand-border); }
+.retryBtn:hover {
+  background: var(--ink-04);
+  color: var(--ink-92);
+  border-color: var(--ink-25);
+}
 
 /* ─── Comments panel: filter chips + selection bar + multi-select
        per-row (PR-review-style multi-select promotion) ───── */
@@ -2123,9 +2259,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 0 8px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--ink-08);
-  margin-bottom: 8px;
+  margin: 0 -14px 12px;
   position: sticky;
   top: 0;
   background: var(--app-bg);
@@ -2134,29 +2270,34 @@
 }
 .cpFilterChip {
   appearance: none;
-  border: 1px solid var(--ink-10);
+  border: 1px solid transparent;
   background: transparent;
-  color: var(--ink-65);
-  font: 500 11.5px var(--font-system);
-  padding: 3px 9px;
+  color: var(--ink-64);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 4px 10px;
   border-radius: 999px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .cpFilterChip:hover {
-  border-color: var(--ink-20);
+  background: var(--ink-04);
   color: var(--ink-92);
 }
-.cpFilterChipActive {
+.cpFilterChipActive,
+.cpFilterChipActive:hover {
   background: var(--brand-bg);
-  border-color: var(--brand-strong);
+  border-color: var(--brand-border);
   color: var(--brand-fg);
 }
 .cpFilterChipCount {
-  font-size: 10px;
-  font-weight: 600;
+  font: var(--weight-semi) 10.5px var(--font-mono);
+  font-variant-numeric: tabular-nums;
   color: inherit;
   opacity: 0.7;
 }

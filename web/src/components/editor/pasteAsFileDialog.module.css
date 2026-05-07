@@ -1,0 +1,155 @@
+/* PasteAsFileDialog — modal for dropping pasted snippets into the
+ * project as a fresh file. Visual rhythm matches the home redesign +
+ * settings dialog. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--backdrop, rgba(0, 0, 0, 0.32));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 24px;
+  animation: pasteFade 120ms ease-out;
+}
+@keyframes pasteFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.dialog {
+  background: var(--surface);
+  color: var(--ink-92);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-pop);
+  width: min(640px, 100%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--ink-08);
+}
+.title {
+  font: var(--weight-semi) var(--text-lg) var(--font-system);
+  letter-spacing: 0.005em;
+}
+.close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-55);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.close:hover { background: var(--ink-04); color: var(--ink-92); }
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  overflow: auto;
+  min-height: 0;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fieldGrow { flex: 1; min-height: 0; }
+.label {
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  color: var(--ink-65);
+}
+.input,
+.textarea {
+  appearance: none;
+  border: 1px solid var(--ink-12);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-92);
+  font: var(--text-md) var(--font-system);
+  padding: 8px 10px;
+}
+.textarea {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  min-height: 220px;
+  resize: vertical;
+}
+.input:focus,
+.textarea:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--ink-08);
+  background: var(--surface);
+}
+.hint {
+  font: var(--weight-medium) 11px var(--font-system);
+  color: var(--ink-50);
+}
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 1px solid var(--ink-12);
+  border-radius: 4px;
+  background: var(--ink-04);
+  color: var(--ink-65);
+  vertical-align: 1px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+}
+.btnGhost,
+.btnPrimary {
+  appearance: none;
+  border: 1px solid var(--ink-12);
+  background: var(--surface);
+  color: var(--ink-92);
+  font: var(--weight-semi) var(--text-md) var(--font-system);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out-expressive),
+              color var(--motion-fast) var(--ease-out-expressive),
+              border-color var(--motion-fast) var(--ease-out-expressive);
+}
+.btnGhost:hover { background: var(--ink-04); }
+.btnPrimary {
+  background: var(--ink-strong);
+  color: var(--surface);
+  border-color: var(--ink-strong);
+}
+.btnPrimary:hover:not(:disabled) { background: var(--ink-strong-hover); border-color: var(--ink-strong-hover); }
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
