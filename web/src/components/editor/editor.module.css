@@ -16,8 +16,8 @@
 /* ─── Tab bar ───────────────────────────────────────────────── */
 .tabbar {
   display: flex;
-  align-items: stretch;
-  gap: 0;
+  align-items: center;
+  gap: 4px;
   padding: 0 12px;
   background: var(--app-bg);
   border-bottom: 1px solid var(--ink-08);
@@ -91,9 +91,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px 0 14px;
-  height: 100%;
+  padding: 0 10px;
+  height: 30px;
+  flex-shrink: 0;
   background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--ink-64);
   cursor: pointer;
   user-select: none;
@@ -102,14 +105,26 @@
   white-space: nowrap;
   max-width: 220px;
   position: relative;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive),
+    box-shadow var(--motion-fast) var(--ease-out-expressive);
 }
-.tab:hover { color: var(--ink-92); }
+.tab:hover { color: var(--ink-92); background: var(--ink-04); }
+.tab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
 .tab.active {
   color: var(--ink-92);
-  border-bottom-color: var(--ink-92);
   font-weight: var(--weight-semi);
+  background: var(--surface);
+  border-color: var(--ink-10);
+  box-shadow: var(--shadow-card);
+}
+.tab.active:hover {
+  background: var(--surface);
 }
 .tab .label {
   overflow: hidden;
