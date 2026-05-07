@@ -8,6 +8,20 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.1.7
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.6...v0.1.7)
+
+### Features
+
+- **web:** Polish-pass II — primitives, microinteractions, and reliability ([#79](https://github.com/aiatelie/ai-atelie/pull/79))
+- **web:** Theme + design axes with 12 palettes ([#80](https://github.com/aiatelie/ai-atelie/pull/80))
+- **repo:** Journey suite — split CUJ + inline-evidence pipeline ([#81](https://github.com/aiatelie/ai-atelie/pull/81))
+
+### ❤️ Contributors
+
+- Kadu Maverick ([@whatiskadudoing](https://github.com/whatiskadudoing))
+
 ## v0.1.6
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.5...v0.1.6)
