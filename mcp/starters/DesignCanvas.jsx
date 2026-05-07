@@ -425,21 +425,45 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
     vp.addEventListener("pointerup", onPointerUp);
     vp.addEventListener("pointercancel", onPointerUp);
 
-    // On first paint, fit the content to the viewport so wide
-    // banners (1584px) aren't clipped at scale 1.
-    requestAnimationFrame(() => {
+    // Fit content to viewport so wide banners (1584px) aren't clipped at
+    // scale 1. The world is empty until DesignCanvas's readSaved() resolves
+    // (async since the project-meta migration), so a one-shot rAF measure
+    // would see ~0px width and skip the fit, leaving content offscreen.
+    // Watch for the world's first non-trivial width via ResizeObserver,
+    // run the fit once, then disconnect — we don't want this firing again
+    // during user pan/zoom (which doesn't change the world's intrinsic
+    // size) or during artboard resizes (the user is already in control).
+    let didInitialFit = false;
+    const fitToViewport = () => {
       const w = worldRef.current;
       if (!w) return;
-      const r = vp.getBoundingClientRect();
       const wb = w.getBoundingClientRect();
-      const fit = Math.min((r.width - 80) / Math.max(wb.width, 1), 1);
+      // Wait for the world to actually have content. Empty wrapper has
+      // tiny intrinsic width; the first real artboard makes it jump.
+      if (wb.width < 100) return;
+      didInitialFit = true;
+      const r = vp.getBoundingClientRect();
+      const fit = Math.min((r.width - 80) / wb.width, 1);
       if (fit < 1) {
         tf.current.scale = fit;
         tf.current.x = (r.width - wb.width * fit) / 2;
         tf.current.y = 30;
         apply();
       }
-    });
+    };
+    let fitObs = null;
+    if (worldRef.current) {
+      fitObs = new ResizeObserver(() => {
+        if (didInitialFit) return;
+        fitToViewport();
+        if (didInitialFit) fitObs?.disconnect();
+      });
+      fitObs.observe(worldRef.current);
+    }
+    // Belt-and-suspenders: try once on mount in case the world already
+    // has content (synchronous render path, e.g. localStorage fallback or
+    // a project that was opened before — read serves cached state).
+    requestAnimationFrame(() => { if (!didInitialFit) fitToViewport(); });
 
     return () => {
       vp.removeEventListener("wheel", onWheel);
@@ -450,6 +474,7 @@ function DCViewport({ children, minScale = 0.05, maxScale = 8, style = {} }) {
       vp.removeEventListener("pointermove", onPointerMove);
       vp.removeEventListener("pointerup", onPointerUp);
       vp.removeEventListener("pointercancel", onPointerUp);
+      fitObs?.disconnect();
     };
   }, [apply, minScale, maxScale]);
 
