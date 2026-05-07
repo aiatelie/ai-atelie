@@ -50,10 +50,10 @@ const JOURNEYS = [
     baseline: true,
   },
   {
-    id: "create-project",
-    title: "Create project",
-    description: "Name + Create lands in /editor with a fresh `p_*` id; the project dir exists on disk and the iframe canvas mounts.",
-    spec: "web/tests/e2e/journeys/create-project.spec.ts",
+    id: "create-hello-world-banner",
+    title: "Create Hello World banner",
+    description: "Name + Create lands in /editor with a fresh `p_*` id; the typed name surfaces in the editor chrome and the iframe canvas mounts.",
+    spec: "web/tests/e2e/journeys/create-hello-world-banner.spec.ts",
     baseline: true,
   },
   {
