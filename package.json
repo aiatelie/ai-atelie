@@ -17,8 +17,8 @@
     "preview": "cd web && bun run preview",
     "release": "bunx changelogen --release --push",
     "release:manual": "bunx bumpp --no-push --execute 'bunx changelogen --no-bump --output CHANGELOG.md'",
-    "test:e2e": "bunx playwright test --grep-invert @cuj",
-    "test:cuj": "bunx playwright test --grep @cuj",
+    "test:e2e": "bunx playwright test --ignore-snapshots web/tests/e2e --grep-invert 'Journey:'",
+    "test:journeys": "bunx playwright test web/tests/e2e/journeys",
     "setup:attach": "bun scripts/setup-attach-session.mjs",
     "upload:evidence": "bun scripts/upload-evidence.mjs",
     "journeys": "bun scripts/run-journeys.mjs"
