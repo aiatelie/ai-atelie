@@ -715,7 +715,7 @@ function Composer({
             ? hasQueued
               ? "1 queued — typing replaces it"
               : "Reply will queue · sent when current turn ends"
-            : "Reply to thread · paste or drop to attach"
+            : "Describe what you want — drop images or paste references"
         }
         rows={1}
       />

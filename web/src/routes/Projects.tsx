@@ -163,12 +163,12 @@ function EmptyState() {
           <path d="M3 7 V18 H21 V9 H12 L10 7 Z" />
         </svg>
       </span>
-      <div className={s.emptyTitle}>No projects yet</div>
+      <div className={s.emptyTitle}>Your atelier is empty</div>
       <div className={s.emptyBody}>
         A project is a workspace for one banner system, prototype, or design
         exploration. It owns its own tabs, comments, and chat history. Shared
-        assets (colors, lotties, components) are global across projects.
-        Name yours in the sidebar to get started.
+        assets — colors, lotties, components — are global across projects.
+        Name your first one on the left to get started.
       </div>
     </div>
   );
