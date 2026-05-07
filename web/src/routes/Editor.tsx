@@ -4425,7 +4425,19 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
       if (raf) cancelAnimationFrame(raf);
       if (settleRaf) cancelAnimationFrame(settleRaf);
     };
-  }, [pinnedSelector, zoom, tab.id, paintHover, isPanMode]);
+    // iframeReady + reloadKey are load-bearing: when the iframe element
+    // remounts (e.g. the canvas-snap toggling display from "frame" to
+    // "fill" on first __page_is_canvas, or a force-reload bumping
+    // reloadKey), `doc`/`win`/`mo` above bind to the *prior*
+    // contentDocument. Without re-subscribing, transform writes from the
+    // freshly-mounted DesignCanvas's pan/zoom land on a detached
+    // documentElement and the overlay drifts off the element. Adding both
+    // to the deps array forces a clean re-attach on every iframe identity
+    // change. (Symptom this fixed: select an element, drag-pan the
+    // canvas, the parent-side selection rectangle stayed put while the
+    // element moved underneath it — the MutationObserver was firing on a
+    // ghost.)
+  }, [pinnedSelector, zoom, tab.id, paintHover, isPanMode, iframeReady, reloadKey]);
 
   // Coordinate scale for the overlay. In framed mode the iframe is
   // visually scaled by `zoom`, so iframe-content rects need to be
