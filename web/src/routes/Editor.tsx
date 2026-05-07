@@ -3637,6 +3637,8 @@ function Toolbar({
         </button>
       )}
 
+      <div className={s.toolDivider} aria-hidden="true" />
+
       <button
         className={s.iconBtn}
         title="Ask AI to add tweak controls for this file"
@@ -3762,13 +3764,16 @@ function Toolbar({
       )}
 
       {showZoom && (
-        <button
-          className={`${s.iconBtn} ${s.zoomBtn}`}
-          onClick={() => onZoom(zoom === 0.5 ? 0.75 : zoom === 0.75 ? 1 : 0.5)}
-          title="Cycle zoom: 50% → 75% → 100%"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
+        <>
+          <div className={s.toolDivider} aria-hidden="true" />
+          <button
+            className={`${s.iconBtn} ${s.zoomBtn}`}
+            onClick={() => onZoom(zoom === 0.5 ? 0.75 : zoom === 0.75 ? 1 : 0.5)}
+            title="Cycle zoom: 50% → 75% → 100%"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+        </>
       )}
 
     </div>
