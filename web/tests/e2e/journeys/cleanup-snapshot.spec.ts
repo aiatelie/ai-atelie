@@ -48,7 +48,7 @@ test.describe("Journey: cleanup snapshot", () => {
 
     // Snap the home page so the runner has visual evidence the suite
     // landed back on a clean projects list.
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.goto("/projects?journey-mode=1", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(500);
     await page.screenshot({ path: FINAL_SCREENSHOT, fullPage: false });
 

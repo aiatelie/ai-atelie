@@ -36,10 +36,19 @@ test.describe("Journey: agent edits canvas", () => {
   test.setTimeout(8 * 60_000);
 
   test("agent receives a prompt, writes files, canvas paints the result", async ({ page, request }) => {
+    // Force the chat to use Sonnet for evidence runs — same convention
+    // as the verify-with-playwright skill. Cheaper + faster than Opus
+    // with no loss of fidelity for our assertions. Setting it via
+    // addInitScript means every page load (incl. iframe sub-frames)
+    // sees the value before the editor reads it.
+    await page.addInitScript(() => {
+      try { localStorage.setItem("editor-model-id", "claude-sonnet-4-6"); } catch { /* ignore */ }
+    });
+
     let projectId: string | undefined;
     try {
       // ─── Create a project ─────────────────────────────────────────
-      await page.goto("/", { waitUntil: "domcontentloaded" });
+      await page.goto("/projects?journey-mode=1", { waitUntil: "domcontentloaded" });
       await page.getByTestId("create-project-name").fill("Journey · Agent Edits");
       await page.getByTestId("create-project-submit").click();
       await page.waitForURL(/\/editor.*p=p_/, { timeout: 15_000 });

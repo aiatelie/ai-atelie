@@ -18,7 +18,10 @@ test.describe("Journey: home loads", () => {
   test.setTimeout(30_000);
 
   test("home page renders with the project create form", async ({ page }) => {
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    // Navigate directly to /projects with journey-mode so the home
+    // grid is filtered to demo + Journey · *. The bare / redirect
+    // strips query strings, so we skip it.
+    await page.goto("/projects?journey-mode=1", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveTitle(/AI Atelie/i);
 
     // Sidebar form is the entry affordance for project creation; it's

@@ -12,8 +12,8 @@
  * form input rather than a browser `alert()`.
  */
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import s from "../components/projects/projects.module.css";
 import { NewProjectForm } from "../components/projects/NewProjectForm";
 import { ConfirmDialog } from "../components/projects/ConfirmDialog";
@@ -31,7 +31,19 @@ import {
 export default function Projects() {
   const { all, loading } = useProjects();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [deleting, setDeleting] = useState<Project | null>(null);
+
+  // `?journey-mode=1` filters the home grid to the demo project + any
+  // project whose name starts with "Journey · ". The journey suite
+  // navigates with this param so PR-evidence screenshots show a clean
+  // home regardless of the contributor's local dev clutter. Production
+  // users never see the param so behavior is unchanged for them.
+  const journeyMode = params.get("journey-mode") === "1";
+  const visible = useMemo(() => {
+    if (!journeyMode) return all;
+    return all.filter((p) => p.id === "demo" || p.name.startsWith("Journey · "));
+  }, [all, journeyMode]);
 
   const openProject = (id: string) => {
     setActiveProject(id);
@@ -83,15 +95,15 @@ export default function Projects() {
             >
               Projects
               {!loading && (
-                <span className={s.tabCount} aria-label={`${all.length} projects`}>
-                  {all.length}
+                <span className={s.tabCount} aria-label={`${visible.length} projects`}>
+                  {visible.length}
                 </span>
               )}
             </button>
           </nav>
 
           <div className={s.mainBody}>
-            {all.length === 0 ? (
+            {visible.length === 0 ? (
               loading ? (
                 <LoadingSkeleton />
               ) : (
@@ -99,7 +111,7 @@ export default function Projects() {
               )
             ) : (
               <div className={s.grid}>
-                {all.map((p) => (
+                {visible.map((p) => (
                   <ProjectCard
                     key={p.id}
                     project={p}

@@ -25,7 +25,7 @@ test.describe("Journey: create project", () => {
     let projectId: string | undefined;
     const before = (await readdir(PROJECTS_DIR)).sort();
     try {
-      await page.goto("/", { waitUntil: "domcontentloaded" });
+      await page.goto("/projects?journey-mode=1", { waitUntil: "domcontentloaded" });
 
       // Fill the sidebar form. data-testid hooks survive copy changes.
       const nameInput = page.getByTestId("create-project-name");
