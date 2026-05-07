@@ -211,28 +211,35 @@ EOF
 
 After creation, output the PR URL. Then prune `.evidence/` to the last 5 runs.
 
-## Step 7 — Attach baseline-journey evidence to the PR body
+## Step 7 — Attach evidence to the PR body
 
-Every PR ships with the canonical baseline journeys' evidence in the
-PR body — separate from the per-task verification artifacts above.
-The journey suite is what proves the surrounding product still works
-even though your change was scoped:
+Delegate to **`.claude/skills/pr-evidence/SKILL.md`** — that skill
+owns the contract for the canonical evidence flow (8 baseline
+journeys + optional `--task <spec>` for per-PR feature demos),
+including the verification step that confirms the body update
+landed.
+
+The short version:
 
 ```sh
+# Canonical: full suite + body update on the current PR
 bun run journeys
+
+# With a per-PR feature demo (write a small Playwright spec, then:)
+bun run journeys -- \
+  --task path/to/feature-demo.spec.ts \
+  --task-title "Feature title" \
+  --task-description "What this PR proves visually."
 ```
 
-This runs `home-loads` + `create-project` + `agent-edits-canvas` +
-`cleanup-snapshot` (each its own ≤90-second-to-8-minute spec),
-ffmpeg-compresses the videos, uploads them, and rewrites the
-`<!-- journey-evidence:start -->` / `<!-- journey-evidence:end -->`
-block in the current PR's body. Idempotent: re-runs replace the
-block instead of appending. Per-journey isolation: a timeout in one
-journey doesn't kill the rest.
+When to write a `--task` spec:
 
-If `bun run journeys` reports a failure, decide via the cuj-guardian
-triage whether it's a real regression or a stale assertion. Don't
-ship until the suite is green or the failure is documented.
+- This PR ships a user-visible feature (theme, UI flow, new affordance).
+- Skip if the PR is purely API/server/config; baseline alone is enough.
+
+If `bun run journeys` reports a failure, walk the `cuj-guardian`
+triage protocol before touching either the spec or the feature.
+Don't ship until the suite is green or the failure is documented.
 
 ## Anti-patterns
 
@@ -253,5 +260,6 @@ ship until the suite is green or the failure is documented.
 
 - `.claude/skills/verify-with-playwright/SKILL.md` — the verify delegate.
 - `.claude/skills/semantic-commit/SKILL.md` — the commit delegate.
+- `.claude/skills/pr-evidence/SKILL.md` — Step 7 delegate (journey suite + body update).
 - `CONTRIBUTING.md` — repo-wide commit/release/skill conventions.
 - `playwright.config.ts` — e2e config the verify step uses.
