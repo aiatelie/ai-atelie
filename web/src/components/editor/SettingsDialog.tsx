@@ -16,7 +16,6 @@ import { useEffect, useState } from "react";
 import s from "./settingsDialog.module.css";
 import { useAgents, rescanAgents, type AgentInfo } from "../../data/agents";
 import {
-  getTheme, setTheme, themes, type ThemePreference,
   getDesign, setDesign, clearDesign, designs, type Design, type DesignMeta,
 } from "../../lib/theme";
 import {
@@ -34,11 +33,10 @@ import {
   type FailureSoundId,
 } from "../../lib/notifications";
 
-type SectionId = "appearance" | "design" | "skills" | "notifications" | "adapters" | "about";
+type SectionId = "theme" | "skills" | "notifications" | "adapters" | "about";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
-  { id: "appearance", label: "Appearance" },
-  { id: "design", label: "Design" },
+  { id: "theme", label: "Theme" },
   { id: "skills", label: "Skills" },
   { id: "notifications", label: "Notifications" },
   { id: "adapters", label: "Adapters" },
@@ -48,7 +46,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 export function SettingsDialog({
   open,
   onClose,
-  initialSection = "appearance",
+  initialSection = "theme",
   projectId,
 }: {
   open: boolean;
@@ -92,8 +90,7 @@ export function SettingsDialog({
           </nav>
 
           <div className={s.content}>
-            {section === "appearance" && <AppearanceSection />}
-            {section === "design" && <DesignSection />}
+            {section === "theme" && <ThemeSection />}
             {section === "skills" && <SkillsSection projectId={projectId} />}
             {section === "notifications" && <NotificationsSection />}
             {section === "adapters" && <AdaptersSection />}
@@ -105,43 +102,7 @@ export function SettingsDialog({
   );
 }
 
-function AppearanceSection() {
-  const [active, setActive] = useState<ThemePreference>(() => getTheme());
-  const onPick = (pref: ThemePreference) => {
-    setTheme(pref);
-    setActive(pref);
-  };
-  return (
-    <section className={s.section}>
-      <h3 className={s.sectionTitle}>Appearance</h3>
-      <p className={s.sectionDesc}>
-        Theme preference for the editor chrome. <strong>System</strong> follows
-        your OS Light/Dark setting and flips live. <strong>Retro</strong> is a
-        decorative cream-and-navy skin.
-      </p>
-      <div
-        className={s.segControl}
-        role="group"
-        aria-label="Theme"
-        style={{ ["--seg-cols" as string]: themes.length } as React.CSSProperties}
-      >
-        {themes.map((th) => (
-          <button
-            key={th.name}
-            type="button"
-            className={`${s.segBtn} ${th.name === active ? s.segBtnActive : ""}`}
-            aria-pressed={th.name === active}
-            onClick={() => onPick(th.name)}
-          >
-            {th.label}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function DesignSection() {
+function ThemeSection() {
   const [active, setActive] = useState<Design | null>(() => getDesign());
   const onPick = (d: Design) => {
     setDesign(d);
@@ -157,22 +118,22 @@ function DesignSection() {
 
   return (
     <section className={s.section}>
-      <h3 className={s.sectionTitle}>Design</h3>
+      <h3 className={s.sectionTitle}>Theme</h3>
       <p className={s.sectionDesc}>
-        A decorative palette overlay on top of your <strong>Appearance</strong>
-        choice. Designs sit independently of Light/Dark — pick one to repaint
-        the chrome with a different identity, or reset to revert to the
-        underlying theme.
+        Pick a theme to repaint the editor chrome — and the canvas surface
+        around your designs — with a different identity. Themes are split
+        into Light and Dark variants; pick whichever fits how you want the
+        app to feel. Reset to fall back to the default cream-and-rust look.
       </p>
 
       <div className={s.designStatus}>
         <span className={s.designStatusLabel}>
           {active ? (
             <>
-              Design: <strong>{designs.find((d) => d.name === active)?.label}</strong>
+              Theme: <strong>{designs.find((d) => d.name === active)?.label}</strong>
             </>
           ) : (
-            <>No design — using your Appearance theme.</>
+            <>No theme picked — using the default.</>
           )}
         </span>
         <button
@@ -181,7 +142,7 @@ function DesignSection() {
           onClick={onReset}
           disabled={!active}
         >
-          Reset to theme
+          Reset to default
         </button>
       </div>
 
