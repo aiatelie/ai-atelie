@@ -71,6 +71,13 @@ const JOURNEYS = [
     baseline: true,
   },
   {
+    id: "canvas-variations",
+    title: "Canvas variations",
+    description: "Agent converts a page-mode project into a design canvas with two side-by-side variations — one green, one purple — both showing 'Hello World'.",
+    spec: "web/tests/e2e/journeys/canvas-variations.spec.ts",
+    baseline: true,
+  },
+  {
     id: "cleanup-snapshot",
     title: "Cleanup snapshot",
     description: "Suite leaves no `Journey · *` projects on disk; force-deletes any leak.",
