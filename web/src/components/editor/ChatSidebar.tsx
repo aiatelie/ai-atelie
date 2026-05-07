@@ -221,14 +221,15 @@ export function ChatTab({
    *  iframe screenshot for the next turn. Editor enables this; Onboard
    *  doesn't (no iframe). */
   showCanvasToggle?: boolean;
-  /** Active project id, threaded down so the ActiveSkillsStrip can
-   *  fetch its own manifest. Optional: routes that render ChatTab
-   *  outside an active-project context (Onboard) omit it and the
-   *  strip silently hides. */
+  /** Active project id. Drives both the `@`-mention file picker (file
+   *  search lives per-project) AND the ActiveSkillsStrip (which fetches
+   *  its own manifest to render the toggle pills). Optional: routes
+   *  that render ChatTab outside an active-project context (Onboard)
+   *  omit it; the file picker disables and the strip silently hides. */
   projectId?: string;
   /** Open Settings to the Skills section. Wired by the parent (Editor);
-   *  the strip click handler calls this. Optional — when absent, the
-   *  strip still renders but the click does nothing. */
+   *  the active-skills-strip click handler calls this. Optional — when
+   *  absent, the strip still renders but the click does nothing. */
   onOpenSkillsSettings?: () => void;
 }) {
   // Seed-text signal for "edit this user message and resend": when the
@@ -287,6 +288,7 @@ export function ChatTab({
         contextLabel={composerContext}
         onClearContext={onClearComposerContext}
         showCanvasToggle={showCanvasToggle}
+        projectId={projectId}
         seedText={editSeed?.text}
         seedNonce={editSeed?.nonce}
         onSlashAction={(action) => {
@@ -405,6 +407,7 @@ function Composer({
   seedText,
   seedNonce,
   showCanvasToggle,
+  projectId,
 }: {
   disabled: boolean;
   /** True when the route is already holding a queued message. The submit
@@ -447,6 +450,9 @@ function Composer({
    *  `seedText` (used by the edit-and-resubmit flow). */
   seedText?: string;
   seedNonce?: number;
+  /** Active project id — when present, typing `@` in the composer opens
+   *  a file-picker popover. Omit to disable. */
+  projectId?: string;
 }) {
   const [text, setText] = useState<string>(() => {
     if (!draftKey || typeof window === "undefined") return "";
@@ -542,9 +548,11 @@ function Composer({
   }, [text]);
 
   const addFiles = async (files: FileList | File[]) => {
-    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const all = Array.from(files);
+    const images = all.filter((f) => f.type.startsWith("image/"));
+    const texts = all.filter((f) => !f.type.startsWith("image/") && isTextLikeFile(f));
     const next = await Promise.all(
-      list.map(
+      images.map(
         (f) =>
           new Promise<Attachment>((resolve, reject) => {
             const r = new FileReader();
@@ -554,7 +562,20 @@ function Composer({
           })
       )
     );
-    setAttachments((prev) => [...prev, ...next]);
+    if (next.length) setAttachments((prev) => [...prev, ...next]);
+    // Text-like drops (spec.md, csv, json, etc.) are appended to the
+    // composer as fenced code blocks. Cap each at 64KB so a stray
+    // multi-MB log file doesn't lock up the textarea or blow past the
+    // adapter token budget on send.
+    if (texts.length) {
+      const blocks = await Promise.all(texts.map(readTextDrop));
+      setText((prev) => {
+        const trimmed = prev.replace(/\s+$/, "");
+        const body = blocks.join("\n\n");
+        return trimmed ? `${trimmed}\n\n${body}\n` : `${body}\n`;
+      });
+      requestAnimationFrame(() => ref.current?.focus());
+    }
   };
 
   const submit = () => {
@@ -596,6 +617,78 @@ function Composer({
     setText("");
   };
 
+  // @-file mention popover. Triggered when the text immediately before the
+  // caret is `@<query>` (no whitespace inside the query). Lazy-fetches the
+  // project file list on first open; cached for the lifetime of the
+  // composer mount. Pick → replaces `@<query>` with `@<path> ` so the
+  // agent can `Read` the file directly. Reuses the slash-menu CSS for
+  // visual consistency.
+  //
+  // Caret is sourced from the ref via useLayoutEffect after every text
+  // change, not from event handlers. Programmatic value changes (from
+  // Playwright fill, from the seed effect, from setText callbacks) don't
+  // always carry a reliable selectionStart on the synthetic event, so
+  // reading the live DOM position is the only way to stay in sync.
+  const [caret, setCaret] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setCaret(el.selectionStart ?? text.length);
+  }, [text]);
+  const [mentionFiles, setMentionFiles] = useState<MentionFile[] | null>(null);
+  const [mentionFetched, setMentionFetched] = useState(false);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const beforeCaret = text.slice(0, caret);
+  const mentionMatch = projectId ? /(?:^|\s)@([^\s@]*)$/.exec(beforeCaret) : null;
+  const mentionQuery = mentionMatch?.[1] ?? null;
+  const mentionMatches = useMemo(() => {
+    if (mentionQuery === null || !mentionFiles) return [];
+    return rankMentionMatches(mentionFiles, mentionQuery).slice(0, 8);
+  }, [mentionFiles, mentionQuery]);
+  const showMention = mentionQuery !== null && mentionMatches.length > 0;
+  useEffect(() => { setMentionIndex(0); }, [mentionQuery]);
+  // Lazy-fetch the file list the first time `@` is typed; refetch on
+  // project switch. We deliberately don't put `mentionQuery` in deps
+  // (and don't abort on cleanup) — every keystroke after `@` would
+  // otherwise re-run the effect, and the previous fetch's abort would
+  // cancel the in-flight request before it could resolve. `needsFetch`
+  // flips true once and stays true; subsequent renders bail on the
+  // `mentionFetched` short-circuit.
+  const needsMentionFetch = mentionQuery !== null;
+  useEffect(() => {
+    if (!projectId || !needsMentionFetch || mentionFetched) return;
+    setMentionFetched(true);
+    fetch(`/api/projects/${encodeURIComponent(projectId)}/files`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((tree: { files?: MentionFile[] } | null) => {
+        if (tree?.files) setMentionFiles(tree.files);
+      })
+      .catch(() => { /* ignore */ });
+  }, [projectId, needsMentionFetch, mentionFetched]);
+  // Wipe the cache on project switch.
+  useEffect(() => {
+    setMentionFiles(null);
+    setMentionFetched(false);
+  }, [projectId]);
+
+  const pickMention = (f: MentionFile) => {
+    if (!mentionMatch) return;
+    const matchStart = (mentionMatch.index ?? 0) + (mentionMatch[0].length - mentionMatch[1].length - 1); // index of the `@`
+    const before = text.slice(0, matchStart);
+    const after = text.slice(caret);
+    const inserted = `@${f.path} `;
+    const next = before + inserted + after;
+    setText(next);
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (!el) return;
+      const newCaret = (before + inserted).length;
+      el.focus();
+      el.setSelectionRange(newCaret, newCaret);
+      setCaret(newCaret);
+    });
+  };
+
   return (
     <form
       className={`${s.composer} ${dragOver ? s.composerDrag : ""}`}
@@ -629,6 +722,25 @@ function Composer({
             >
               <span className={s.slashName}>{c.name}</span>
               <span className={s.slashDesc}>{c.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {showMention && (
+        <div className={s.slashMenu} role="listbox" data-testid="mention-popover">
+          {mentionMatches.map((f, i) => (
+            <button
+              key={f.path}
+              type="button"
+              role="option"
+              aria-selected={i === mentionIndex}
+              className={`${s.slashItem} ${i === mentionIndex ? s.slashItemActive : ""}`}
+              onMouseEnter={() => setMentionIndex(i)}
+              onMouseDown={(e) => { e.preventDefault(); /* keep textarea focus */ }}
+              onClick={() => pickMention(f)}
+            >
+              <span className={s.slashName}>@{f.name}</span>
+              <span className={s.slashDesc}>{f.path}</span>
             </button>
           ))}
         </div>
@@ -705,7 +817,12 @@ function Composer({
         className={s.composerField}
         data-testid="chat-composer"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setCaret(e.target.selectionStart ?? e.target.value.length);
+        }}
+        onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
+        onClick={(e) => setCaret((e.currentTarget as HTMLTextAreaElement).selectionStart ?? 0)}
         onPaste={async (e) => {
           const items = Array.from(e.clipboardData.items).filter((it) => it.type.startsWith("image/"));
           if (items.length === 0) return;
@@ -720,6 +837,27 @@ function Composer({
             e.preventDefault();
             submit();
             return;
+          }
+          if (showMention) {
+            if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex((i) => Math.min(i + 1, mentionMatches.length - 1)); return; }
+            if (e.key === "ArrowUp")   { e.preventDefault(); setMentionIndex((i) => Math.max(i - 1, 0)); return; }
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); pickMention(mentionMatches[mentionIndex]); return; }
+            if (e.key === "Tab") { e.preventDefault(); pickMention(mentionMatches[mentionIndex]); return; }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              // Drop the partial @-token so the popover closes without
+              // also wiping anything else the user typed.
+              if (mentionMatch) {
+                const start = (mentionMatch.index ?? 0) + (mentionMatch[0].length - mentionMatch[1].length - 1);
+                setText(text.slice(0, start) + text.slice(caret));
+                requestAnimationFrame(() => {
+                  ref.current?.focus();
+                  setCaret(start);
+                  ref.current?.setSelectionRange(start, start);
+                });
+              }
+              return;
+            }
           }
           if (showSlash) {
             if (e.key === "ArrowDown") { e.preventDefault(); setSlashIndex((i) => Math.min(i + 1, slashMatches.length - 1)); return; }
@@ -738,7 +876,9 @@ function Composer({
             ? hasQueued
               ? "1 queued — typing replaces it"
               : "Reply will queue · sent when current turn ends"
-            : "Describe what you want — drop images or paste references"
+            : projectId
+              ? "Describe what you want — @ to reference a file, drop images or text"
+              : "Describe what you want — drop images or paste references"
         }
         rows={1}
       />
@@ -804,6 +944,7 @@ function Composer({
       <div className={s.composerHint} aria-hidden="true">
         <kbd className={s.kbd}>Enter</kbd> to send ·{" "}
         <kbd className={s.kbd}>Shift</kbd>+<kbd className={s.kbd}>Enter</kbd> newline ·{" "}
+        {projectId ? <><kbd className={s.kbd}>@</kbd> for files · </> : null}
         paste images · drop files
       </div>
     </form>
@@ -859,6 +1000,67 @@ const STARTER_PROMPTS: Array<{ short: string; full: string }> = [
   { short: "Try a bolder type direction", full: "Propose a bolder typography direction for the active page — pair, scale, weights. Show the change as a rough sketch in source." },
 ];
 
+/** Recognized text-file extensions for the composer drop handler.
+ *  Anything matching here gets read as text and appended to the
+ *  composer as a fenced code block instead of being silently dropped. */
+const TEXT_DROP_EXTS = new Set([
+  "md", "txt", "csv", "tsv", "json", "yaml", "yml", "toml", "ini", "env",
+  "html", "htm", "xml", "svg",
+  "css", "scss", "less",
+  "js", "jsx", "ts", "tsx", "mjs", "cjs",
+  "py", "rb", "go", "rs", "java", "kt", "swift", "c", "h", "cpp", "hpp",
+  "sh", "bash", "fish", "zsh",
+  "sql", "graphql", "gql",
+]);
+const TEXT_DROP_MAX_BYTES = 64 * 1024;
+
+function isTextLikeFile(f: File): boolean {
+  if (f.type.startsWith("text/")) return true;
+  const dot = f.name.lastIndexOf(".");
+  if (dot < 0) return false;
+  return TEXT_DROP_EXTS.has(f.name.slice(dot + 1).toLowerCase());
+}
+
+async function readTextDrop(f: File): Promise<string> {
+  const slice = f.slice(0, TEXT_DROP_MAX_BYTES);
+  const text = await slice.text();
+  const truncated = f.size > TEXT_DROP_MAX_BYTES ? `\n... (truncated — ${(f.size / 1024).toFixed(0)} KB total)` : "";
+  const dot = f.name.lastIndexOf(".");
+  const lang = dot >= 0 ? f.name.slice(dot + 1).toLowerCase() : "";
+  return `\`\`\`${lang} ${f.name}\n${text}${truncated}\n\`\`\``;
+}
+
+/** Project file shape returned by `GET /api/projects/:id/files`. Only
+ *  the fields the @-mention popover actually uses — keep narrow so a
+ *  schema drift on unrelated fields doesn't break the typecheck. */
+type MentionFile = {
+  path: string;
+  name: string;
+  kind?: "page" | "component" | "asset" | "config";
+};
+
+/** Rank candidates for the `@`-mention popover. Mirrors QuickSwitcher's
+ *  `scoreMatch`: prefix-on-name beats substring-on-name beats substring-
+ *  on-path. Empty query returns everything in original order so the
+ *  user gets a glanceable list the moment they type `@`. */
+function rankMentionMatches(files: MentionFile[], q: string): MentionFile[] {
+  const query = q.trim().toLowerCase();
+  if (!query) return files.slice();
+  const scored: { f: MentionFile; score: number }[] = [];
+  for (const f of files) {
+    const name = f.name.toLowerCase();
+    const path = f.path.toLowerCase();
+    let score = 0;
+    if (name === query) score = 1000;
+    else if (name.startsWith(query)) score = 500;
+    else if (name.includes(query)) score = 250;
+    else if (path.includes(query)) score = 100;
+    if (score > 0) scored.push({ f, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((x) => x.f);
+}
+
 /** Slash commands available from the composer. Typing `/` opens a
  *  popover; click or hit Enter to execute. Each command resolves either
  *  to a prompt (sent as a turn) or an action (handler runs synchronously). */
@@ -881,6 +1083,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { name: "/explain", description: "Walk through what's currently on the active page", kind: "prompt", prompt: "Walk me through what's currently on the active page — components, layout decisions, design choices." },
   { name: "/refactor", description: "Refactor the active component without changing visuals", kind: "prompt", prompt: "Refactor the active component for cleaner structure without changing the visual output." },
   { name: "/test", description: "Suggest a small test for the most recent change", kind: "prompt", prompt: "Suggest a small test or visual sanity check for the most recent change." },
+  { name: "/compress", description: "Summarize the conversation so far in ~200 words and continue", kind: "prompt", prompt: "Summarize the conversation so far in ~200 words — what we've decided, what's done, what's still open. Then we'll continue from there." },
   { name: "/new", description: "Start a new chat thread", kind: "action", action: "new-thread" },
   { name: "/clear", description: "Clear all messages in this thread", kind: "action", action: "clear" },
   { name: "/copy", description: "Copy this thread to clipboard as plain text", kind: "action", action: "copy" },

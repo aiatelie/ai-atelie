@@ -1,0 +1,9 @@
+{
+  "name": "playwright-tools",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}

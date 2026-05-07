@@ -74,8 +74,19 @@ BACKEND-ARCH-CLAUDE-DESIGN.txt
 MULTI-TENANT-CLAUDE-DESIGN.txt
 _internal/
 
-# Internal inspection scripts (not shipped)
-playwright-tools/
+# Internal inspection scripts (not shipped). The three load-bearing
+# scripts and their package metadata ARE tracked — they're spawned by
+# api/src/services/{exportRender,exportVideo,exportOgraf}.ts and the
+# server returns 503 without them. Anything else in this dir
+# (one-off inspect-*.mjs / drive.mjs / scratch dumps) stays local.
+playwright-tools/*
+!playwright-tools/.gitignore
+!playwright-tools/README.md
+!playwright-tools/package.json
+!playwright-tools/bun.lock
+!playwright-tools/export-element.mjs
+!playwright-tools/record-element.mjs
+!playwright-tools/extract-element-html.mjs
 
 # Personal user content — designs, templates, assets the maintainer
 # created for their own use. The OSS repo ships only the framework.

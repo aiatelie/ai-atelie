@@ -103,7 +103,8 @@ Alpha. Solo-built, used in anger by the author. APIs and project formats may cha
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md).
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — repo conventions, security model, what's accepted.
+- [docs/CONTRIBUTOR_WORKFLOW.md](./docs/CONTRIBUTOR_WORKFLOW.md) — the day-to-day loop: branch → implement → verify → semantic commit → PR with inline-video evidence → review → release.
 
 ## License
 

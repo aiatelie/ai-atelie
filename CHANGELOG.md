@@ -8,6 +8,21 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.1.8
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.7...v0.1.8)
+
+### Bug Fixes
+
+- **web:** Smart-label element identity across selection surfaces ([#82](https://github.com/aiatelie/ai-atelie/pull/82))
+- **web:** Overlay tracks transform-driven canvas motion ([#83](https://github.com/aiatelie/ai-atelie/pull/83))
+- **api,web:** Chat stream survives full page reload ([#84](https://github.com/aiatelie/ai-atelie/pull/84))
+- **repo:** Restore playwright-tools/ scripts so export endpoints work ([#85](https://github.com/aiatelie/ai-atelie/pull/85))
+
+### ❤️ Contributors
+
+- Kadu Maverick ([@whatiskadudoing](https://github.com/whatiskadudoing))
+
 ## v0.1.7
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.6...v0.1.7)
