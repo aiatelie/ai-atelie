@@ -78,6 +78,13 @@ const JOURNEYS = [
     baseline: true,
   },
   {
+    id: "comment-translate",
+    title: "Comment → translate",
+    description: "User clicks the 'Hello World' heading in Comment mode, leaves a note asking for Spanish, hits Send to chat, and the iframe paints 'hola mundo'.",
+    spec: "web/tests/e2e/journeys/comment-translate.spec.ts",
+    baseline: true,
+  },
+  {
     id: "cleanup-snapshot",
     title: "Cleanup snapshot",
     description: "Suite leaves no `Journey · *` projects on disk; force-deletes any leak.",
