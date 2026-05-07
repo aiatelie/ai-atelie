@@ -209,6 +209,28 @@ function DesignSwatchCard({
   );
 }
 
+/** Inline check glyph for the SkillsSection custom checkbox visual.
+ *  Mirrors the one in NewProjectForm so both surfaces feel like the
+ *  same component — same rounded corners, same tick path, same stroke
+ *  weight. Native <input type="checkbox"> is kept for accessibility +
+ *  form semantics; this glyph just paints the visible state. */
+function SkillCheckGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 8.5l3 3 6.5-7" />
+    </svg>
+  );
+}
+
 /* SkillsSection — per-project skill catalog viewer.
  *
  * Two groups:
@@ -328,30 +350,26 @@ function SkillsSection({ projectId }: { projectId?: string }) {
         <p className={s.sectionDesc}>Loading…</p>
       ) : (
         <>
-          <div style={{ marginBottom: "20px" }}>
-            <div style={{ fontSize: "0.78em", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--ink-65)", fontWeight: 600, marginBottom: "8px" }}>
-              Aesthetic direction
-            </div>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div className={s.skillsGroup}>
+            <div className={s.skillsGroupLabel}>Aesthetic direction</div>
+            <ul className={s.skillsList}>
               {aestheticSkills.map((entry) => {
                 const isActive = active.includes(entry.name);
                 return (
                   <li key={entry.name}>
-                    <label style={{ display: "flex", gap: "12px", padding: "10px 12px", border: "1px solid var(--ink-08)", borderRadius: "8px", cursor: "pointer", background: isActive ? "var(--brand-bg)" : "var(--surface-2)" }}>
+                    <label className={s.skillRow}>
                       <input
                         type="checkbox"
                         checked={isActive}
                         disabled={saving}
                         onChange={() => toggle(entry.name)}
-                        style={{ marginTop: "2px" }}
                       />
-                      <span style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <span style={{ fontWeight: 600, color: "var(--ink-92)" }}>
-                          {entry.display}
-                        </span>
-                        <span style={{ color: "var(--ink-65)", fontSize: "0.92em" }}>
-                          {entry.description}
-                        </span>
+                      <span className={s.skillCheck} aria-hidden="true">
+                        <SkillCheckGlyph className={s.skillCheckMark} />
+                      </span>
+                      <span className={s.skillBody}>
+                        <span className={s.skillName}>{entry.display}</span>
+                        <span className={s.skillDesc}>{entry.description}</span>
                       </span>
                     </label>
                   </li>
@@ -361,22 +379,18 @@ function SkillsSection({ projectId }: { projectId?: string }) {
           </div>
 
           {capabilitySkills.length > 0 && (
-            <div>
-              <div style={{ fontSize: "0.78em", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--ink-65)", fontWeight: 600, marginBottom: "8px" }}>
-                Capabilities (always on)
-              </div>
-              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div className={s.skillsGroup}>
+              <div className={s.skillsGroupLabel}>Capabilities (always on)</div>
+              <ul className={s.skillsList}>
                 {capabilitySkills.map((entry) => (
-                  <li
-                    key={entry.name}
-                    style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "8px 12px", border: "1px solid var(--ink-08)", borderRadius: "8px", background: "var(--surface-warm)" }}
-                  >
-                    <span style={{ fontWeight: 600, color: "var(--ink-85)", fontSize: "0.95em" }}>
-                      {entry.display}
-                    </span>
-                    <span style={{ color: "var(--ink-65)", fontSize: "0.88em" }}>
-                      {entry.description}
-                    </span>
+                  <li key={entry.name}>
+                    <div className={s.capabilityRow}>
+                      <span className={s.capabilityBadge}>On</span>
+                      <span className={s.skillBody}>
+                        <span className={s.skillName}>{entry.display}</span>
+                        <span className={s.skillDesc}>{entry.description}</span>
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>

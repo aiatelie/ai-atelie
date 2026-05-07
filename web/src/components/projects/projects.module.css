@@ -195,47 +195,54 @@
   outline-offset: 2px;
 }
 
-/* Design-skills picker — collapsible row above the Create button.
- * Reuses the form's surface/ink token vocabulary. The default-collapsed
- * state keeps the form scannable for users who don't want to think
- * about skills; expanding is a deliberate "I care about this" gesture. */
+/* Design-skills picker — visible by default on the New Project form so
+ * users see the choice on first visit instead of having to discover a
+ * collapsible. The list is small (4 entries today) so taking the
+ * vertical space is fine; the section header doubles as a select-all /
+ * none toggle.
+ *
+ * The catalog is fetched on every mount of NewProjectForm — any
+ * `kind: "aesthetic"` skill added to skills/index.json automatically
+ * surfaces here on the next page load, no code changes needed. */
 .formSkills {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 10px 10px 8px;
   border: 1px solid var(--ink-08);
   border-radius: var(--radius-md);
   background: var(--surface-warm);
 }
-.formSkillsToggle {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
+.formSkillsHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--ink-92);
-  width: 100%;
+  padding: 0 2px;
 }
 .formSkillsLabel {
   font: var(--weight-semi) var(--text-sm) var(--font-system);
+  color: var(--ink-92);
 }
-.formSkillsSummary {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+/* "Select all / None" pill — sits where the static counter used to.
+ * Click flips between all-selected and all-cleared states; the label
+ * updates to reflect what the click will do. */
+.formSkillsToggleAll {
+  appearance: none;
+  border: 1px solid var(--ink-12);
+  background: var(--surface);
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
   font: var(--weight-medium) var(--text-xs) var(--font-system);
-  color: var(--ink-55);
-  letter-spacing: 0.02em;
+  color: var(--ink-65);
+  letter-spacing: 0.04em;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.formSkillsCaret {
-  font-size: 10px;
-  color: var(--ink-50);
+.formSkillsToggleAll:hover {
+  background: var(--ink-04);
+  color: var(--ink-92);
+  border-color: var(--ink-20);
 }
 .formSkillsList {
   list-style: none;
@@ -243,37 +250,96 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 4px;
 }
 .formSkillsItem { margin: 0; }
+/* Each row is a full-width click target. The native checkbox is hidden
+ * (visually) but kept for accessibility; the visible "check" is a
+ * styled div that flips when the input is :checked. */
 .formSkillsRow {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: flex-start;
-  padding: 6px 8px;
+  padding: 9px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s;
+  border: 1px solid transparent;
+  position: relative;
 }
-.formSkillsRow:hover { background: var(--ink-04); }
-.formSkillsRow input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+.formSkillsRow:hover {
+  background: var(--ink-04);
+  border-color: var(--ink-08);
+}
+.formSkillsRow:has(input:checked) {
+  background: var(--brand-bg);
+  border-color: var(--brand-border);
+}
+.formSkillsRow:has(input:checked):hover {
+  background: var(--brand-hover);
+}
+.formSkillsRow input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.formSkillsCheck {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 4px;
+  border: 1.5px solid var(--ink-25);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+.formSkillsRow:has(input:checked) .formSkillsCheck {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.formSkillsCheckMark {
+  width: 10px;
+  height: 10px;
+  color: var(--on-brand);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.12s, transform 0.12s;
+}
+.formSkillsRow:has(input:checked) .formSkillsCheckMark {
+  opacity: 1;
+  transform: scale(1);
+}
+.formSkillsBody {
+  flex: 1;
+  min-width: 0;
+}
 .formSkillsName {
   display: block;
   font: var(--weight-semi) var(--text-sm) var(--font-system);
   color: var(--ink-85);
+  letter-spacing: -0.005em;
+}
+.formSkillsRow:has(input:checked) .formSkillsName {
+  color: var(--brand-strong-fg);
 }
 .formSkillsDesc {
   display: block;
   font: var(--weight-regular) var(--text-xs) var(--font-system);
-  color: var(--ink-65);
-  margin-top: 2px;
-  line-height: 1.4;
+  color: var(--ink-60);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.formSkillsRow:has(input:checked) .formSkillsDesc {
+  color: var(--ink-78);
 }
 .formSkillsHint {
   font: var(--weight-regular) var(--text-xs) var(--font-system);
-  color: var(--ink-55);
-  margin-top: 2px;
+  color: var(--ink-50);
+  letter-spacing: 0;
+  padding: 0 2px;
 }
 
 .formStatus {
