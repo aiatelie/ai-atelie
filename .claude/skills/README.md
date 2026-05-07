@@ -11,7 +11,7 @@ Markdown playbooks Claude Code auto-loads when you (the contributor) open this r
 - **`cuj-guardian/`** — runs and triages the journey suite under `web/tests/e2e/journeys/`. Pre-flight gate by diff inspection; five-step triage protocol on failure.
 - **`pr-evidence/`** — wraps `bun run journeys` (8 baseline journeys + optional `--task <spec>`) and rewrites the inline-evidence block in the current PR's body.
 - **`semantic-commit/`** — drafts Conventional Commits messages tuned to the workspace scope set (`api | web | mcp | skills | repo | deps`).
-- **`frontend-design/`** — aesthetic + convention guide for editing AI Atelie's own chrome. Auto-fires on `web/src/` diffs. Encodes the two-axis theme/design system, the token-only color rule, and the 6-font global stack so chrome edits stay coherent across all 4 themes and 12 designs. Mirrors `/skills/frontend-design/` but for the host app, not user-generated designs.
+- **`frontend-design/`** — aesthetic + convention guide for editing AI Atelie's own chrome. Auto-fires on `web/src/` diffs. Opts into [`atelier/`](../../atelier/) (typography, color, anti-ai-slop, state-coverage, animation-discipline, accessibility-baseline) via `craft.requires`, then layers the host-app posture: two-axis theme×design system, warm-cream + Claude rust canonical look, 6-font global stack, restraint over flourish so the canvas can carry the design conversation. Mirrors `/skills/frontend-design/` but for the host app, not user-generated designs.
 
 ## Adding a dev-time skill
 
