@@ -1123,6 +1123,63 @@
   overflow-y: auto;
 }
 
+/* ─── System-reminder block (echoed by the model, collapsible) ─── */
+.reminderBlock {
+  margin: 6px 0;
+  border: 1px solid var(--ink-06);
+  border-radius: var(--radius-sm);
+  background: var(--ink-02);
+  overflow: hidden;
+}
+.reminderSummary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  font: var(--weight-medium) 11px var(--font-system);
+  color: var(--ink-55);
+}
+.reminderSummary::-webkit-details-marker { display: none; }
+.reminderSummary::before {
+  content: "▸";
+  font-size: 9px;
+  display: inline-block;
+  transition: transform var(--motion-fast) var(--ease-out-expressive);
+  color: var(--ink-44);
+}
+.reminderBlock[open] > .reminderSummary::before { transform: rotate(90deg); }
+.reminderTag {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-50);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--ink-04);
+  flex-shrink: 0;
+}
+.reminderPreview {
+  color: var(--ink-50);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.reminderBody {
+  padding: 0 12px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-55);
+  white-space: pre-wrap;
+  line-height: 1.5;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
 /* ─── Elicitation form (Claude asks a structured question) ─── */
 .elicitCard {
   margin: 12px;

@@ -8,12 +8,13 @@
  * for the onboarding full-page chat to reuse without forking.
  */
 
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import s from "./chat.module.css";
 import type { Attachment } from "./CommentBubble";
 import { ModelPicker, loadModelId, saveModelId, useModelPickerFlag } from "./ModelPicker";
 import { getModel } from "../../data/modelPresets";
 import { Markdown, DiffBlock } from "./Markdown";
+import { previewReminder, splitSystemReminders } from "./systemReminder";
 import { ElicitForm } from "./ElicitForm";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
@@ -1253,7 +1254,7 @@ function Bubble({
         ) : (
           <div className={s.text}>
             {m.content ? (
-              <Markdown text={m.content} />
+              <AssistantContent text={m.content} />
             ) : m.pending ? (
               <LiveStatus tools={m.tools} />
             ) : (
@@ -1329,6 +1330,43 @@ function StreamingDots() {
 /** Collapsible reasoning block. Auto-collapsed once the reply text starts
  *  arriving (so the final answer is the focal point); auto-open while the
  *  model is still thinking and there's no text yet. */
+/** Renders assistant prose, lifting any echoed `<system-reminder>`
+ *  blocks into a collapsed details element so harness internals don't
+ *  leak into the conversation. The surrounding prose still flows
+ *  through the markdown pipeline. */
+function AssistantContent({ text }: { text: string }) {
+  const segments = useMemo(() => splitSystemReminders(text), [text]);
+  if (segments.length === 0) return <Markdown text={text} />;
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.kind === "text" ? (
+          <Markdown key={i} text={seg.text} />
+        ) : (
+          <SystemReminderBlock key={i} body={seg.text} />
+        )
+      )}
+    </>
+  );
+}
+
+function SystemReminderBlock({ body }: { body: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className={s.reminderBlock}
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary className={s.reminderSummary}>
+        <span className={s.reminderTag} aria-hidden="true">system</span>
+        <span className={s.reminderPreview}>{previewReminder(body)}</span>
+      </summary>
+      <div className={s.reminderBody}>{body}</div>
+    </details>
+  );
+}
+
 function ThinkingBlock({ text, pending }: { text: string; pending: boolean }) {
   const [open, setOpen] = useState(pending);
   return (
