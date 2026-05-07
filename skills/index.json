@@ -41,8 +41,9 @@
     {
       "name": "interactive-prototype",
       "display": "Interactive prototype",
-      "description": "Working app with real interactions",
-      "body_status": "stub",
+      "description": "Build a clickable, hi-fi prototype of a product or flow — not a wireframe, not a static mock",
+      "kind": "capability",
+      "body_status": "reconstructed",
       "body_sources": []
     },
     {
@@ -63,8 +64,9 @@
     {
       "name": "animated-video",
       "display": "Animated video",
-      "description": "Timeline-based motion design",
-      "body_status": "stub",
+      "description": "Timeline-based motion design — animated explainer-style HTML artifacts where time advances and elements enter or exit on a schedule",
+      "kind": "capability",
+      "body_status": "reconstructed",
       "body_sources": []
     },
     {
