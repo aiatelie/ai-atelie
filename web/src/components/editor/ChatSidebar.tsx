@@ -8,7 +8,7 @@
  * for the onboarding full-page chat to reuse without forking.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import s from "./chat.module.css";
 import type { Attachment } from "./CommentBubble";
 import { ModelPicker, loadModelId, saveModelId, useModelPickerFlag } from "./ModelPicker";
@@ -16,6 +16,7 @@ import { getModel } from "../../data/modelPresets";
 import { Markdown, DiffBlock } from "./Markdown";
 import { previewReminder, splitSystemReminders } from "./systemReminder";
 import { ELAPSED_TICK_MS, SLOW_RUN_THRESHOLD_MS, formatElapsed } from "./elapsed";
+import { dayLabel, fullDateTime, relativeTime, shouldShowDaySeparator } from "./time";
 import { ElicitForm } from "./ElicitForm";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
@@ -787,11 +788,6 @@ function Composer({
 
 
 
-function formatTime(ts: number): string {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 /** Bubble shown above the composer when the user typed a message while
  *  the active turn was still streaming. The route holds the message in
  *  a one-slot queue and auto-fires it once the turn drains; this UI
@@ -978,20 +974,26 @@ function ChatBody({
           </div>
         </div>
       ) : (
-        visible.map(({ m, i }) => (
-          <Bubble
-            key={i}
-            m={m}
-            index={i}
-            messages={thread!.messages}
-            threadId={threadId}
-            onUndo={onUndo}
-            onRetry={onRetry}
-            onDeleteMessage={onDeleteMessage}
-            onRestore={onRestore}
-            onEditMessage={onEditMessage}
-          />
-        ))
+        visible.map(({ m, i }, vi) => {
+          const prev = vi > 0 ? visible[vi - 1].m : undefined;
+          const showDay = shouldShowDaySeparator(prev?.ts, m.ts);
+          return (
+            <Fragment key={i}>
+              {showDay && <DaySeparator ts={m.ts} />}
+              <Bubble
+                m={m}
+                index={i}
+                messages={thread!.messages}
+                threadId={threadId}
+                onUndo={onUndo}
+                onRetry={onRetry}
+                onDeleteMessage={onDeleteMessage}
+                onRestore={onRestore}
+                onEditMessage={onEditMessage}
+              />
+            </Fragment>
+          );
+        })
       )}
       <div ref={bottomRef} />
     </div>
@@ -1204,7 +1206,11 @@ function Bubble({
               </svg>
             </button>
           </div>
-          <div className={s.bubbleMetaRight}>{formatTime(m.ts)}</div>
+          <div className={s.bubbleMetaRight}>
+            <time dateTime={new Date(m.ts).toISOString()} title={fullDateTime(m.ts)}>
+              {relativeTime(m.ts)}
+            </time>
+          </div>
         </div>
         {lightbox}
       </div>
@@ -1309,11 +1315,27 @@ function Bubble({
         )}
       </div>
       <div className={s.bubbleMetaLeft}>
-        {formatTime(m.ts)}
+        <time
+          dateTime={new Date(m.ts).toISOString()}
+          title={fullDateTime(m.ts)}
+        >
+          {relativeTime(m.ts)}
+        </time>
         {!m.pending && !m.error && (
           <CostBadge messages={messages} index={index} />
         )}
       </div>
+    </div>
+  );
+}
+
+/** Thin horizontal rule with a centered day label. Drops in between
+ *  bubbles whose timestamps cross a local-day boundary so a multi-day
+ *  thread doesn't read as one continuous wall. */
+function DaySeparator({ ts }: { ts: number }) {
+  return (
+    <div className={s.daySeparator} role="separator" aria-label={fullDateTime(ts)}>
+      <span className={s.daySeparatorLabel}>{dayLabel(ts)}</span>
     </div>
   );
 }

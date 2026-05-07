@@ -1143,6 +1143,30 @@
   overflow-y: auto;
 }
 
+/* ─── Day separator (between bubbles crossing a day boundary) ─── */
+.daySeparator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 4px;
+  user-select: none;
+  color: var(--ink-44);
+  font: var(--weight-medium) 10.5px var(--font-system);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.daySeparator::before,
+.daySeparator::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--ink-08);
+}
+.daySeparatorLabel {
+  flex-shrink: 0;
+  color: var(--ink-55);
+}
+
 /* ─── System-reminder block (echoed by the model, collapsible) ─── */
 .reminderBlock {
   margin: 6px 0;
