@@ -102,25 +102,63 @@ const MARK_END = "<!-- journey-evidence:end -->";
 
 // ─── CLI ────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const opts = { pr: null, only: null, noUpload: false, skipPrEdit: false };
+  const opts = {
+    pr: null,
+    only: null,
+    noUpload: false,
+    skipPrEdit: false,
+    skipBaseline: false,
+    tasks: [], // array of { spec, title?, description? }
+  };
+  /** Pending task spec waiting for its title/description. The args
+   *  --task <spec> [--task-title <t>] [--task-description <d>] form
+   *  one logical group; parser collects until next --task or end. */
+  let pendingTask = null;
+  const flushTask = () => {
+    if (pendingTask) {
+      opts.tasks.push(pendingTask);
+      pendingTask = null;
+    }
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--pr") opts.pr = argv[++i];
     else if (a === "--only") opts.only = argv[++i];
     else if (a === "--no-upload") opts.noUpload = true;
     else if (a === "--skip-pr-edit") opts.skipPrEdit = true;
+    else if (a === "--skip-baseline") opts.skipBaseline = true;
+    else if (a === "--task") {
+      flushTask();
+      pendingTask = { spec: argv[++i], title: null, description: null };
+    }
+    else if (a === "--task-title") {
+      if (!pendingTask) { console.error("--task-title without preceding --task"); process.exit(2); }
+      pendingTask.title = argv[++i];
+    }
+    else if (a === "--task-description") {
+      if (!pendingTask) { console.error("--task-description without preceding --task"); process.exit(2); }
+      pendingTask.description = argv[++i];
+    }
     else if (a === "-h" || a === "--help") { printHelp(); process.exit(0); }
     else { console.error(`unknown argument: ${a}`); process.exit(2); }
   }
+  flushTask();
   return opts;
 }
 
 function printHelp() {
   console.log(`Usage: bun run journeys [-- options]
-  --pr <n>          Target PR number (auto-detected from current branch)
-  --only <id>       Run a single journey by id (e.g. home-loads)
-  --no-upload       Skip the GitHub upload + body edit, just bundle locally
-  --skip-pr-edit    Upload but leave the PR body alone`);
+  --pr <n>                 Target PR number (auto-detected from current branch)
+  --only <id>              Run a single baseline journey by id (e.g. home-loads)
+  --skip-baseline          Don't run the baseline suite (useful with --task)
+  --task <spec>            Run an additional spec as task evidence (per-PR demo).
+                           May be repeated. The spec must save a screenshot at
+                           test-results/journeys-<slug>-final.png where <slug>
+                           is the spec basename minus .spec.ts.
+  --task-title <title>     Title for the most recent --task (defaults to slug)
+  --task-description <d>   Description column copy for the most recent --task
+  --no-upload              Skip the GitHub upload + body edit, just bundle locally
+  --skip-pr-edit           Upload but leave the PR body alone`);
 }
 
 // ─── helpers ────────────────────────────────────────────────────────
@@ -405,11 +443,47 @@ function spliceBody(body, block) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
 
-  const selected = opts.only
-    ? JOURNEYS.filter((j) => j.id === opts.only)
-    : JOURNEYS.filter((j) => j.baseline);
+  // Baseline selection.
+  let selected = [];
+  if (opts.only) {
+    selected = JOURNEYS.filter((j) => j.id === opts.only);
+    if (selected.length === 0) {
+      console.error(`no journey matched id=${opts.only}`);
+      process.exit(2);
+    }
+  } else if (!opts.skipBaseline) {
+    selected = JOURNEYS.filter((j) => j.baseline);
+  }
+
+  // Task journeys (per-PR custom evidence) appended to selection.
+  // Playwright's testDir is ./web/tests/e2e/ — specs outside that
+  // tree won't be discovered. Stage task specs inside the testDir
+  // under a gitignored .task-staging/ subdir before running.
+  const TASK_STAGING = join(REPO_ROOT, "web/tests/e2e/.task-staging");
+  if (opts.tasks.length > 0) {
+    ensureDir(TASK_STAGING);
+  }
+  for (const t of opts.tasks) {
+    if (!existsSync(t.spec)) {
+      console.error(`--task spec not found: ${t.spec}`);
+      process.exit(2);
+    }
+    const slug = basename(t.spec).replace(/\.spec\.ts$/, "").replace(/\.test\.ts$/, "").replace(/\.ts$/, "");
+    const stagedSpec = join(TASK_STAGING, `${slug}.spec.ts`);
+    copyFileSync(t.spec, stagedSpec);
+    selected.push({
+      id: slug,
+      title: t.title || slug.replace(/-/g, " "),
+      description: t.description || "Per-PR feature evidence.",
+      // Run from the staging path so Playwright's testDir picks it up.
+      spec: stagedSpec.replace(REPO_ROOT + "/", ""),
+      section: "task",
+      baseline: false,
+    });
+  }
+
   if (selected.length === 0) {
-    console.error(`no journeys matched (only=${opts.only})`);
+    console.error("no journeys to run (use --only or --task, or drop --skip-baseline)");
     process.exit(2);
   }
 
