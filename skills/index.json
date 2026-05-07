@@ -6,6 +6,7 @@
       "name": "frontend-design",
       "display": "Frontend design",
       "description": "Aesthetic direction for designs outside an existing brand system",
+      "kind": "aesthetic",
       "body_status": "reconstructed",
       "body_sources": [
         "https://claude.com/blog/improving-frontend-design-through-skills"
@@ -15,6 +16,7 @@
       "name": "design-aesthetic-presets",
       "display": "Aesthetic presets",
       "description": "Pick one of eleven named aesthetic directions before writing any code, then execute it with discipline",
+      "kind": "aesthetic",
       "body_status": "original",
       "body_sources": []
     },
@@ -22,6 +24,7 @@
       "name": "design-critique",
       "display": "Design critique",
       "description": "Run a structured anti-slop audit on the design just produced before declaring done",
+      "kind": "aesthetic",
       "body_status": "original",
       "body_sources": []
     },
@@ -29,6 +32,7 @@
       "name": "design-md-author",
       "display": "DESIGN.md author",
       "description": "Read or write a Google-spec DESIGN.md at the project root — the cross-tool aesthetic spec that grounds every prompt in this project",
+      "kind": "aesthetic",
       "body_status": "original",
       "body_sources": [
         "https://github.com/google-labs-code/design.md"
@@ -45,6 +49,7 @@
       "name": "make-tweakable",
       "display": "Make tweakable",
       "description": "Add in-design tweak controls",
+      "kind": "capability",
       "body_status": "verbatim",
       "body_sources": []
     },
@@ -87,6 +92,7 @@
       "name": "export",
       "display": "Export",
       "description": "Export a selected element as PNG / JPEG / OGraf for video editors. Provider-agnostic — the AI calls capabilities by id, the host's adapter (MCP today, OpenAI-tools later) routes the call.",
+      "kind": "capability",
       "body_status": "original",
       "body_sources": []
     }

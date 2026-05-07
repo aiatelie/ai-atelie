@@ -2,6 +2,7 @@
 name: design-md-author
 display: DESIGN.md author
 description: Read or write a Google-spec DESIGN.md at the project root — the cross-tool aesthetic spec that grounds every prompt in this project. Use when the user asks to capture, update, or import a design system, or when starting a project that should have a documented aesthetic direction.
+kind: aesthetic
 body_status: original
 sources:
   - https://github.com/google-labs-code/design.md

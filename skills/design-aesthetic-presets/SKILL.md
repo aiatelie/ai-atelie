@@ -2,6 +2,7 @@
 name: design-aesthetic-presets
 display: Aesthetic presets
 description: Pick one of eleven named aesthetic directions before writing any code, then execute it with discipline. Forces commitment to a specific look so output stops converging on the AI-default white-purple-Inter aesthetic.
+kind: aesthetic
 body_status: original
 sources: []
 ---

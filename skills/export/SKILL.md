@@ -2,6 +2,7 @@
 name: export
 display: Export
 description: Export a selected element from the canvas as PNG, JPEG, OGraf bundle, Lottie, or video. Saves to the project's exports/ folder; the chat renders the result inline as an artifact card.
+kind: capability
 body_status: original
 ---
 

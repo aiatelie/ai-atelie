@@ -248,16 +248,28 @@ function DesignSwatchCard({
   );
 }
 
-/* SkillsSection — per-project toggle list of catalog design skills.
+/* SkillsSection — per-project skill catalog viewer.
  *
- * Reads `<SKILLS_DIR>/index.json` via /api/skills/catalog and the
- * project's `design.active_skills` from the manifest. Toggles persist
- * via PATCH /api/projects/:id/manifest. The catalog ships pre-baked
- * with the app; per-project selection is the user's choice. */
+ * Two groups:
+ *   - Aesthetic skills (kind: "aesthetic") — toggleable; persisted to
+ *     manifest.design.active_skills via PATCH /api/projects/:id/manifest.
+ *     These govern HOW the agent designs (frontend-design, presets,
+ *     critique, DESIGN.md author).
+ *   - Capabilities (kind: "capability") — read-only display. The agent
+ *     reaches for these when the user asks for the matching action
+ *     (export, make-tweakable). Always-on; no user toggle.
+ *
+ * Stubs (no `kind` field, body_status: "stub") are intentionally
+ * hidden — they're working-theory placeholders, not user-facing yet.
+ *
+ * Reads `<SKILLS_DIR>/index.json` via /api/skills/catalog. The catalog
+ * ships pre-baked with the app; per-project aesthetic selection is the
+ * user's choice. */
 type CatalogEntry = {
   name: string;
   display: string;
   description: string;
+  kind?: "aesthetic" | "capability";
   body_status: "verbatim" | "reconstructed" | "stub" | "original";
   body_sources: string[];
 };
@@ -331,14 +343,17 @@ function SkillsSection({ projectId }: { projectId?: string }) {
     );
   }
 
+  const aestheticSkills = catalog?.filter((e) => e.kind === "aesthetic") ?? [];
+  const capabilitySkills = catalog?.filter((e) => e.kind === "capability") ?? [];
+
   return (
     <section className={s.section}>
       <h3 className={s.sectionTitle}>Skills</h3>
       <p className={s.sectionDesc}>
-        Pick which catalog skills the agent prefers when generating into
-        this project's canvas. The full catalog is always available — the
-        active selection just signals your intent so the agent reaches
-        for these first. Saved to <code>manifest.json</code> as
+        Pick which <strong>aesthetic skills</strong> the agent prefers when
+        generating into this project's canvas. Capabilities below are always
+        available — the agent invokes them when you ask for the matching
+        action. Saved to <code>manifest.json</code> as
         <code> design.active_skills</code>.
       </p>
 
@@ -351,37 +366,62 @@ function SkillsSection({ projectId }: { projectId?: string }) {
       {!catalog || !active ? (
         <p className={s.sectionDesc}>Loading…</p>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
-          {catalog.map((entry) => {
-            const isActive = active.includes(entry.name);
-            return (
-              <li key={entry.name}>
-                <label style={{ display: "flex", gap: "12px", padding: "10px 12px", border: "1px solid var(--ink-08)", borderRadius: "8px", cursor: "pointer", background: isActive ? "var(--brand-bg)" : "var(--surface-2)" }}>
-                  <input
-                    type="checkbox"
-                    checked={isActive}
-                    disabled={saving}
-                    onChange={() => toggle(entry.name)}
-                    style={{ marginTop: "2px" }}
-                  />
-                  <span style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <span style={{ fontWeight: 600, color: "var(--ink-92)" }}>
-                      {entry.display}
-                      {entry.body_status === "stub" && (
-                        <span style={{ marginLeft: "8px", fontSize: "0.85em", color: "var(--ink-55)", fontWeight: 400 }}>
-                          (stub)
+        <>
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ fontSize: "0.78em", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--ink-65)", fontWeight: 600, marginBottom: "8px" }}>
+              Aesthetic direction
+            </div>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+              {aestheticSkills.map((entry) => {
+                const isActive = active.includes(entry.name);
+                return (
+                  <li key={entry.name}>
+                    <label style={{ display: "flex", gap: "12px", padding: "10px 12px", border: "1px solid var(--ink-08)", borderRadius: "8px", cursor: "pointer", background: isActive ? "var(--brand-bg)" : "var(--surface-2)" }}>
+                      <input
+                        type="checkbox"
+                        checked={isActive}
+                        disabled={saving}
+                        onChange={() => toggle(entry.name)}
+                        style={{ marginTop: "2px" }}
+                      />
+                      <span style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontWeight: 600, color: "var(--ink-92)" }}>
+                          {entry.display}
                         </span>
-                      )}
+                        <span style={{ color: "var(--ink-65)", fontSize: "0.92em" }}>
+                          {entry.description}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          {capabilitySkills.length > 0 && (
+            <div>
+              <div style={{ fontSize: "0.78em", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--ink-65)", fontWeight: 600, marginBottom: "8px" }}>
+                Capabilities (always on)
+              </div>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                {capabilitySkills.map((entry) => (
+                  <li
+                    key={entry.name}
+                    style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "8px 12px", border: "1px solid var(--ink-08)", borderRadius: "8px", background: "var(--surface-warm)" }}
+                  >
+                    <span style={{ fontWeight: 600, color: "var(--ink-85)", fontSize: "0.95em" }}>
+                      {entry.display}
                     </span>
-                    <span style={{ color: "var(--ink-65)", fontSize: "0.92em" }}>
+                    <span style={{ color: "var(--ink-65)", fontSize: "0.88em" }}>
                       {entry.description}
                     </span>
-                  </span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

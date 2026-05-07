@@ -27,6 +27,18 @@ skills/
 | `stub` | Body is a working theory + TODO marker. |
 | `original` | Body was written from scratch for this project. |
 
+## kind values
+
+The `kind` frontmatter field segments the catalog by what the skill *does*. The Settings → Skills section in the editor uses this to decide what the user can toggle.
+
+| Kind | Meaning | Surface in the UI |
+|---|---|---|
+| `aesthetic` | Governs **how** the agent designs — direction, presets, critique, DESIGN.md handling. The user picks which ones are active per project, and the prompt builder includes the selection in the system prompt. | Toggleable list under "Aesthetic direction". Persisted to `manifest.design.active_skills`. |
+| `capability` | A thing the agent *does* when the user asks for that action — export, make-tweakable, future export-to-Canva, etc. Always available when the catalog is loaded; not user-toggleable. | Read-only list under "Capabilities (always on)". |
+| _absent_ | Stubs and uncategorized skills. The body is a placeholder; the skill isn't ready for user surfacing yet. | Hidden from the Settings UI. The skill body is still loaded into the agent's context via `additionalDirectories` if the agent invokes it by name, but it doesn't appear in any user-facing toggle. |
+
+A skill graduates from `stub` (no `kind`) to a real entry by writing the body and adding `kind: "aesthetic"` or `kind: "capability"` to its frontmatter and to `index.json`.
+
 ## How each consumer uses these
 
 ### Claude Code (product runtime)

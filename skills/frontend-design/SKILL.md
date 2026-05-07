@@ -2,6 +2,7 @@
 name: frontend-design
 display: Frontend design
 description: Aesthetic direction for designs outside an existing brand system
+kind: aesthetic
 body_status: reconstructed
 sources:
   - https://claude.com/blog/improving-frontend-design-through-skills

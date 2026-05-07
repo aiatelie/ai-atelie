@@ -2,6 +2,7 @@
 name: design-critique
 display: Design critique
 description: Run a structured anti-slop audit on the design just produced before declaring done. Catches the recognizable AI-default patterns (Tailwind indigo, two-stop trust gradients, emoji-as-icons, generic display fonts, rounded-card-with-left-border, and 20+ more) so they can be fixed before the user sees them.
+kind: aesthetic
 body_status: original
 sources: []
 ---
