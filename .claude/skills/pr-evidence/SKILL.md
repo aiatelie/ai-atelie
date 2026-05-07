@@ -107,10 +107,10 @@ Reference: `web/tests/e2e/journeys/home-loads.spec.ts` (UI-only) and `agent-edit
 
 ## Anti-patterns
 
-- **Don't post evidence in a comment.** The runner edits the body. Comments are noise; the upload-evidence claim-comment is auto-deleted post-body-update on purpose.
-- **Don't run the suite with Opus.** Sonnet is the convention (set in agent journey specs). Switching to Opus burns cost without raising fidelity.
-- **Don't loosen a journey assertion to make it green.** If a journey fails, walk the `cuj-guardian` triage protocol first.
-- **Don't run journeys on docs-only PRs.** The agent journeys take real money to execute.
+- **Don't post evidence in a comment.** The runner edits the PR body for a reason — comments are noise, and the upload-evidence claim-comment is auto-deleted post-body-update on purpose. **INSTEAD**: let `bun run journeys` edit the body; if the body wasn't updated, surface the runner's error rather than working around it with a comment.
+- **Don't run the suite with Opus.** Sonnet produces equivalent visible results for the canonical journey prompts at a fraction of the cost. **INSTEAD**: leave the model selection at the journey-spec default (`claude-sonnet-4-6` via `localStorage` init script). Reserve Opus for the actual feature work the maintainer is shipping.
+- **Don't loosen a journey assertion to make it green.** A green-by-weakening run proves nothing. **INSTEAD**: walk the `cuj-guardian` triage protocol first; if the test is genuinely stale, replace assertions with new ones of equal-or-greater strength and journal the change.
+- **Don't run journeys on docs-only PRs.** Agent journeys spend real Anthropic credits. **INSTEAD**: skip evidence entirely on docs-only diffs (the pre-flight check below identifies them); a docs PR is its own evidence.
 
 ## Why this is a skill, not a subagent
 

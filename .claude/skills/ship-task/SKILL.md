@@ -243,11 +243,11 @@ Don't ship until the suite is green or the failure is documented.
 
 ## Anti-patterns
 
-- "Verified by inspection" — not allowed. Either run `verify-with-playwright` or explicitly state the surface has no UI.
-- Skipping Step 4. The Blast Radius Report is the most valuable artifact this skill produces; without it, you're a slightly-better-than-nothing autocommitter.
-- Amending commits to "fix" something. Create a new commit. The history-tells-the-story principle is load-bearing for the changelog.
-- `--no-verify` on commits. Don't bypass hooks; fix the underlying issue.
-- Force-pushing to anything that isn't your own branch.
+- **"Verified by inspection."** Not allowed. **INSTEAD**: run `verify-with-playwright` against the change, or — if the surface genuinely has no UI (api-only, mcp-only, config) — state that explicitly in the PR body's test plan with a one-line reason.
+- **Skipping Step 4.** The Blast Radius Report is the most valuable artifact this skill produces; without it, you're a slightly-better-than-nothing autocommitter. **INSTEAD**: produce the report even when no risk is found — the act of writing it forces the inspection, and "No regression risk found" with the importer list attached is itself the evidence.
+- **Amending commits to "fix" something.** History-tells-the-story is load-bearing for the changelog. **INSTEAD**: create a new commit. If the prior commit was wrong, write a `revert` commit. If the prior commit needs a follow-up, write a `fix` commit that references it in the body.
+- **`--no-verify` on commits.** Bypassing hooks hides the failure, not the cause. **INSTEAD**: read the hook's error, fix the underlying issue, re-stage, commit again. If the hook itself is broken, fix the hook in its own commit before continuing.
+- **Force-pushing to anything that isn't your own branch.** **INSTEAD**: push normally to your branch; if `main` or a shared branch needs to change, open a PR. If your own branch needs history rewrite (e.g. squash before merge), confirm with the maintainer first.
 
 ## When the loop should bail out
 
