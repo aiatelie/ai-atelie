@@ -2130,6 +2130,13 @@ export default function Editor() {
         }}
       />
 
+      {isDesignFiles && (
+        // Empty toolbar shell on Design Files view so the editor keeps
+        // a consistent two-row chrome (tab strip + toolbar) across
+        // file-edit and project-files surfaces. Real content for this
+        // surface (sort, view-mode toggle, refresh) can land here later.
+        <div className={s.toolbar} aria-hidden="true" />
+      )}
       {!isDesignFiles && <Toolbar
         mode={mode}
         onMode={(m) => {
