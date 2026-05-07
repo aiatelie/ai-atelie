@@ -84,6 +84,11 @@ export default function Projects() {
               aria-current="page"
             >
               Projects
+              {!loading && (
+                <span className={s.tabCount} aria-label={`${all.length} projects`}>
+                  {all.length}
+                </span>
+              )}
             </button>
           </nav>
 
@@ -95,20 +100,17 @@ export default function Projects() {
                 <EmptyState />
               )
             ) : (
-              <>
-                <div className={s.sectionLabel}>Projects · {all.length}</div>
-                <div className={s.grid}>
-                  {all.map((p) => (
-                    <ProjectCard
-                      key={p.id}
-                      project={p}
-                      onOpen={() => openProject(p.id)}
-                      onDelete={() => setDeleting(p)}
-                      onRename={(next) => updateProject(p.id, { name: next })}
-                    />
-                  ))}
-                </div>
-              </>
+              <div className={s.grid}>
+                {all.map((p) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    onOpen={() => openProject(p.id)}
+                    onDelete={() => setDeleting(p)}
+                    onRename={(next) => updateProject(p.id, { name: next })}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </main>
@@ -138,23 +140,20 @@ export default function Projects() {
 
 function LoadingSkeleton() {
   return (
-    <>
-      <div className={s.sectionLabel} aria-busy="true">Projects · …</div>
-      <div className={s.grid}>
-        {[0, 1, 2].map((i) => (
-          <div key={i} className={s.card} aria-hidden="true" style={{ opacity: 0.35 }}>
-            <div className={s.cardName} style={{ background: "currentColor", height: 18, borderRadius: 4, opacity: 0.15, width: "60%" }} />
-            <div className={s.tabsList}>
-              <span className={s.tabPill} style={{ width: 80 }}>&nbsp;</span>
-              <span className={s.tabPill} style={{ width: 64 }}>&nbsp;</span>
-            </div>
-            <div className={s.cardMeta}>
-              <span>&nbsp;</span>
-            </div>
+    <div className={s.grid} aria-busy="true">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className={s.card} aria-hidden="true" style={{ opacity: 0.35 }}>
+          <div className={s.cardName} style={{ background: "currentColor", height: 18, borderRadius: 4, opacity: 0.15, width: "60%" }} />
+          <div className={s.tabsList}>
+            <span className={s.tabPill} style={{ width: 80 }}>&nbsp;</span>
+            <span className={s.tabPill} style={{ width: 64 }}>&nbsp;</span>
           </div>
-        ))}
-      </div>
-    </>
+          <div className={s.cardMeta}>
+            <span>&nbsp;</span>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

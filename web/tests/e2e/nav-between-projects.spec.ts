@@ -8,7 +8,7 @@ test("navigate from editor back to /projects and into a different project", asyn
   await page.goto("/projects", { waitUntil: "domcontentloaded" });
 
   // Wait for skeleton to disappear: real cards have no aria-hidden.
-  await expect(page.locator('[class*="sectionLabel"]:not([aria-busy="true"])').first())
+  await expect(page.locator('[class*="grid"]:not([aria-busy="true"]) > [class*="card"]:not([aria-hidden="true"])').first())
     .toBeVisible({ timeout: 10_000 });
 
   const cards = await realCards(page);
@@ -57,7 +57,7 @@ test("navigate from editor back to /projects and into a different project", asyn
   await expect(page).toHaveURL(/\/projects/);
   await page.screenshot({ path: "test-results/nav-2-back-on-home.png", fullPage: false });
 
-  await expect(page.locator('[class*="sectionLabel"]:not([aria-busy="true"])').first())
+  await expect(page.locator('[class*="grid"]:not([aria-busy="true"]) > [class*="card"]:not([aria-hidden="true"])').first())
     .toBeVisible({ timeout: 10_000 });
   const cards2 = await realCards(page);
   const c2Count = await cards2.count();
@@ -75,7 +75,7 @@ test("navigate from editor back to /projects and into a different project", asyn
 
 test("ProjectSwitcher dropdown switches active project in-place and links to /projects", async ({ page }) => {
   await page.goto("/projects", { waitUntil: "domcontentloaded" });
-  await expect(page.locator('[class*="sectionLabel"]:not([aria-busy="true"])').first())
+  await expect(page.locator('[class*="grid"]:not([aria-busy="true"]) > [class*="card"]:not([aria-hidden="true"])').first())
     .toBeVisible({ timeout: 10_000 });
 
   // Pick the LinkedIn-banner project (has multiple file tabs) as the
@@ -125,6 +125,6 @@ test("ProjectSwitcher dropdown switches active project in-place and links to /pr
   await page.getByRole("button", { name: /switch project/i }).click();
   await page.locator('text=Browse all projects').click();
   await page.waitForURL(/\/projects(\?|$|\/)/, { timeout: 5000 });
-  await expect(page.locator('[class*="sectionLabel"]').first()).toBeVisible();
+  await expect(page.locator('[class*="grid"] > [class*="card"]').first()).toBeVisible();
   await page.screenshot({ path: "test-results/nav-7-browse-all.png", fullPage: false });
 });

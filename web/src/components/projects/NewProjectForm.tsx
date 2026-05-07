@@ -42,8 +42,8 @@ export function NewProjectForm({ onSubmit }: Props) {
     <form className={s.formWrap} onSubmit={submit} noValidate>
       <div className={s.formEyebrow}>New project</div>
 
-      <label className={s.formLabel} htmlFor="new-project-name">
-        Name
+      <label htmlFor="new-project-name" className={s.visuallyHidden}>
+        Project name
       </label>
       <input
         id="new-project-name"
