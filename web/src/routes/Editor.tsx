@@ -4284,13 +4284,24 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
   //   - Debounced ResizeObserver on iframe body → catches page reflow
   //     (image loads, font swaps, AI-driven content changes) without
   //     firing on every individual element settle.
+  //   - MutationObserver on `style` attribute (subtree=documentElement)
+  //     → catches transform-driven motion: in-iframe canvases that pan/
+  //     zoom by writing `el.style.transform = translate3d(...)` (e.g.
+  //     `DCViewport` in projects/demo/design-canvas.jsx), JS-driven
+  //     element drag (Editor.tsx writes `style.left/top` for repositioning),
+  //     and AI mutations that touch inline style. Without this, none of
+  //     scroll/resize/RO fire and the overlay drifts off the element.
+  //   - Transition/animation events on the iframe doc → arm the settle
+  //     window so CSS transitions/animations on ancestors get sampled
+  //     every frame for their full duration (the engine interpolates
+  //     between style values without firing MutationObserver).
   //   - "Settle window": for ~1 second after pinnedSelector changes
-  //     and after every scroll, run rAF every frame so post-action
-  //     reflows reposition the box quickly. After 1s the loop stops
-  //     and we go back to event-driven.
+  //     and after every scroll/transition/animation, run rAF every
+  //     frame so post-action reflows reposition the box quickly. After
+  //     1s the loop stops and we go back to event-driven.
   //
-  // This covers the "box drifts after I click / scroll" case the user
-  // reported without burning CPU when the page is idle.
+  // This covers the "box drifts after I click / scroll / pan / zoom"
+  // case the user reported without burning CPU when the page is idle.
   useLayoutEffect(() => {
     if (!pinnedSelector || isPanMode) {
       setSelectedRect(null);
@@ -4355,10 +4366,41 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
       ro.observe(doc.body);
     }
 
+    // Observe inline-style mutations on every element under the iframe
+    // doc. Catches transform-driven motion (e.g. DCViewport's per-pan
+    // `style.transform = translate3d(...)` writes) and any other JS-
+    // driven style change that moves an ancestor of the pinned element.
+    // schedule() rAF-coalesces, so a 60fps pan collapses to one
+    // measure() per frame — same cost as the existing scroll path.
+    let mo: MutationObserver | null = null;
+    if (typeof MutationObserver !== "undefined" && doc.documentElement) {
+      mo = new MutationObserver(schedule);
+      mo.observe(doc.documentElement, {
+        attributes: true,
+        attributeFilter: ["style"],
+        subtree: true,
+      });
+    }
+
+    // CSS transitions and animations interpolate between style values
+    // WITHOUT writing the style attribute on each frame — MutationObserver
+    // can't see those interpolated frames. Arm the settle window on
+    // transition/animation lifecycle events so the rAF loop tracks the
+    // full duration; the dedup in measure() keeps it cheap when nothing
+    // visibly changes between frames.
+    const onAnimEvent = () => { schedule(); armSettle(); };
+    const animEvents = [
+      "transitionrun", "transitionend", "transitioncancel",
+      "animationstart", "animationend", "animationiteration", "animationcancel",
+    ] as const;
+    for (const ev of animEvents) doc.addEventListener(ev, onAnimEvent, true);
+
     return () => {
       win.removeEventListener("scroll", onScroll, true);
       win.removeEventListener("resize", schedule);
       ro?.disconnect();
+      mo?.disconnect();
+      for (const ev of animEvents) doc.removeEventListener(ev, onAnimEvent, true);
       if (roDebounce) clearTimeout(roDebounce);
       if (raf) cancelAnimationFrame(raf);
       if (settleRaf) cancelAnimationFrame(settleRaf);
