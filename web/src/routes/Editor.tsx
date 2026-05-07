@@ -2983,7 +2983,7 @@ function TabBar({
         <button className={s.share} onClick={() => alert("Share is a stub for now")}>
           Share
         </button>
-        <span className={s.avatar} aria-hidden="true">·</span>
+        <span className={s.avatar} aria-label="Account" title="Account">AA</span>
       </div>
     </div>
   );

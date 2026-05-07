@@ -42,11 +42,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  background: var(--brand);
-  color: var(--surface);
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  color: var(--ink-92);
   flex-shrink: 0;
 }
 .projectTitle {
@@ -236,8 +235,14 @@
   border: 0;
   cursor: pointer;
   font-size: 16px;
+  transition: color var(--motion-fast) var(--ease-out-expressive);
 }
 .tabPlus:hover { color: var(--ink-92); }
+.tabPlus:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
 
 .tabRight {
   margin-left: auto;
@@ -258,33 +263,51 @@
   cursor: pointer;
   font-weight: var(--weight-medium);
   font-size: var(--text-md);
+  text-decoration: none;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
 }
-.present:hover { background: var(--ink-08); }
+.present:hover { background: var(--ink-08); border-color: var(--ink-12); }
+.present:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .share {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
   border-radius: var(--radius-md);
-  background: var(--ink-strong);
-  color: var(--surface);
+  background: var(--brand);
+  color: var(--on-brand);
   border: 0;
   cursor: pointer;
   font-weight: var(--weight-semi);
   font-size: var(--text-md);
+  transition: background var(--motion-fast) var(--ease-out-expressive);
 }
-.share:hover { background: var(--ink-strong-hover); }
+.share:hover { background: var(--brand-fg); }
+.share:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand), var(--brand-fg));
-  color: var(--surface);
+  background: var(--surface-2);
+  border: 1px solid var(--ink-08);
+  color: var(--ink-65);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-weight: var(--weight-semi);
-  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  user-select: none;
+  flex-shrink: 0;
 }
 
 .settingsBtn {
@@ -299,11 +322,19 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .settingsBtn:hover {
   background: var(--ink-08);
   color: var(--ink-92);
+  border-color: var(--ink-12);
+}
+.settingsBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 /* ─── Toolbar ───────────────────────────────────────────────── */
