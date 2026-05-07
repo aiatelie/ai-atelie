@@ -101,5 +101,13 @@ test.describe("smart element label", () => {
     const afterBtn = testInfo.outputPath("after-button.png");
     await page.screenshot({ path: afterBtn, fullPage: false });
     await testInfo.attach("after-button", { path: afterBtn, contentType: "image/png" });
+
+    // Final screenshot at the journey-runner convention path so
+    // pr-evidence's bundler picks it up automatically. Click the
+    // headline once more so the final still highlights the smart
+    // label's primary win (Heading vs DIV).
+    await headline.click();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: "test-results/journeys-smart-element-label-final.png", fullPage: false });
   });
 });
