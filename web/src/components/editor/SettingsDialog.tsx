@@ -1,7 +1,8 @@
 /* SettingsDialog.tsx — global Settings shell with sidebar nav.
  *
  * Sections:
- *   - Appearance    — theme picker (System / Light / Dark / Retro), live preview
+ *   - Appearance    — theme picker (System / Light / Dark / Retro)
+ *   - Design        — decorative palette overlay (12 swatch cards)
  *   - Notifications — completion sound + desktop ping prefs (#5)
  *   - Adapters      — existing per-CLI cards (ported from AdaptersDialog)
  *   - About         — read-only version + runtime info for bug reports
@@ -14,7 +15,10 @@
 import { useState } from "react";
 import s from "./settingsDialog.module.css";
 import { useAgents, rescanAgents, type AgentInfo } from "../../data/agents";
-import { getTheme, setTheme, themes, type ThemePreference } from "../../lib/theme";
+import {
+  getTheme, setTheme, themes, type ThemePreference,
+  getDesign, setDesign, clearDesign, designs, type Design, type DesignMeta,
+} from "../../lib/theme";
 import {
   loadNotifPrefs,
   saveNotifPrefs,
@@ -30,10 +34,11 @@ import {
   type FailureSoundId,
 } from "../../lib/notifications";
 
-type SectionId = "appearance" | "notifications" | "adapters" | "about";
+type SectionId = "appearance" | "design" | "notifications" | "adapters" | "about";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "appearance", label: "Appearance" },
+  { id: "design", label: "Design" },
   { id: "notifications", label: "Notifications" },
   { id: "adapters", label: "Adapters" },
   { id: "about", label: "About" },
@@ -82,6 +87,7 @@ export function SettingsDialog({
 
           <div className={s.content}>
             {section === "appearance" && <AppearanceSection />}
+            {section === "design" && <DesignSection />}
             {section === "notifications" && <NotificationsSection />}
             {section === "adapters" && <AdaptersSection />}
             {section === "about" && <AboutSection />}
@@ -125,6 +131,113 @@ function AppearanceSection() {
         ))}
       </div>
     </section>
+  );
+}
+
+function DesignSection() {
+  const [active, setActive] = useState<Design | null>(() => getDesign());
+  const onPick = (d: Design) => {
+    setDesign(d);
+    setActive(d);
+  };
+  const onReset = () => {
+    clearDesign();
+    setActive(null);
+  };
+
+  const lights = designs.filter((d) => d.kind === "light");
+  const darks = designs.filter((d) => d.kind === "dark");
+
+  return (
+    <section className={s.section}>
+      <h3 className={s.sectionTitle}>Design</h3>
+      <p className={s.sectionDesc}>
+        A decorative palette overlay on top of your <strong>Appearance</strong>
+        choice. Designs sit independently of Light/Dark — pick one to repaint
+        the chrome with a different identity, or reset to revert to the
+        underlying theme.
+      </p>
+
+      <div className={s.designStatus}>
+        <span className={s.designStatusLabel}>
+          {active ? (
+            <>
+              Design: <strong>{designs.find((d) => d.name === active)?.label}</strong>
+            </>
+          ) : (
+            <>No design — using your Appearance theme.</>
+          )}
+        </span>
+        <button
+          type="button"
+          className={s.designResetBtn}
+          onClick={onReset}
+          disabled={!active}
+        >
+          Reset to theme
+        </button>
+      </div>
+
+      <div className={s.themeGroup} role="group" aria-label="Light designs">
+        <div className={s.themeGroupLabel}>Light</div>
+        <div className={s.themeGrid}>
+          {lights.map((d) => (
+            <DesignSwatchCard
+              key={d.name}
+              design={d}
+              active={d.name === active}
+              onPick={() => onPick(d.name)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className={s.themeGroup} role="group" aria-label="Dark designs">
+        <div className={s.themeGroupLabel}>Dark</div>
+        <div className={s.themeGrid}>
+          {darks.map((d) => (
+            <DesignSwatchCard
+              key={d.name}
+              design={d}
+              active={d.name === active}
+              onPick={() => onPick(d.name)}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DesignSwatchCard({
+  design,
+  active,
+  onPick,
+}: {
+  design: DesignMeta;
+  active: boolean;
+  onPick: () => void;
+}) {
+  const [bg, surface, brand, ink] = design.swatch;
+  return (
+    <button
+      type="button"
+      className={`${s.themeCard} ${active ? s.themeCardActive : ""}`}
+      aria-pressed={active}
+      onClick={onPick}
+      title={design.label}
+    >
+      <span
+        className={s.themeSwatch}
+        aria-hidden="true"
+        style={{ background: bg, borderColor: surface }}
+      >
+        <span className={s.themeSwatchSurface} style={{ background: surface }} />
+        <span className={s.themeSwatchBrand} style={{ background: brand }} />
+        <span className={s.themeSwatchInk} style={{ background: ink }} />
+      </span>
+      <span className={s.themeCardLabel}>{design.label}</span>
+    </button>
   );
 }
 

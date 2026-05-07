@@ -10,6 +10,11 @@
 
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Archivo:wght@400;700;900&family=Syne:wght@700;800&family=Noto+Sans+JP:wght@900&family=Antonio:wght@700&family=Instrument+Serif:ital@0;1&display=swap");
 
+/* Generated palette overrides — see tools/gen-themes.mjs and the
+ * THEMES array in lib/theme.ts. Each block matches the shape of the
+ * Light/Dark/Retro overrides further down. */
+@import "./styles/themes.css";
+
 :root {
   /* ─── Surfaces ─────────────────────────────────────────────
    * app-bg: page / chrome bg
