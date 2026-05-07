@@ -12,7 +12,7 @@
  * sidebar. ModelPicker still routes "⚙ Manage adapters" through this
  * dialog — it just opens directly to the Adapters section. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import s from "./settingsDialog.module.css";
 import { useAgents, rescanAgents, type AgentInfo } from "../../data/agents";
 import {
@@ -34,11 +34,12 @@ import {
   type FailureSoundId,
 } from "../../lib/notifications";
 
-type SectionId = "appearance" | "design" | "notifications" | "adapters" | "about";
+type SectionId = "appearance" | "design" | "skills" | "notifications" | "adapters" | "about";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "appearance", label: "Appearance" },
   { id: "design", label: "Design" },
+  { id: "skills", label: "Skills" },
   { id: "notifications", label: "Notifications" },
   { id: "adapters", label: "Adapters" },
   { id: "about", label: "About" },
@@ -48,10 +49,15 @@ export function SettingsDialog({
   open,
   onClose,
   initialSection = "appearance",
+  projectId,
 }: {
   open: boolean;
   onClose: () => void;
   initialSection?: SectionId;
+  /** Active project the dialog should scope project-level sections to
+   *  (currently: Skills). Optional — when absent, project-level
+   *  sections render an empty-state. */
+  projectId?: string;
 }) {
   const [section, setSection] = useState<SectionId>(initialSection);
 
@@ -88,6 +94,7 @@ export function SettingsDialog({
           <div className={s.content}>
             {section === "appearance" && <AppearanceSection />}
             {section === "design" && <DesignSection />}
+            {section === "skills" && <SkillsSection projectId={projectId} />}
             {section === "notifications" && <NotificationsSection />}
             {section === "adapters" && <AdaptersSection />}
             {section === "about" && <AboutSection />}
@@ -238,6 +245,145 @@ function DesignSwatchCard({
       </span>
       <span className={s.themeCardLabel}>{design.label}</span>
     </button>
+  );
+}
+
+/* SkillsSection — per-project toggle list of catalog design skills.
+ *
+ * Reads `<SKILLS_DIR>/index.json` via /api/skills/catalog and the
+ * project's `design.active_skills` from the manifest. Toggles persist
+ * via PATCH /api/projects/:id/manifest. The catalog ships pre-baked
+ * with the app; per-project selection is the user's choice. */
+type CatalogEntry = {
+  name: string;
+  display: string;
+  description: string;
+  body_status: "verbatim" | "reconstructed" | "stub" | "original";
+  body_sources: string[];
+};
+
+type CatalogResponse = { skills: CatalogEntry[] };
+
+type ManifestDesign = { active_skills?: string[]; design_md?: string };
+
+function SkillsSection({ projectId }: { projectId?: string }) {
+  const [catalog, setCatalog] = useState<CatalogEntry[] | null>(null);
+  const [active, setActive] = useState<string[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Fetch the catalog once — it's stable per app build.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/skills/catalog")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j: CatalogResponse) => { if (!cancelled) setCatalog(j.skills ?? []); })
+      .catch((err) => { if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err)); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Fetch the project's current selection. Re-runs when projectId changes.
+  useEffect(() => {
+    if (!projectId) { setActive(null); return; }
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/manifest`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((m: { design?: ManifestDesign }) => {
+        if (cancelled) return;
+        setActive(m.design?.active_skills ?? ["frontend-design"]);
+      })
+      .catch((err) => { if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err)); });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  const toggle = async (name: string) => {
+    if (!projectId || !active) return;
+    const next = active.includes(name)
+      ? active.filter((s) => s !== name)
+      : [...active, name];
+    // Optimistic update — restore on error.
+    const previous = active;
+    setActive(next);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/manifest`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ design: { active_skills: next } }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      setActive(previous);
+      setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!projectId) {
+    return (
+      <section className={s.section}>
+        <h3 className={s.sectionTitle}>Skills</h3>
+        <p className={s.sectionDesc}>
+          Open a project to choose which design skills are active for it.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className={s.section}>
+      <h3 className={s.sectionTitle}>Skills</h3>
+      <p className={s.sectionDesc}>
+        Pick which catalog skills the agent prefers when generating into
+        this project's canvas. The full catalog is always available — the
+        active selection just signals your intent so the agent reaches
+        for these first. Saved to <code>manifest.json</code> as
+        <code> design.active_skills</code>.
+      </p>
+
+      {loadError && (
+        <p className={s.sectionDesc} style={{ color: "var(--danger-fg)" }}>
+          {loadError}
+        </p>
+      )}
+
+      {!catalog || !active ? (
+        <p className={s.sectionDesc}>Loading…</p>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+          {catalog.map((entry) => {
+            const isActive = active.includes(entry.name);
+            return (
+              <li key={entry.name}>
+                <label style={{ display: "flex", gap: "12px", padding: "10px 12px", border: "1px solid var(--ink-08)", borderRadius: "8px", cursor: "pointer", background: isActive ? "var(--brand-bg)" : "var(--surface-2)" }}>
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    disabled={saving}
+                    onChange={() => toggle(entry.name)}
+                    style={{ marginTop: "2px" }}
+                  />
+                  <span style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <span style={{ fontWeight: 600, color: "var(--ink-92)" }}>
+                      {entry.display}
+                      {entry.body_status === "stub" && (
+                        <span style={{ marginLeft: "8px", fontSize: "0.85em", color: "var(--ink-55)", fontWeight: 400 }}>
+                          (stub)
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ color: "var(--ink-65)", fontSize: "0.92em" }}>
+                      {entry.description}
+                    </span>
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 

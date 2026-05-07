@@ -2826,7 +2826,11 @@ export default function Editor() {
 
       {settingsOpen && (
         <Suspense fallback={null}>
-          <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+          <SettingsDialog
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            projectId={activeProject?.id}
+          />
         </Suspense>
       )}
 
