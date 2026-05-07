@@ -21,6 +21,15 @@ export type CreateProjectInput = {
   indexHtml: string;
   /** Starter CSS for style.css. */
   styleCss: string;
+  /** Optional canonical DesignCanvas component to drop in alongside
+   *  index.html. When present, the project's index.html should script-
+   *  include this file (`<script type="text/babel" src="design-canvas.jsx">`)
+   *  and wrap its root render in `<DesignCanvas>` / `<DCSection>` /
+   *  `<DCArtboard>` so the project starts with pan/zoom, theme, and
+   *  state-persistence wired in. The route reads the canonical starter
+   *  from `mcp/starters/DesignCanvas.jsx` and threads it through here so
+   *  the storage layer doesn't need to know the on-disk location. */
+  designCanvas?: string;
 };
 
 export class ProjectRepo {
@@ -96,6 +105,9 @@ export class ProjectRepo {
     const files = this.driver.project(input.id).files;
     await files.write("index.html", input.indexHtml);
     await files.write("style.css", input.styleCss);
+    if (input.designCanvas) {
+      await files.write("design-canvas.jsx", input.designCanvas);
+    }
     await this.writeManifest(input.id, manifest);
     return manifest;
   }
