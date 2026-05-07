@@ -49,6 +49,33 @@
   color: var(--ink-64);
   font-size: var(--text-md);
 }
+.crumbActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+}
+.crumbAction {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out-expressive),
+              color var(--motion-fast) var(--ease-out-expressive),
+              border-color var(--motion-fast) var(--ease-out-expressive);
+}
+.crumbAction:hover {
+  background: var(--ink-04);
+  color: var(--ink-92);
+}
+.crumbAction:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -1px;
+}
 .search {
   margin-left: auto;
   appearance: none;

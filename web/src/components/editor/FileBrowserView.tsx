@@ -14,6 +14,7 @@ import { readRecents, pushRecent } from "./recents";
 import { readFolderState, writeFolderState } from "./folderState";
 import { EmptyState } from "../feedback";
 import { toast } from "../toast";
+import { PasteAsFileDialog } from "./PasteAsFileDialog";
 
 export type SandboxFile = {
   path: string;
@@ -57,6 +58,8 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
   const [menu, setMenu] = useState<{ file: SandboxFile; x: number; y: number } | null>(null);
   // Path of the row currently flashing from a reveal request. Cleared on a timer.
   const [pulsePath, setPulsePath] = useState<string | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   // Recently-opened paths, persisted per project. Most-recent first; capped at 6.
   const [recents, setRecents] = useState<string[]>(() => readRecents(projectId));
@@ -209,6 +212,47 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
     refresh();
   };
 
+  /** Write a textual paste at uploads/<name>. Goes through the upload
+   *  endpoint so file-write permissions stay in one place. */
+  const writePastedFile = async (filename: string, content: string) => {
+    if (!projectId) return;
+    const safeName = filename.replace(/[\\/]/g, "_");
+    const dataUrl = `data:text/plain;base64,${btoa(unescape(encodeURIComponent(content)))}`;
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/file/upload`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: `uploads/${safeName}`, dataUrl }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(`Couldn't save ${safeName}: ${err.error ?? `HTTP ${res.status}`}`);
+        return;
+      }
+      await refresh();
+      toast.success(`Saved ${safeName}`);
+    } catch (err) {
+      toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  /** Pull image-typed entries out of a clipboard event and route them
+   *  through the existing upload flow. Returns true if anything was
+   *  handled so the caller can preventDefault. */
+  const consumeClipboardImages = (data: DataTransfer | null): boolean => {
+    if (!data) return false;
+    const files: File[] = [];
+    for (const item of Array.from(data.items)) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length === 0) return false;
+    void uploadFiles(files);
+    return true;
+  };
+
   return (
     <div
       className={`${s.shell} ${dropOver ? s.shellDrop : ""}`}
@@ -223,11 +267,47 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
         setDropOver(false);
         if (e.dataTransfer.files.length) await uploadFiles(e.dataTransfer.files);
       }}
+      onPaste={(e) => {
+        // Skip when the user is typing inside any input/textarea
+        // (e.g. the filter search). We only want clipboard-image
+        // paste to land here when the panel is the focused container.
+        const tag = (e.target as HTMLElement | null)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (consumeClipboardImages(e.clipboardData)) e.preventDefault();
+      }}
     >
       <div className={s.list} ref={listRef}>
         <div className={s.crumb}>
           <button className={s.crumbBtn} onClick={refresh} title="Refresh">↻</button>
           <span className={s.crumbPath}>project</span>
+          <div className={s.crumbActions}>
+            <button
+              type="button"
+              className={s.crumbAction}
+              onClick={() => setPasteOpen(true)}
+              title="Paste text or markdown into a new file"
+            >
+              Paste…
+            </button>
+            <button
+              type="button"
+              className={s.crumbAction}
+              onClick={() => uploadInputRef.current?.click()}
+              title="Upload one or more files"
+            >
+              Upload
+            </button>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files?.length) void uploadFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+          </div>
           <input
             className={s.search}
             type="search"
@@ -414,6 +494,11 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
           onClose={() => setMenu(null)}
         />
       )}
+      <PasteAsFileDialog
+        open={pasteOpen}
+        onClose={() => setPasteOpen(false)}
+        onSubmit={(filename, content) => writePastedFile(filename, content)}
+      />
     </div>
   );
 }
