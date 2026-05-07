@@ -38,24 +38,28 @@ const JOURNEYS = [
   {
     id: "home-loads",
     title: "Home loads",
+    description: "App shell paints; the create-project form is visible and focusable.",
     spec: "web/tests/e2e/journeys/home-loads.spec.ts",
     baseline: true,
   },
   {
     id: "create-project",
     title: "Create project",
+    description: "Name + Create lands in /editor with a fresh `p_*` id; the project dir exists on disk and the iframe canvas mounts.",
     spec: "web/tests/e2e/journeys/create-project.spec.ts",
     baseline: true,
   },
   {
     id: "agent-edits-canvas",
     title: "Agent edits canvas",
+    description: "Sonnet receives a chat prompt, writes files, and the iframe paints the requested change.",
     spec: "web/tests/e2e/journeys/agent-edits-canvas.spec.ts",
     baseline: true,
   },
   {
     id: "cleanup-snapshot",
     title: "Cleanup snapshot",
+    description: "Suite leaves no `Journey · *` projects on disk; force-deletes any leak.",
     spec: "web/tests/e2e/journeys/cleanup-snapshot.spec.ts",
     baseline: true,
   },
@@ -303,36 +307,70 @@ function urlFor(uploadResults, filename) {
   return hit?.url || null;
 }
 
+/** Escape any pipe characters in cell content so they don't break the
+ *  markdown table layout. Newlines inside cells must be `<br />`. */
+function escapeCell(s) {
+  return String(s ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
+function renderTableSection(heading, rows, uploads) {
+  if (rows.length === 0) return "";
+  const lines = [];
+  lines.push(`### ${heading}`);
+  lines.push("");
+  lines.push("| Journey | What it proves | Screenshot | Video |");
+  lines.push("| --- | --- | --- | --- |");
+  // Failures first so reviewers see them immediately.
+  const sorted = [...rows].sort(
+    (a, b) => Number(a.status === "passed") - Number(b.status === "passed"),
+  );
+  for (const r of sorted) {
+    const glyph = STATUS_GLYPH[r.status] || STATUS_GLYPH.unknown;
+    const titleCell = `${glyph} **${escapeCell(r.title)}** <br /> _${fmtDuration(r.durationMs)}_`;
+    const description = r.errorMessage && r.status !== "passed"
+      ? `${escapeCell(r.description ?? "")} <br /> ⚠ ${escapeCell(r.errorMessage)}`
+      : escapeCell(r.description ?? "");
+    const screenshotUrl = r.artifacts.screenshot ? urlFor(uploads, basename(r.artifacts.screenshot)) : null;
+    const videoUrl = r.artifacts.video ? urlFor(uploads, basename(r.artifacts.video)) : null;
+    const screenshotCell = screenshotUrl
+      ? `<img src="${screenshotUrl}" alt="${escapeCell(r.title)} final" width="320" />`
+      : "—";
+    const videoCell = videoUrl ? `[${basename(r.artifacts.video)}](${videoUrl})` : "—";
+    lines.push(`| ${titleCell} | ${description || "—"} | ${screenshotCell} | ${videoCell} |`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 function renderMarkdown(results, uploads) {
   const lines = [];
   lines.push("## Journey evidence");
   lines.push("");
   lines.push(`_Run ${new Date().toISOString().replace("T", " ").slice(0, 16)} UTC by \`scripts/run-journeys.mjs\`._`);
   lines.push("");
-  // Failures first so reviewers see them immediately.
-  const sorted = [...results].sort((a, b) => Number(a.status === "passed") - Number(b.status === "passed"));
-  for (const r of sorted) {
-    const glyph = STATUS_GLYPH[r.status] || STATUS_GLYPH.unknown;
-    lines.push(`### ${glyph} ${r.title} · ${fmtDuration(r.durationMs)}`);
+  const baseline = results.filter((r) => r.section !== "task");
+  const task = results.filter((r) => r.section === "task");
+  if (baseline.length > 0) {
+    lines.push(renderTableSection("Baseline", baseline, uploads));
+  }
+  if (task.length > 0) {
+    lines.push(renderTableSection("Task evidence", task, uploads));
+  }
+  // Bare-URL section so GitHub auto-renders inline `<video>` players.
+  // Markdown links inside table cells render as plain anchors only.
+  const inlineUrls = [...results]
+    .filter((r) => r.artifacts.video)
+    .map((r) => urlFor(uploads, basename(r.artifacts.video)))
+    .filter((u) => u);
+  if (inlineUrls.length > 0) {
+    lines.push("<details>");
+    lines.push("<summary>Inline video players (bare URLs · auto-play)</summary>");
     lines.push("");
-    if (r.errorMessage && r.status !== "passed") {
-      lines.push(`> ${r.errorMessage}`);
+    for (const u of inlineUrls) {
+      lines.push(u);
       lines.push("");
     }
-    const screenshotUrl = r.artifacts.screenshot ? urlFor(uploads, basename(r.artifacts.screenshot)) : null;
-    const videoUrl = r.artifacts.video ? urlFor(uploads, basename(r.artifacts.video)) : null;
-    if (screenshotUrl) {
-      lines.push(`<img src="${screenshotUrl}" alt="${r.title} final" width="640" />`);
-      lines.push("");
-    }
-    if (videoUrl) {
-      lines.push(`[${basename(r.artifacts.video)}](${videoUrl})`);
-      lines.push("");
-    }
-    if (!screenshotUrl && !videoUrl) {
-      lines.push("_(no artifacts produced)_");
-      lines.push("");
-    }
+    lines.push("</details>");
   }
   return lines.join("\n").trim();
 }
