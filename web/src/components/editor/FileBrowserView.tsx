@@ -8,7 +8,7 @@
  * onOpenRoute callback supplied by the caller.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import s from "./fileBrowserView.module.css";
 import { readRecents, pushRecent, writeRecents } from "./recents";
 import { readFolderState, writeFolderState } from "./folderState";
@@ -422,26 +422,9 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
               size="sm"
             />
           )}
-          {groups.pages.map((f) => (
-            <FileRow
-              key={f.path}
-              file={f}
-              selected={selected?.path === f.path}
-              activeTab={activeRoute === f.path}
-              openInTab={openRoutes.has(f.path)}
-              pulse={pulsePath === f.path}
-              onSelect={() => setSelected(f)}
-              onActivate={() => openFile(f)}
-              onContextMenu={openMenu(f)}
-              onOpenMenu={openMenu(f)}
-            />
-          ))}
-        </Section>
-
-        {/* Components */}
-        {groups.components.length > 0 && (
-          <Section label="Components" count={groups.components.length}>
-            {groups.components.map((f) => (
+          <RowList
+            items={groups.pages}
+            renderItem={(f) => (
               <FileRow
                 key={f.path}
                 file={f}
@@ -454,47 +437,76 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
                 onContextMenu={openMenu(f)}
                 onOpenMenu={openMenu(f)}
               />
-            ))}
+            )}
+          />
+        </Section>
+
+        {/* Components */}
+        {groups.components.length > 0 && (
+          <Section label="Components" count={groups.components.length}>
+            <RowList
+              items={groups.components}
+              renderItem={(f) => (
+                <FileRow
+                  key={f.path}
+                  file={f}
+                  selected={selected?.path === f.path}
+                  activeTab={activeRoute === f.path}
+                  openInTab={openRoutes.has(f.path)}
+                  pulse={pulsePath === f.path}
+                  onSelect={() => setSelected(f)}
+                  onActivate={() => openFile(f)}
+                  onContextMenu={openMenu(f)}
+                  onOpenMenu={openMenu(f)}
+                />
+              )}
+            />
           </Section>
         )}
 
         {/* Source (CSS / JS / JSON) */}
         {groups.source.length > 0 && (
           <Section label="Source" count={groups.source.length}>
-            {groups.source.map((f) => (
-              <FileRow
-                key={f.path}
-                file={f}
-                selected={selected?.path === f.path}
-                activeTab={activeRoute === f.path}
-                openInTab={openRoutes.has(f.path)}
-                pulse={pulsePath === f.path}
-                onSelect={() => setSelected(f)}
-                onActivate={() => openFile(f)}
-                onContextMenu={openMenu(f)}
-                onOpenMenu={openMenu(f)}
-              />
-            ))}
+            <RowList
+              items={groups.source}
+              renderItem={(f) => (
+                <FileRow
+                  key={f.path}
+                  file={f}
+                  selected={selected?.path === f.path}
+                  activeTab={activeRoute === f.path}
+                  openInTab={openRoutes.has(f.path)}
+                  pulse={pulsePath === f.path}
+                  onSelect={() => setSelected(f)}
+                  onActivate={() => openFile(f)}
+                  onContextMenu={openMenu(f)}
+                  onOpenMenu={openMenu(f)}
+                />
+              )}
+            />
           </Section>
         )}
 
         {/* Assets (images, video, audio, other) */}
         {groups.assets.length > 0 && (
           <Section label="Assets" count={groups.assets.length}>
-            {groups.assets.map((f) => (
-              <FileRow
-                key={f.path}
-                file={f}
-                selected={selected?.path === f.path}
-                activeTab={activeRoute === f.path}
-                openInTab={openRoutes.has(f.path)}
-                pulse={pulsePath === f.path}
-                onSelect={() => setSelected(f)}
-                onActivate={() => openFile(f)}
-                onContextMenu={openMenu(f)}
-                onOpenMenu={openMenu(f)}
-              />
-            ))}
+            <RowList
+              items={groups.assets}
+              renderItem={(f) => (
+                <FileRow
+                  key={f.path}
+                  file={f}
+                  selected={selected?.path === f.path}
+                  activeTab={activeRoute === f.path}
+                  openInTab={openRoutes.has(f.path)}
+                  pulse={pulsePath === f.path}
+                  onSelect={() => setSelected(f)}
+                  onActivate={() => openFile(f)}
+                  onContextMenu={openMenu(f)}
+                  onOpenMenu={openMenu(f)}
+                />
+              )}
+            />
           </Section>
         )}
 
@@ -608,6 +620,23 @@ function FileContextMenu({
   );
 }
 
+/** Pick a `data-kind` attribute for the row icon. CSS targets these
+ *  to give image / video / audio / pdf / code / other their own
+ *  background+border tone, which makes a long file list scan-able by
+ *  glyph color rather than reading every name. */
+function iconKindFor(f: SandboxFile): string {
+  if (f.kind === "page") return "page";
+  if (f.kind === "component") return "component";
+  if (f.kind === "config") return "code";
+  const ext = (f.name.split(".").pop() || "").toLowerCase();
+  if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "bmp"].includes(ext)) return "image";
+  if (["mp4", "webm", "mov", "m4v"].includes(ext)) return "video";
+  if (["mp3", "wav", "ogg", "m4a", "flac"].includes(ext)) return "audio";
+  if (ext === "pdf") return "pdf";
+  if (["json", "ts", "tsx", "js", "jsx", "css", "scss", "html", "md", "yaml", "yml", "toml"].includes(ext)) return "code";
+  return "other";
+}
+
 /** Pages open as their path, components open through the synthetic
  *  /_preview/ wrapper, everything else is a download. */
 function routeFor(f: SandboxFile): string {
@@ -619,10 +648,53 @@ function Section({ label, count, children }: { label: string; count?: number; ch
   return (
     <div className={s.section}>
       <div className={s.sectionLabel}>
-        {label}{typeof count === "number" && count > 0 ? ` · ${count}` : ""}
+        <span>{label}</span>
+        {typeof count === "number" && count > 0 && (
+          <span className={s.sectionCount}>{count}</span>
+        )}
       </div>
       {children}
     </div>
+  );
+}
+
+/** Render the first `initialLimit` rows; expose a "Show N more…"
+ *  button that swaps to the full list inside a useTransition so the
+ *  UI doesn't stutter on big projects (Claude can produce hundreds of
+ *  files in a long session). */
+const INITIAL_SECTION_LIMIT = 30;
+
+function RowList<T>({
+  items,
+  initialLimit = INITIAL_SECTION_LIMIT,
+  renderItem,
+}: {
+  items: T[];
+  initialLimit?: number;
+  renderItem: (item: T, index: number) => React.ReactNode;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [, startTransition] = useTransition();
+  // Reset whenever the underlying list shrinks below the cap (e.g.
+  // after a delete) so the button doesn't linger pointing at zero.
+  useEffect(() => {
+    if (items.length <= initialLimit && showAll) setShowAll(false);
+  }, [items.length, initialLimit, showAll]);
+  const visible = showAll ? items : items.slice(0, initialLimit);
+  const hidden = items.length - visible.length;
+  return (
+    <>
+      {visible.map(renderItem)}
+      {hidden > 0 && (
+        <button
+          type="button"
+          className={s.showMore}
+          onClick={() => startTransition(() => setShowAll(true))}
+        >
+          Show {hidden} more
+        </button>
+      )}
+    </>
   );
 }
 
@@ -676,7 +748,10 @@ function FileRow({
         e.dataTransfer.effectAllowed = "copy";
       }}
     >
-      <div className={`${s.icon} ${file.kind === "component" ? s.iconComponent : (file.kind === "asset" || file.kind === "config") ? s.iconAsset : ""}`}>
+      <div
+        className={`${s.icon} ${file.kind === "component" ? s.iconComponent : (file.kind === "asset" || file.kind === "config") ? s.iconAsset : ""}`}
+        data-kind={iconKindFor(file)}
+      >
         <Icon />
       </div>
       <div className={s.meta}>

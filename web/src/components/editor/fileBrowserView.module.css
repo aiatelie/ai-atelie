@@ -150,8 +150,35 @@
   text-transform: uppercase;
   color: var(--ink-50);
   font-weight: var(--weight-semi);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .sectionLabel + .row { padding-top: 6px; }
+.sectionCount {
+  font: var(--weight-semi) 10px var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-55);
+  background: var(--ink-04);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.showMore {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 8px 24px 12px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: color var(--motion-fast) var(--ease-out-expressive);
+}
+.showMore:hover { color: var(--ink-92); }
 
 .row {
   display: grid;
@@ -230,6 +257,28 @@
   background: var(--ink-04);
   border-color: var(--ink-10);
   color: var(--ink-44);
+}
+
+/* Per-kind icon tinting. data-kind is keyed off the file extension by
+ * iconKindFor(); we override only the few that benefit from a distinct
+ * glyph color so the list scans by hue. Falls back gracefully — any
+ * unknown data-kind picks up the parent .iconAsset / .iconComponent
+ * styles. */
+.icon[data-kind="image"] {
+  background: var(--success-alt-bg, var(--ink-04));
+  border-color: var(--success-alt-border, var(--ink-10));
+  color: var(--success-fg, var(--ink-65));
+}
+.icon[data-kind="video"],
+.icon[data-kind="audio"] {
+  background: var(--icon-bg-cool, var(--ink-04));
+  border-color: var(--icon-bg-blue-soft, var(--ink-10));
+  color: var(--icon-bg-blue-strong, var(--ink-65));
+}
+.icon[data-kind="pdf"] {
+  background: var(--brand-warm-soft, var(--ink-04));
+  border-color: var(--brand-warm-border, var(--ink-10));
+  color: var(--brand-warm-strong, var(--brand));
 }
 
 .meta {
