@@ -113,3 +113,17 @@ if (typeof window !== "undefined") {
 // Backwards-compat re-export so existing call sites that imported
 // `ThemeName` keep compiling. New code should use ThemePreference.
 export type ThemeName = ThemePreference;
+
+/** Subscribe to theme-change notifications. The listener fires for
+ *  explicit setTheme() calls AND for live OS appearance flips while
+ *  the user has "system" selected. Returns an unsubscribe function. */
+export function subscribeTheme(listener: (pref: ThemePreference) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = (e: Event) => {
+    const detail = (e as CustomEvent<{ name?: ThemePreference }>).detail;
+    if (detail?.name) listener(detail.name);
+    else listener(active);
+  };
+  window.addEventListener(EVENT, handler);
+  return () => window.removeEventListener(EVENT, handler);
+}
