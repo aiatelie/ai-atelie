@@ -12,9 +12,12 @@
 // journeys, plenty of margin.
 
 import { existsSync } from "node:fs";
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 
-const PROJECTS_DIR = "/Users/kadu/developer/aiatilie/ai-atelie/web/projects";
+// Resolve relative to this spec so the journey works from worktrees too:
+// <repo>/web/tests/e2e/journeys/<name>.spec.ts → ../../.. = <repo>/web
+const PROJECTS_DIR = path.resolve(import.meta.dirname, "../../..", "projects");
 const API_BASE = "http://localhost:5174";
 const FINAL_SCREENSHOT = "test-results/journeys-comment-translate-final.png";
 const PROJECT_NAME = "Journey · Comment Translate";
