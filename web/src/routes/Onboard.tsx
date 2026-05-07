@@ -602,6 +602,7 @@ export default function Onboard() {
                 onSend={(text, attachments, modelId) => queueOrSend(text, attachments, modelId)}
                 onStop={lastIsPending ? onStop : undefined}
                 draftKey={activeThread ? `onboard-draft:${activeThread.id}` : undefined}
+                projectId={projectId}
               />
             </div>
           )}
