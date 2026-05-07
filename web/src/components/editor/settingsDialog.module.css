@@ -163,6 +163,138 @@
   font-weight: var(--weight-semi);
 }
 
+/* ─── Design — swatch grid + status row ─────────────────────── */
+
+.designStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface-warm);
+  border: 1px solid var(--ink-08);
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.designStatusLabel {
+  font-size: 12px;
+  color: var(--ink-65);
+}
+.designStatusLabel strong { color: var(--ink-92); font-weight: var(--weight-semi); }
+
+.designResetBtn {
+  appearance: none;
+  border: 1px solid var(--ink-12);
+  background: var(--surface);
+  color: var(--ink-92);
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  padding: 5px 12px;
+  border-radius: 100px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color var(--motion-fast) var(--ease-out-expressive);
+}
+.designResetBtn:hover:not(:disabled) { background: var(--ink-04); }
+.designResetBtn:disabled { opacity: 0.4; cursor: default; }
+
+.themeGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.themeGroupLabel {
+  font-size: 11px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+  color: var(--ink-50);
+  font-weight: var(--weight-semi);
+}
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.themeCard {
+  appearance: none;
+  background: var(--surface-warm);
+  border: 1px solid var(--ink-10);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition:
+    background-color var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
+}
+.themeCard:hover {
+  border-color: var(--ink-25);
+  background: var(--surface);
+}
+.themeCard:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.themeCardActive,
+.themeCardActive:hover {
+  border-color: var(--brand);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--brand) inset;
+}
+
+.themeSwatch {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 44px;
+  border-radius: 6px;
+  border: 1px solid;
+  overflow: hidden;
+}
+
+.themeSwatchSurface {
+  position: absolute;
+  inset: 6px 32% 6px 6px;
+  border-radius: 4px;
+}
+.themeSwatchBrand {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  bottom: 6px;
+  right: 8px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.themeSwatchInk {
+  position: absolute;
+  width: 14px;
+  height: 6px;
+  border-radius: 2px;
+  top: 8px;
+  right: 8px;
+}
+
+.themeCardLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--ink-92);
+  letter-spacing: 0.005em;
+}
+.themeCardActive .themeCardLabel { color: var(--brand-fg, var(--brand)); font-weight: var(--weight-semi); }
+
 /* ─── Notifications ────────────────────────────────────────── */
 
 .notifRow {
