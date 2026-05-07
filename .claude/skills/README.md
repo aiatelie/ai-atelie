@@ -8,7 +8,8 @@ Markdown playbooks Claude Code auto-loads when you (the contributor) open this r
 
 - **`ship-task/`** — orchestrator. Take a task → understand → implement → verify → blast-radius regression check → semantic commit → PR with evidence.
 - **`verify-with-playwright/`** — drives the dev server with a real browser, captures screenshots/video, hands them to `bun run upload:evidence`.
-- **`cuj-guardian/`** — runs and triages the Critical User Journey (`web/tests/e2e/cuj.spec.ts`). Pre-flight gate by diff inspection; five-step triage protocol on failure.
+- **`cuj-guardian/`** — runs and triages the journey suite under `web/tests/e2e/journeys/`. Pre-flight gate by diff inspection; five-step triage protocol on failure.
+- **`pr-evidence/`** — wraps `bun run journeys` (8 baseline journeys + optional `--task <spec>`) and rewrites the inline-evidence block in the current PR's body.
 - **`semantic-commit/`** — drafts Conventional Commits messages tuned to the workspace scope set (`api | web | mcp | skills | repo | deps`).
 
 ## Adding a dev-time skill
@@ -51,11 +52,41 @@ Skill bodies should:
 
 After authoring: open Claude Code in the repo and type `/`-something or ask a question that should trigger your skill. If the skill description doesn't fire, pad the description with more trigger phrases — skill discovery in 2026 still under-fires more than it over-fires.
 
+## When to upgrade a skill to a subagent
+
+Skills run inline in the contributor's conversation; subagents
+(`.claude/agents/<name>.md`) run in their own context window with
+their own tool restrictions and return only a summary. Subagents
+earn their place when the work is **isolated, parallelizable, or
+context-polluting**.
+
+Today everything fits as a skill. Revisit when **any** of these
+triggers fires:
+
+1. **Stdout pollution.** A skill's shelled-out tool dumps so much
+   noise (long Playwright runs, verbose CI logs, full agent stream
+   replays) that the contributor loses track of the conversation.
+   Move it to a subagent so the noise stays in the side process and
+   only a clean summary returns.
+2. **Parallelism need.** Two skills routinely run together
+   independently (e.g. running the journey suite *while* doing a
+   `verify-with-playwright` per-task spec). A subagent unlocks
+   `Promise.all`-shape concurrency since each gets its own context.
+3. **PR review traffic.** Once the repo gets active reviewers,
+   triaging review comments needs its own context window —
+   classifying nits vs. blockers, drafting follow-ups — without
+   contaminating the implementation context. That's the moment for
+   a `pr-reviewer` subagent.
+
+Until then: skills + scripts + hooks. Web consensus and Claude
+Code's official guidance both say *start with skills, add subagents
+when you observe the pain.*
+
 ## Cross-references
 
-- **`scripts/`** at the repo root — non-skill helpers a skill body can shell out to (`bun run setup:attach`, `bun run upload:evidence`, `bun run release`, `bun run test:cuj`). Add scripts here when you need persistent automation; reference them from skill bodies when a skill should call them.
-- **`web/tests/e2e/cuj.spec.ts`** — the Critical User Journey. The `cuj-guardian` skill owns this test's lifecycle.
-- **`web/tests/e2e/CUJ_JOURNAL.md`** — append-only journal of every change to the CUJ. Required reading before modifying the spec.
+- **`scripts/`** at the repo root — non-skill helpers a skill body can shell out to (`bun run setup:attach`, `bun run upload:evidence`, `bun run journeys`, `bun run release`). Add scripts here when you need persistent automation; reference them from skill bodies when a skill should call them.
+- **`web/tests/e2e/journeys/`** — the journey suite (`home-loads`, `home-shows-demo`, `create-hello-world-banner`, `switch-model`, `agent-edits-canvas`, `canvas-variations`, `comment-translate`, `cleanup-snapshot`). The `cuj-guardian` skill owns the suite's lifecycle.
+- **`web/tests/e2e/CUJ_JOURNAL.md`** — append-only journal of every change to a journey. Required reading before modifying any spec.
 
 ## Where this should NOT go
 

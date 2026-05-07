@@ -139,7 +139,7 @@ Reserve Opus for the actual feature work the maintainer is shipping — not the 
 
 ### Other valid completion signals
 
-- **Filesystem**: poll `web/projects/<id>/` until a target file is written or modified (use `stat().mtimeMs` against a pre-prompt snapshot — see `cuj.spec.ts` for the pattern).
+- **Filesystem**: poll `web/projects/<id>/` until a target file is written or modified (use `stat().mtimeMs` against a pre-prompt snapshot — see `web/tests/e2e/journeys/agent-edits-canvas.spec.ts` for the pattern).
 - **DOM mutation**: `page.waitForFunction(() => document.querySelector("[data-step-count]")?.textContent !== "0")`
 - **Chat thread**: wait for an "Undo" / "Restore" button to appear (which only renders post-completion in this codebase).
 - **Iframe content**: `await page.frameLocator("iframe").locator("body").innerText()` returns text matching the expected result.

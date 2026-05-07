@@ -105,16 +105,19 @@ We don't write any plaintext cookie or token file anywhere. Specifically:
 
 A rule of thumb: **if you ever see a step in the docs that asks you to copy a cookie value into a file, paste it into a command, or commit it anywhere — it's a regression.** The setup is designed so the cookie value is never visible as text outside of Chromium's own storage.
 
-## The Critical User Journey (CUJ)
+## The journey suite
 
-`web/tests/e2e/cuj.spec.ts` is the single end-to-end test that proves AI Atelie's core promise: a user opens the app, creates a project, the agent designs into it, the canvas renders. It takes ~5 minutes (agent latency), so it's tagged `@cuj` and gated behind a separate npm script:
+`web/tests/e2e/journeys/` holds four focused, ≤90s specs that together prove AI Atelie's core promise: a user opens the app, creates a project, the agent designs into it, the canvas renders, and no test project leaks onto disk. They produce inline-renderable evidence (per-journey video + final.png) for the PR description.
 
 ```bash
-bun run test:e2e   # everything EXCEPT the CUJ — fast, run as often as you like
-bun run test:cuj   # ONLY the CUJ — run before approving any PR
+bun run test:e2e        # everything EXCEPT the journey suite — fast, run as often as you like
+bun run test:journeys   # the suite without uploading evidence
+bun run journeys        # the suite + uploads inline evidence into the current PR's body
 ```
 
-The change log for the CUJ is `web/tests/e2e/CUJ_JOURNAL.md`. **Touching `cuj.spec.ts` without adding a journal entry is a bug.** The `cuj-guardian` skill enforces this and walks the triage protocol on failure.
+`bun run journeys` runs each spec in turn, ffmpeg-compresses the videos, uploads them via `scripts/upload-evidence.mjs`, and rewrites a `<!-- journey-evidence:start -->`...`<!-- journey-evidence:end -->` block in the current PR's body — idempotent, re-runnable. Per-journey isolation: a failure in one journey doesn't kill the others; failures sort to the top of the evidence block.
+
+The change log for the suite is `web/tests/e2e/CUJ_JOURNAL.md`. **Touching any journey without adding a journal entry is a bug.** The `cuj-guardian` skill walks the triage protocol on failure (now applied to whichever journey went red, not the monolithic spec it used to gate).
 
 ## What is not accepted
 

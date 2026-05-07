@@ -5,22 +5,20 @@ description: Run and triage AI Atelie's Critical User Journey (CUJ) for every PR
 
 # cuj-guardian
 
-A contributor workflow for AI Atelie. The CUJ ("Critical User Journey") is *the one test* that proves the product still does its core job. This skill keeps it alive across PRs by gating runs, triaging failures, and refusing to weaken assertions silently.
+A contributor workflow for AI Atelie. The CUJ ("Critical User Journey") is now a **suite of focused journeys**, not one big spec — the same contract, split into pieces so a slow agent doesn't kill the cleanup phase or block evidence on the PR.
 
 This skill is **dev-time only**. It does not load into adapter sessions spawned by the editor.
 
-## What the CUJ proves
+## What the suite proves
 
-The single test in `web/tests/e2e/cuj.spec.ts`. Drives:
+Four journeys under `web/tests/e2e/journeys/`. Together they prove the product still does its core job:
 
-1. Home page renders with a working `+ New project` affordance.
-2. Project creation through the modal lands on the editor route with a valid `p_*` id.
-3. The new project's directory exists on disk under `web/projects/<id>/` with the expected scaffold.
-4. The editor iframe canvas is reachable.
-5. A real Claude Code agent (or Kimi / OpenCode adapter, whichever is selected in the picker) takes a chat prompt and produces a JSX file that contains both `#ffffff` and `#0a1f3a` backgrounds plus `Hello World` text — proving the agent ↔ filesystem ↔ canvas pipeline works end to end.
-6. Cleanup via `DELETE /api/projects/<id>` so no test project leaks into `web/projects/`.
+1. `home-loads.spec.ts` — home renders, the create-project form is visible + interactive.
+2. `create-project.spec.ts` — name + Create lands on `/editor` with a valid `p_*` id; project dir exists on disk; iframe canvas mounts.
+3. `agent-edits-canvas.spec.ts` — the load-bearing one. A real Claude Code agent (or whichever adapter is selected) takes a chat prompt, writes to disk, and the iframe paints the requested change.
+4. `cleanup-snapshot.spec.ts` — leak guard: any project named `Journey · *` is force-deleted; suite ends with the project list it started with.
 
-If this test fails, the product is broken in a way users will notice. That's the contract; everything else (`smoke.spec.ts`, type-check, build) is cheap-pre-flight stuff.
+If any of these fails, the product is broken in a way users will notice. That's the contract; everything else (`smoke.spec.ts`, type-check, build) is cheap-pre-flight stuff.
 
 ## Cleanup safety guarantee
 
@@ -82,7 +80,7 @@ Output a one-paragraph pre-flight report stating which row applies and what you'
 ## Running the CUJ
 
 ```bash
-bun run test:cuj
+bun run test:journeys
 ```
 
 Wall time: typically 4–6 minutes. Agent latency dominates; the harness loop itself is deterministic.
@@ -101,7 +99,7 @@ Artifacts on success or failure (Playwright auto-captures):
 Walk these five steps **in order**, stop at the first match. Do NOT weaken or skip any assertion until the protocol identifies "stale test".
 
 ### Step 1 — Re-run once
-Failures from the agent or network are common. Re-run `bun run test:cuj` once. If the second run passes and the diff between the two runs is the agent's wording (which it always is), call it **flaky** and file an issue describing the flake — but do not mute the test.
+Failures from the agent or network are common. Re-run `bun run test:journeys` once. If the second run passes and the diff between the two runs is the agent's wording (which it always is), call it **flaky** and file an issue describing the flake — but do not mute the test.
 
 ### Step 2 — Locate the failing assertion
 Read the failure line + the failure screenshot. Classify the failure surface as one of:
@@ -138,7 +136,7 @@ When Step 5 says "go":
 2. **Assertions**: never weaken without a replacement of equal strength. If a step is genuinely no longer applicable, remove it AND add a new strong assertion that catches the new behaviour the feature introduced.
 3. **No `test.skip` or `test.only`.** Ever. If the test is broken in a way you can't fix in this PR, escalate to the maintainer; don't paper over it.
 4. **No `expect(true).toBe(true)`** or empty asserts. The agent must refuse this even if the test would otherwise be flagged as broken.
-5. **Update journal in the same commit.** A spec change without a journal entry is a bug. The pre-commit ritual: `git diff --staged web/tests/e2e/cuj.spec.ts CUJ_JOURNAL.md` — both must be non-empty.
+5. **Update journal in the same commit.** A spec change without a journal entry is a bug. The pre-commit ritual: `git diff --staged web/tests/e2e/journeys/ CUJ_JOURNAL.md` — both must be non-empty.
 
 ## Anti-patterns the agent must refuse
 
@@ -153,7 +151,7 @@ When Step 5 says "go":
 
 Before writing the commit message, the agent must verify:
 
-- [ ] `bun run test:cuj` passed locally on the current SHA (post-edit if any).
+- [ ] `bun run test:journeys` passed locally on the current SHA (post-edit if any).
 - [ ] `web/tests/e2e/CUJ_JOURNAL.md` has a new entry dated today with the PR number.
 - [ ] No `.skip`, `.only`, or empty `expect(...)` in the staged diff.
 - [ ] If selectors changed: the new selector is role+name or `data-testid`, not text-only.
@@ -172,7 +170,7 @@ Stop and ask the maintainer rather than auto-edit when:
 
 ## See also
 
-- `web/tests/e2e/cuj.spec.ts` — the test itself.
+- `web/tests/e2e/journeys/` — the test itself.
 - `web/tests/e2e/CUJ_JOURNAL.md` — the change log.
 - `.claude/skills/verify-with-playwright/SKILL.md` — the smaller per-feature verification skill (writes ad-hoc specs; does not own the journey).
 - `.claude/skills/ship-task/SKILL.md` — the orchestrator that runs this skill as part of the PR loop.

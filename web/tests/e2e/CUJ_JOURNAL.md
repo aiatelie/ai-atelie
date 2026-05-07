@@ -1,8 +1,10 @@
 # Critical User Journey — Change Log
 
-The CUJ is a single test in [`cuj.spec.ts`](./cuj.spec.ts). It is the contract that "the product still does its core job": a user opens the app, creates a project, the Claude Code agent designs into it, the canvas renders the result.
+The CUJ is now a **suite of journeys** under [`journeys/`](./journeys/) — each a focused, ≤90s spec that proves one piece of the canonical AI Atelie experience. They produce inline-renderable evidence (per-journey video + final.png) for the PR description via `bun run journeys`.
 
-Every PR that **modifies** the CUJ (new step, removed step, weakened or strengthened assertion, changed selector) MUST add an entry here. Append-only, newest on top. Every PR that runs the CUJ unchanged MAY add a "ran-clean" entry for visibility, but it isn't required.
+Together they preserve the contract the old single-spec CUJ asserted: "the product still does its core job — a user opens the app, creates a project, the Claude Code agent designs into it, the canvas renders the result, and no test project leaks onto disk."
+
+Every PR that **modifies** any journey (new step, removed step, weakened or strengthened assertion, changed selector) MUST add an entry here. Append-only, newest on top. Every PR that runs the suite unchanged MAY add a "ran-clean" entry for visibility, but it isn't required.
 
 ## Format
 
@@ -24,7 +26,20 @@ See [`.claude/skills/cuj-guardian/SKILL.md`](../../../.claude/skills/cuj-guardia
 
 ---
 
-## 2026-05-07 — PR pending — evolved (modal step removed)
+## 2026-05-07 — PR pending — evolved (split into journeys/ suite)
+
+- **Change kind**: `evolved` (single spec → four-journey suite).
+- **Before**: one ~6-min `cuj.spec.ts` test that walked home → create → agent → assertion → cleanup. When the agent took >10 min the worker was killed before `finally`, leaking the test project; partial successes left no evidence on the PR.
+- **After**: four specs under `journeys/`:
+  - `home-loads.spec.ts` — app shell + create form (≤3s).
+  - `create-project.spec.ts` — name + Create → /editor with fresh `p_*` + project on disk + iframe mounted (≤90s).
+  - `agent-edits-canvas.spec.ts` — load-bearing: agent receives a chat prompt and the iframe paints "Hi there" + index.html no longer the starter (≤8min).
+  - `cleanup-snapshot.spec.ts` — name-prefix scan: any project named `Journey · *` is a leak; force-delete and assert empty.
+  Each journey produces a deterministic `final.png` + Playwright auto-records `video.webm`. `scripts/run-journeys.mjs` runs them in turn, ffmpeg-compresses videos, uploads via `scripts/upload-evidence.mjs`, and rewrites a `<!-- journey-evidence:* -->` block in the PR body — idempotent, re-runnable.
+- **Why**: the monolithic CUJ hit the 10-min Playwright wall on the polish-pass-II PR run, killed the worker before cleanup ran, and left a leaked test project + zero evidence on the PR. Splitting isolates timeouts (home-loads still passes when agent is broken; cleanup still cleans up if the agent journey times out) and lets each journey upload its evidence independently.
+- **Proof of value**: ran each new journey individually with `--no-upload` against the dev server (home-loads 0.8s, create-project 1.9s, cleanup-snapshot 1.1s — all green). Selectors moved to `getByTestId("chat-composer" | "chat-send" | "create-project-name" | "create-project-submit")` so future copy/CSS changes can't silently break them the way the polish-pass placeholder rewrite would have.
+
+## 2026-05-07 — PR #79 — evolved (modal step removed)
 
 - **Change kind**: `evolved` (one step removed; flow shortens by one click).
 - **Before**: step 1 expected a "+ New project" button visible, step 2 clicked it to open a modal that rendered the name input, step 3 filled the input and clicked Create.

@@ -31,20 +31,38 @@ Artifacts:
 
 All four are gitignored. The `verify-with-playwright` skill copies the
 relevant ones into `.evidence/<run>/` and uploads them to the PR via
-`gh attach`.
+`scripts/upload-evidence.mjs` (GitHub user-attachments CDN — videos
+play inline in PR descriptions).
+
+## The journey suite
+
+`journeys/` holds the canonical baseline journeys (home / create /
+agent / cleanup) that ship inline-rendering evidence into every PR's
+body. See [`journeys/README.md`](./journeys/README.md) and
+[`CUJ_JOURNAL.md`](./CUJ_JOURNAL.md). Run with:
+
+```sh
+bun run journeys              # full suite + upload to current PR
+bun run test:journeys         # full suite, no upload
+bun run journeys -- --only home-loads --no-upload  # one journey, local
+```
 
 ## Naming
 
 `<feature>.spec.ts`. Mirror the surface you're testing — e.g.
 `live-preview.spec.ts` for issue #1, `inspector-css.spec.ts` for the
-inspector flow.
+inspector flow. Baseline journeys live under `journeys/<id>.spec.ts`.
 
 ## Conventions
 
 - Always start at `await page.goto('/')` (the `baseURL` resolves to
   `http://localhost:5173`).
-- Prefer role-based selectors (`getByRole`, `getByLabel`) over CSS
-  selectors so tests survive markup changes.
+- For load-bearing UI nodes, prefer `getByTestId(...)` against the
+  ids defined alongside the production element. Role-based selectors
+  (`getByRole`, `getByLabel`) are the second-best choice; CSS
+  selectors and placeholder/text matches are last-resort.
 - One scenario per file unless they share fixtures.
 - Don't test the agent's outputs — test that the surface behaves the
   way the issue's acceptance criteria says it should.
+- Take a deterministic final screenshot at the end of each spec so
+  the runner has a stable artifact path to upload.

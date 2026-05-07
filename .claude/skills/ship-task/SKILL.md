@@ -211,6 +211,36 @@ EOF
 
 After creation, output the PR URL. Then prune `.evidence/` to the last 5 runs.
 
+## Step 7 — Attach evidence to the PR body
+
+Delegate to **`.claude/skills/pr-evidence/SKILL.md`** — that skill
+owns the contract for the canonical evidence flow (8 baseline
+journeys + optional `--task <spec>` for per-PR feature demos),
+including the verification step that confirms the body update
+landed.
+
+The short version:
+
+```sh
+# Canonical: full suite + body update on the current PR
+bun run journeys
+
+# With a per-PR feature demo (write a small Playwright spec, then:)
+bun run journeys -- \
+  --task path/to/feature-demo.spec.ts \
+  --task-title "Feature title" \
+  --task-description "What this PR proves visually."
+```
+
+When to write a `--task` spec:
+
+- This PR ships a user-visible feature (theme, UI flow, new affordance).
+- Skip if the PR is purely API/server/config; baseline alone is enough.
+
+If `bun run journeys` reports a failure, walk the `cuj-guardian`
+triage protocol before touching either the spec or the feature.
+Don't ship until the suite is green or the failure is documented.
+
 ## Anti-patterns
 
 - "Verified by inspection" — not allowed. Either run `verify-with-playwright` or explicitly state the surface has no UI.
@@ -230,5 +260,6 @@ After creation, output the PR URL. Then prune `.evidence/` to the last 5 runs.
 
 - `.claude/skills/verify-with-playwright/SKILL.md` — the verify delegate.
 - `.claude/skills/semantic-commit/SKILL.md` — the commit delegate.
+- `.claude/skills/pr-evidence/SKILL.md` — Step 7 delegate (journey suite + body update).
 - `CONTRIBUTING.md` — repo-wide commit/release/skill conventions.
 - `playwright.config.ts` — e2e config the verify step uses.

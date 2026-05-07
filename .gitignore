@@ -96,3 +96,4 @@ playwright-tools/
 .cache/
 .turbo/
 .parcel-cache/
+web/tests/e2e/.task-staging/
