@@ -688,6 +688,13 @@ function Composer({
           if (files.length) await addFiles(files);
         }}
         onKeyDown={(e) => {
+          // Cmd/Ctrl+Enter is always send, regardless of slash-menu state.
+          // It's the universal "submit" gesture across chat tools.
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            submit();
+            return;
+          }
           if (showSlash) {
             if (e.key === "ArrowDown") { e.preventDefault(); setSlashIndex((i) => Math.min(i + 1, slashMatches.length - 1)); return; }
             if (e.key === "ArrowUp")   { e.preventDefault(); setSlashIndex((i) => Math.max(i - 1, 0)); return; }
@@ -760,12 +767,17 @@ function Composer({
                 ? hasQueued
                   ? "Replace queued message · fires when current turn ends"
                   : "Queue this message · fires when current turn ends"
-                : "Enter to send · Shift+Enter for newline"
+                : "Enter to send · Shift+Enter for newline · ⌘/Ctrl+Enter also sends"
             }
           >
             ↑
           </button>
         )}
+      </div>
+      <div className={s.composerHint} aria-hidden="true">
+        <kbd className={s.kbd}>Enter</kbd> to send ·{" "}
+        <kbd className={s.kbd}>Shift</kbd>+<kbd className={s.kbd}>Enter</kbd> newline ·{" "}
+        paste images · drop files
       </div>
     </form>
   );

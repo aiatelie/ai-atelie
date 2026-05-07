@@ -1289,10 +1289,30 @@
 .composer {
   border-top: 1px solid var(--ink-08);
   background: var(--surface);
-  padding: 10px 12px;
+  padding: 10px 12px 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.composerHint {
+  font: var(--weight-medium) 10.5px var(--font-system);
+  color: var(--ink-44);
+  letter-spacing: 0.005em;
+  user-select: none;
+  padding: 0 2px;
+}
+.kbd {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px solid var(--ink-12);
+  border-radius: 4px;
+  background: var(--ink-04);
+  color: var(--ink-65);
+  vertical-align: 1px;
 }
 .composerDrag { outline: 2px dashed var(--brand); outline-offset: -4px; }
 .composerField {
