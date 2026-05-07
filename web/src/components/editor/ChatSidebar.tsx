@@ -22,6 +22,7 @@ import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
 import { kindOf, KIND_VERB, type ToolKind } from "../../lib/toolKind";
+import { smartLabel } from "../../lib/smartLabel";
 
 /* KindIcon — 12px inline SVG icons for tool-call chips. Lucide-style
  * minimal: single stroke, currentColor, no fill. Sized to sit inside
@@ -94,6 +95,11 @@ export type ChatMessage =
       /** Rich element profile attached to this turn — what the AI saw
        *  for "the thing the user clicked on". Persists with the message. */
       descriptor?: import("../../lib/cssPath").ElementDescriptor;
+      /** UI smart-label kind classified at click time (when live
+       *  computed style was available). Persisted so the chat-ref card
+       *  on rehydrated history still says "Heading" for a heading-styled
+       *  div instead of regressing to "Container". */
+      kind?: import("../../lib/smartLabel").LabelKind;
       /** Small data-URL screenshot of how the page looked at comment time. */
       thumbnail?: string;
       /** Serialized iframe body outerHTML at comment time (for restore). */
@@ -1144,23 +1150,29 @@ function Bubble({
                 </button>
               )}
               <div className={s.refLabel}>
-                {desc ? (
-                  <span
-                    className={s.refSnippet}
-                    title={desc.ancestors.length > 1 ? `ancestors: ${desc.ancestors.join(" › ")}` : undefined}
-                  >
-                    {desc.label}
-                  </span>
-                ) : (
-                  <>
-                    <span className={s.refTag}>&lt;{tag}&gt;</span>
-                    {snippet ? (
-                      <span className={s.refSnippet}>"{snippet.length > 36 ? snippet.slice(0, 33) + "…" : snippet}"</span>
-                    ) : (
-                      <code className={s.refPath}>{m.route}</code>
-                    )}
-                  </>
-                )}
+                {(desc || tag) ? (() => {
+                  const lbl = smartLabel({
+                    descriptor: desc,
+                    kind: m.kind,
+                    tag,
+                  });
+                  // Long-form label (e.g. `<h1.title> "Welcome" inside
+                  // <section.hero>`) goes in the tooltip; the chip stays
+                  // compact so the snippet on the next line can breathe.
+                  const tip = desc?.ancestors && desc.ancestors.length > 1
+                    ? `${desc.label} · ancestors: ${desc.ancestors.join(" › ")}`
+                    : desc?.label;
+                  return (
+                    <>
+                      <span className={s.refTag} title={tip}>{lbl.full}</span>
+                      {snippet ? (
+                        <span className={s.refSnippet}>"{snippet.length > 36 ? snippet.slice(0, 33) + "…" : snippet}"</span>
+                      ) : !desc ? (
+                        <code className={s.refPath}>{m.route}</code>
+                      ) : null}
+                    </>
+                  );
+                })() : null}
               </div>
             </div>
           )}

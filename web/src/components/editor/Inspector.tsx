@@ -11,6 +11,7 @@ import s from "./editor.module.css";
 import { getDocumentColors, getDocumentFonts, type ColorUsage, type FontUsage } from "../../lib/docInspect";
 import { ModelPicker, loadModelId, saveModelId, useModelPickerFlag } from "./ModelPicker";
 import type { ElementDescriptor } from "../../lib/cssPath";
+import { smartLabel, computedHints } from "../../lib/smartLabel";
 
 export type SelectedInfo = {
   selector: string;
@@ -355,11 +356,20 @@ function InspectorBody({
     onChange(String(key), String(raw) + suffix);
   }
 
+  // Smart label uses live computed style — only available right here in
+  // the inspector. Chip slot is small, so we render the `short` variant
+  // (just the kind) and put the full structural identity in the tooltip.
+  const label = smartLabel({
+    descriptor: selected.descriptor,
+    tag: selected.tag,
+    computed: computedHints(selected.computed),
+  });
+
   return (
     <aside className={s.inspector}>
       <div className={s.inspectorTitle}>
         <span>Selection{selectionCount && selectionCount > 1 ? ` · ${selectionCount}` : ""}</span>
-        <span className={s.selBadge}>{selected.tag}</span>
+        <span className={s.selBadge} title={label.full}>{label.short}</span>
         {onClose && (
           <button
             type="button"

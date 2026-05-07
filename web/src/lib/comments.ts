@@ -21,6 +21,8 @@
 
 import { useEffect, useState } from "react";
 import { subscribeProjectMeta } from "./metaEvents";
+import type { ElementDescriptor } from "./cssPath";
+import type { LabelKind } from "./smartLabel";
 
 export type LocalComment = {
   id: string;
@@ -28,6 +30,15 @@ export type LocalComment = {
   selector: string;
   tag?: string;
   innerText?: string;
+  /** Rich element profile snapshotted at capture time. Optional for
+   *  back-compat with rows saved before this field existed — the UI
+   *  falls back to tag-based smart labels for those. */
+  descriptor?: ElementDescriptor;
+  /** Resolved smart-label kind, classified at capture time when live
+   *  computed style was available. Persisted so the comments panel
+   *  can render "Heading" on a heading-styled div without re-resolving
+   *  computed style (which we no longer have post-reload). */
+  kind?: LabelKind;
   body: string;
   x?: number;
   y?: number;

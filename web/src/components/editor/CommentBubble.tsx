@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import s from "./comment.module.css";
 import { ModelPicker, loadModelId, saveModelId, useModelPickerFlag } from "./ModelPicker";
+import { smartLabel } from "../../lib/smartLabel";
 
 export type CommentTarget = {
   /** Bubble anchor — canvas-local px (already iframe-rect-adjusted). */
@@ -26,6 +27,10 @@ export type CommentTarget = {
   /** Rich, AI-friendly element profile — supersedes the bare selector
    *  in chat/comment prompts. */
   descriptor?: import("../../lib/cssPath").ElementDescriptor;
+  /** Smart-label kind resolved at click time (when live computed style
+   *  was available). Lets the bubble render "Heading" for a heading-
+   *  styled div without re-running heuristics here. */
+  kind?: import("../../lib/smartLabel").LabelKind;
 };
 
 export type Attachment = {
@@ -118,7 +123,18 @@ export function CommentBubble({ target, onCancel, onSubmit }: Props) {
     >
       <div className={s.bubbleHead}>
         <span className={s.dot} />
-        <span className={s.tag}>&lt;{target.tag}&gt;</span>
+        {(() => {
+          const lbl = smartLabel({
+            descriptor: target.descriptor,
+            kind: target.kind,
+            tag: target.tag,
+          });
+          return (
+            <span className={s.tag} title={target.descriptor?.label ?? lbl.full}>
+              {lbl.medium}
+            </span>
+          );
+        })()}
         <button className={s.x} onClick={onCancel} aria-label="Cancel">×</button>
       </div>
 
