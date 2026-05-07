@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom";
 import s from "../components/projects/projects.module.css";
 import { NewProjectForm } from "../components/projects/NewProjectForm";
 import { ConfirmDialog } from "../components/projects/ConfirmDialog";
+import { Skeleton } from "../components/feedback";
 import {
   createProject,
   deleteProject,
@@ -137,14 +138,14 @@ function LoadingSkeleton() {
   return (
     <div className={s.grid} aria-busy="true">
       {[0, 1, 2].map((i) => (
-        <div key={i} className={s.card} aria-hidden="true" style={{ opacity: 0.35 }}>
-          <div className={s.cardName} style={{ background: "currentColor", height: 18, borderRadius: 4, opacity: 0.15, width: "60%" }} />
+        <div key={i} className={s.card} aria-hidden="true">
+          <Skeleton width="60%" height={18} />
           <div className={s.tabsList}>
-            <span className={s.tabPill} style={{ width: 80 }}>&nbsp;</span>
-            <span className={s.tabPill} style={{ width: 64 }}>&nbsp;</span>
+            <Skeleton variant="rect" width={80} height={20} />
+            <Skeleton variant="rect" width={64} height={20} />
           </div>
           <div className={s.cardMeta}>
-            <span>&nbsp;</span>
+            <Skeleton width={120} height={11} />
           </div>
         </div>
       ))}

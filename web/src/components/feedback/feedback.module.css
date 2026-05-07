@@ -1,0 +1,59 @@
+/* Shared feedback primitives — Skeleton, Spinner, CenteredLoader.
+ * One shimmer keyframe drives both the skeleton blocks and any future
+ * placeholder surfaces. Tokens follow the cascade in index.css so the
+ * primitives reskin automatically across themes. */
+
+@keyframes feedbackShimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@keyframes feedbackSpin {
+  to { transform: rotate(360deg); }
+}
+
+.skeleton {
+  display: inline-block;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(
+    90deg,
+    var(--ink-06) 0%,
+    var(--ink-10) 50%,
+    var(--ink-06) 100%
+  );
+  background-size: 200% 100%;
+  animation: feedbackShimmer 1.6s linear infinite;
+  vertical-align: middle;
+}
+.skeletonRect { border-radius: var(--radius-sm); }
+.skeletonCircle { border-radius: 999px; }
+.skeletonText { border-radius: var(--radius-xs); }
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--ink-10);
+  border-top-color: var(--ink-65);
+  border-radius: 999px;
+  animation: feedbackSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.centered {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 80px;
+  color: var(--ink-55);
+  font-size: var(--text-sm);
+  font-family: var(--font-system);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background: var(--ink-08); }
+  .spinner { animation-duration: 1.6s; }
+}
