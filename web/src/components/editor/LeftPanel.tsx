@@ -287,6 +287,7 @@ export function LeftPanel(props: Props) {
           queuedMessage={queuedMessage}
           onCancelQueued={onCancelQueued}
           showCanvasToggle
+          projectId={projectId}
         />
       )}
       {tab === "comments" && (
