@@ -269,11 +269,22 @@ projectsRoutes.get("/api/projects", async (c) => {
 });
 
 projectsRoutes.post("/api/projects/create", async (c) => {
-  let body: { name?: string; id?: string };
+  let body: { name?: string; id?: string; active_skills?: unknown };
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
   const name = (body.name ?? "Untitled").trim() || "Untitled";
   const id = body.id && ID_RE.test(body.id) ? body.id : newProjectId();
+  // Validate active_skills at the boundary: array of non-empty strings,
+  // capped at a reasonable max so a malformed body can't bloat the
+  // manifest. Anything else falls through to the repo's default
+  // (all four aesthetic skills checked).
+  let activeSkills: string[] | undefined;
+  if (Array.isArray(body.active_skills)) {
+    const cleaned = body.active_skills
+      .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+      .slice(0, 32);
+    if (cleaned.length > 0) activeSkills = cleaned;
+  }
   try {
     // Read the canonical DesignCanvas starter so every fresh project lands
     // with pan/zoom + theme + state-persistence wired in from prompt #1.
@@ -291,6 +302,7 @@ projectsRoutes.post("/api/projects/create", async (c) => {
       indexHtml,
       styleCss: STARTER_CSS.replace(/__NAME__/g, name),
       designCanvas: designCanvas || undefined,
+      activeSkills,
     });
     broadcastShared("projects");
     return c.json({ id, manifest });

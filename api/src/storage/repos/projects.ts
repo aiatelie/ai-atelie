@@ -30,7 +30,20 @@ export type CreateProjectInput = {
    *  from `mcp/starters/DesignCanvas.jsx` and threads it through here so
    *  the storage layer doesn't need to know the on-disk location. */
   designCanvas?: string;
+  /** Aesthetic-skill selection at creation time. Persists to
+   *  manifest.design.active_skills. When omitted, the repo defaults
+   *  to all four shipped aesthetic skills (frontend-design,
+   *  design-aesthetic-presets, design-critique, design-md-author) —
+   *  matches what NewProjectForm shows pre-checked. */
+  activeSkills?: string[];
 };
+
+const DEFAULT_ACTIVE_SKILLS = [
+  "frontend-design",
+  "design-aesthetic-presets",
+  "design-critique",
+  "design-md-author",
+];
 
 export class ProjectRepo {
   constructor(private readonly driver: StorageDriver) {}
@@ -89,6 +102,19 @@ export class ProjectRepo {
   async create(input: CreateProjectInput): Promise<ProjectManifest> {
     if (!ID_RE.test(input.id)) throw new Error(`Invalid project id: ${input.id}`);
     const now = Date.now();
+    // When the route passes the canonical DesignCanvas starter, the
+    // project's index.html script-includes it; reflect that in the
+    // manifest's components array so the editor's file panels know
+    // about the component without scanning. Empty otherwise.
+    const components = input.designCanvas
+      ? [{ file: "design-canvas.jsx", name: "DesignCanvas" }]
+      : [];
+    // Use the explicit selection from the form if provided; otherwise
+    // ship every aesthetic skill on. Direct API callers (CLI, tests)
+    // don't need to know the catalog to get a sensible default.
+    const active_skills = (input.activeSkills && input.activeSkills.length > 0)
+      ? input.activeSkills
+      : DEFAULT_ACTIVE_SKILLS;
     const manifest: ProjectManifest = {
       schemaVersion: 1,
       id: input.id,
@@ -97,9 +123,9 @@ export class ProjectRepo {
       createdAt: now,
       updatedAt: now,
       pages: [{ file: "index.html", label: "index.html", title: input.name }],
-      components: [],
+      components,
       entry: "index.html",
-      design: { active_skills: ["frontend-design"] },
+      design: { active_skills },
     };
     await this.driver.createProject(input.id);
     const files = this.driver.project(input.id).files;
