@@ -57,6 +57,13 @@ const JOURNEYS = [
     baseline: true,
   },
   {
+    id: "switch-model",
+    title: "Switch model",
+    description: "Default Opus; user picks Sonnet via the chat model picker; choice persists across a full reload.",
+    spec: "web/tests/e2e/journeys/switch-model.spec.ts",
+    baseline: true,
+  },
+  {
     id: "agent-edits-canvas",
     title: "Agent edits canvas",
     description: "Sonnet receives a chat prompt, writes files, and the iframe paints the requested change.",
