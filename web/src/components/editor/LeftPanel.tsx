@@ -147,6 +147,14 @@ export function LeftPanel(props: Props) {
     try { localStorage.setItem("left-panel-collapsed", collapsed ? "1" : "0"); } catch { /* ignore */ }
   }, [collapsed]);
 
+  // Cmd/Ctrl+B (in Editor.tsx) dispatches "leftpanel:toggle" so the
+  // panel can flip its own collapsed state without prop-drilling.
+  useEffect(() => {
+    const onToggle = () => setCollapsed((v) => !v);
+    window.addEventListener("leftpanel:toggle", onToggle);
+    return () => window.removeEventListener("leftpanel:toggle", onToggle);
+  }, []);
+
   const handleResizeMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     // Only react to primary button. Right-/middle-click should fall
     // through to the browser's default context-menu / scroll behavior.

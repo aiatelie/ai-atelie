@@ -43,6 +43,8 @@ const SECTIONS: Section[] = [
     title: "Navigation",
     rows: [
       { keys: ["mod", "P"], label: "Quick file switcher" },
+      { keys: ["mod", "B"], label: "Toggle left panel" },
+      { keys: ["?"], label: "Show this shortcuts cheat sheet" },
       { keys: ["mod", "/"], label: "Show this shortcuts cheat sheet" },
       { keys: ["Esc"], label: "Close any popover or modal" },
     ],
@@ -52,6 +54,7 @@ const SECTIONS: Section[] = [
     rows: [
       { keys: ["Enter"], label: "Send message" },
       { keys: ["Shift", "Enter"], label: "Newline in composer" },
+      { keys: ["mod", "Enter"], label: "Send (alt shortcut)" },
       { keys: ["/"], label: "Open slash command menu" },
       { keys: ["↑", "↓"], label: "Navigate slash menu" },
       { keys: ["Tab"], label: "Complete highlighted slash command" },
@@ -61,6 +64,7 @@ const SECTIONS: Section[] = [
     title: "Inspector & forms",
     rows: [
       { keys: ["mod", "Enter"], label: "Submit Inspector edit, comment, or elicit form" },
+      { keys: ["mod", "S"], label: "Save pending Inspector edits to source" },
     ],
   },
   {

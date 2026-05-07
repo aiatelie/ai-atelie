@@ -1608,10 +1608,39 @@ export default function Editor() {
   // Cmd/Ctrl+/ opens the keyboard-shortcuts cheat sheet. Same suppression
   // rule — typing "/" in chat composer mustn't hijack into this modal.
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /** Persist any pending inspector overrides for the active route to
+   *  the project's _inspector_edits.css. Shared by the Inspector save
+   *  button and the Cmd/Ctrl+S keyboard shortcut. */
+  const saveInspectorEdits = useCallback(async () => {
+    const overrides = readRoute(activeTab.route);
+    if (Object.keys(overrides).length === 0) return;
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(activeProject.id)}/inspector-css`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ route: activeTab.route, edits: overrides }),
+        },
+      );
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      clearRoute(activeTab.route);
+      const ifr = iframeRef.current;
+      if (ifr) DmBridge.injectInspectorCSS(ifr, Date.now());
+      canvasFrameRef.current?.reloadFrame();
+      trackEvent("inspector_save", { count: String(Object.keys(overrides).length) }, activeProject.id);
+      toast.success("Inspector edits saved.");
+    } catch (err) {
+      toast.error(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [activeProject.id, activeTab.route]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
-      const inField = tag === "INPUT" || tag === "TEXTAREA";
+      const inField = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement | null)?.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && (e.key === "p" || e.key === "P")) {
         if (inField) return;
         e.preventDefault();
@@ -1624,10 +1653,34 @@ export default function Editor() {
         setShortcutsOpen((v) => !v);
         return;
       }
+      // ? (Shift+/) — open the shortcuts cheat sheet without a modifier.
+      // Suppressed inside any input so users can still type "?" in chat.
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (inField) return;
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+        return;
+      }
+      // Cmd/Ctrl+B — toggle the LeftPanel collapsed state. Dispatched as
+      // a window event so the panel listens without prop-drilling.
+      if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
+        if (inField) return;
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("leftpanel:toggle"));
+        return;
+      }
+      // Cmd/Ctrl+S — flush pending inspector edits. Always wins over the
+      // browser's "Save Page As" since the user explicitly bound it.
+      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        if (inField) return;
+        void saveInspectorEdits();
+        return;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [saveInspectorEdits]);
   // Reactive stroke list for the active route — drives the Draw bar's
   // Send/Undo enabled-state and the composite-on-send pipeline.
   const routeStrokes = useStrokes(activeTab.route);
@@ -2395,37 +2448,7 @@ export default function Editor() {
               await clearRouteEverywhere(activeTab.route);
               canvasFrameRef.current?.reloadFrame();
             }}
-            onSaveInspectorEdits={async () => {
-              // Fast path: write inspector edits to _inspector_edits.css in
-              // the project (no AI). Page reloads via vite watcher and the
-              // saved styles apply via the auto-injected <link>.
-              const overrides = readRoute(activeTab.route);
-              if (Object.keys(overrides).length === 0) return;
-              try {
-                const res = await fetch(
-                  `/api/projects/${encodeURIComponent(activeProject.id)}/inspector-css`,
-                  {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ route: activeTab.route, edits: overrides }),
-                  },
-                );
-                if (!res.ok) {
-                  const j = await res.json().catch(() => ({}));
-                  throw new Error(j?.error ?? `HTTP ${res.status}`);
-                }
-                // Drop the localStorage layer — the CSS file owns the styles
-                // now. Reload the iframe + cache-bust the link so the new
-                // rules apply immediately.
-                clearRoute(activeTab.route);
-                const ifr = iframeRef.current;
-                if (ifr) DmBridge.injectInspectorCSS(ifr, Date.now());
-                canvasFrameRef.current?.reloadFrame();
-                trackEvent("inspector_save", { count: String(Object.keys(overrides).length) }, activeProject.id);
-              } catch (err) {
-                toast.error(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
-              }
-            }}
+            onSaveInspectorEdits={saveInspectorEdits}
             onBakeToSource={async () => {
               // Slow path: ask Claude to walk the source and rewrite the
               // original JSX / CSS so the overrides become permanent (i.e.
