@@ -183,10 +183,10 @@ export function CommentsPanel({
       {visible.length === 0 && (
         <div className={s.empty}>
           <p style={{ margin: 0 }}>
-            {filter === "open" && "No open comments on this file. Click an element with Comment mode on, write a note, and hit Save."}
+            {filter === "open" && "No open notes on this file yet."}
             {filter === "promoted" && "Nothing promoted to chat yet."}
-            {filter === "resolved" && "No resolved comments."}
-            {filter === "all-files" && "No comments yet — start by clicking an element."}
+            {filter === "resolved" && "No resolved notes."}
+            {filter === "all-files" && "No notes yet — start by clicking an element."}
           </p>
           {filter !== "all-files" && otherCount && otherCount > 0 ? (
             <p style={{ margin: 0, opacity: 0.7 }}>
@@ -255,7 +255,7 @@ function FilterChip({
       onClick={() => setFilter(value)}
     >
       {label}
-      <span className={s.cpFilterChipCount}>{count}</span>
+      {count > 0 && <span className={s.cpFilterChipCount}>{count}</span>}
     </button>
   );
 }
