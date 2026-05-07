@@ -73,21 +73,28 @@
   border-bottom: 2px solid transparent;
   margin-bottom: -7px;
   padding-bottom: 8px;
+  transition: color var(--motion-fast) var(--ease-out-expressive);
 }
 .tab:hover { color: var(--ink-92); }
+.tab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
 .tabActive {
   color: var(--ink-92);
   font-weight: var(--weight-semi);
   border-bottom-color: var(--ink-92);
 }
 .tabBadge {
-  background: var(--brand-bg);
-  color: var(--brand-fg);
-  font: var(--weight-semi) 10px var(--font-system);
+  background: var(--ink-04);
+  color: var(--ink-65);
+  font: var(--weight-medium) 10px var(--font-system);
   border-radius: 999px;
   padding: 1px 6px;
   min-width: 16px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .headIcon {
@@ -102,8 +109,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive);
 }
 .headIcon:hover { background: var(--ink-04); color: var(--ink-92); }
+.headIcon:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 
 .body {
   flex: 1;
