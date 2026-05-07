@@ -33,6 +33,7 @@ import { CommentPins } from "../components/editor/CommentPins";
 import { LeftPanel } from "../components/editor/LeftPanel";
 import { FileBrowserView, PageIcon, ComponentIcon, AssetIcon } from "../components/editor/FileBrowserView";
 import { toast } from "../components/toast";
+import { Spinner } from "../components/feedback";
 
 // Lazy-loaded heavy components — pulled out of the initial bundle and
 // fetched only when the user actually opens them. Each lazy() returns a
@@ -2392,8 +2393,7 @@ export default function Editor() {
             overrideCount={overrideCountForActive}
             onReset={async () => {
               await clearRouteEverywhere(activeTab.route);
-              const ifr = iframeRef.current;
-              if (ifr) ifr.src = ifr.src;
+              canvasFrameRef.current?.reloadFrame();
             }}
             onSaveInspectorEdits={async () => {
               // Fast path: write inspector edits to _inspector_edits.css in
@@ -2419,10 +2419,8 @@ export default function Editor() {
                 // rules apply immediately.
                 clearRoute(activeTab.route);
                 const ifr = iframeRef.current;
-                if (ifr) {
-                  DmBridge.injectInspectorCSS(ifr, Date.now());
-                  ifr.src = ifr.src;
-                }
+                if (ifr) DmBridge.injectInspectorCSS(ifr, Date.now());
+                canvasFrameRef.current?.reloadFrame();
                 trackEvent("inspector_save", { count: String(Object.keys(overrides).length) }, activeProject.id);
               } catch (err) {
                 toast.error(`Couldn't save inspector edits: ${err instanceof Error ? err.message : String(err)}`);
@@ -2487,8 +2485,7 @@ export default function Editor() {
               // the CSS-file clear, the !important rules would continue to
               // shadow whatever Claude just wrote into source.
               await clearRouteEverywhere(activeTab.route);
-              const ifr = iframeRef.current;
-              if (ifr) ifr.src = ifr.src;
+              canvasFrameRef.current?.reloadFrame();
             }}
           />}
           <div className={s.rightBody}>
@@ -3784,6 +3781,10 @@ type RectLike = { x: number; y: number; w: number; h: number };
 export type CanvasFrameHandle = {
   /** Show the hover outline at the given selector. Pass null to hide. */
   paintHoverBySelector: (sel: string | null) => void;
+  /** Force-refresh the iframe by bumping a reload-key into its src.
+   *  Use this instead of `ifr.src = ifr.src`, which Chromium can no-op
+   *  when the URL is identical. */
+  reloadFrame: () => void;
 };
 
 const CanvasFrame = forwardRef<CanvasFrameHandle, {
@@ -3813,10 +3814,21 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
 }, handleRef) {
   // Sandbox tab → /p/<id>/<route>. tab.route is project-relative (e.g.
   // "index.html" or "_preview/Button.jsx"). Otherwise treat route as a
-  // SPA path (legacy fallback during the migration window).
-  const iframeSrc = projectId
+  // SPA path (legacy fallback during the migration window). The
+  // reloadKey appended to the URL is a force-refresh signal — bumping
+  // it changes the URL identity so Chromium doesn't no-op the reload.
+  const [reloadKey, setReloadKey] = useState(0);
+  const baseSrc = projectId
     ? `/p/${encodeURIComponent(projectId)}/${tab.route.replace(/^\/+/, "")}`
     : tab.route;
+  const iframeSrc = reloadKey > 0
+    ? `${baseSrc}${baseSrc.includes("?") ? "&" : "?"}r=${reloadKey}`
+    : baseSrc;
+  // Until the iframe's first onLoad fires, render a soft placeholder so
+  // the canvas isn't a blank rectangle during cold loads (project /
+  // tab switches, forced reloads).
+  const [iframeReady, setIframeReady] = useState(false);
+  useEffect(() => { setIframeReady(false); }, [baseSrc, reloadKey]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // State mirror of the iframe element — children that want to subscribe to
   // postMessage events scoped to this iframe (e.g. IframeErrorOverlay) need
@@ -3855,6 +3867,7 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
     const ifr = iframeRef.current;
     const doc = ifr?.contentDocument;
     if (!ifr || !doc) return;
+    setIframeReady(true);
     applyOverrides(doc, tab.route);
     applySharedAssetsToDoc(doc);
     DmBridge.inject(ifr);
@@ -3977,6 +3990,7 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
       const el = resolveCssPath(doc, sel) as HTMLElement | null;
       paintHover(el);
     },
+    reloadFrame: () => setReloadKey((k) => k + 1),
   }), [paintHover]);
 
   // Hook click-to-select / hover-outline whenever mode or active tab change.
@@ -4350,6 +4364,7 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
           title={tab.label}
           onLoad={onLoad}
         />
+        {!iframeReady && <CanvasFirstPaint />}
         {overlay}
         <Suspense fallback={null}>
           <IframeErrorOverlay iframe={iframeEl} />
@@ -4380,6 +4395,7 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
           transformOrigin: "top left",
         }}
       />
+      {!iframeReady && <CanvasFirstPaint />}
       {overlay}
       <Suspense fallback={null}>
         <IframeErrorOverlay iframe={iframeEl} />
@@ -4387,6 +4403,17 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
     </div>
   );
 });
+
+/** Soft placeholder shown over the iframe until its first onLoad
+ *  fires. Avoids a stark blank rectangle during cold loads (initial
+ *  mount, project switch, tab switch, forced reload). */
+function CanvasFirstPaint() {
+  return (
+    <div className={s.canvasFirstPaint} aria-hidden="true">
+      <Spinner size={18} label="Loading preview" />
+    </div>
+  );
+}
 
 /* ─── Iframe-side helpers ────────────────────────────────────── */
 function getActiveDoc(): Document | null {
