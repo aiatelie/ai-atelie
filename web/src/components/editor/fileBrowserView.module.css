@@ -79,7 +79,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: 20px 1fr auto auto;
+  grid-template-columns: 20px 1fr auto auto auto;
   align-items: center;
   gap: 12px;
   padding: 6px 24px;
@@ -418,5 +418,53 @@
   color: var(--ink-92);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  text-decoration: none;
+  display: block;
 }
 .menuItem:hover { background: var(--ink-04); }
+.menuItemDanger {
+  color: var(--brand-warm-strong, var(--brand));
+}
+.menuItemDanger:hover {
+  background: var(--brand-warm-soft);
+  color: var(--brand-warm-strong, var(--brand));
+}
+.menuDivider {
+  height: 1px;
+  background: var(--ink-08);
+  margin: 4px 6px;
+}
+
+/* Hover-revealed kebab on each row. Always visible when the row is
+ * preview-selected (rowActive) or the menu is anchored to it; hidden
+ * on idle rows so they don't feel busy. */
+.kebab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-50);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-left: 6px;
+  visibility: hidden;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive);
+}
+.row:hover .kebab,
+.rowActive .kebab,
+.rowEditorActive .kebab { visibility: visible; }
+.kebab:hover { background: var(--ink-08); color: var(--ink-92); }
+.kebab:focus-visible {
+  visibility: visible;
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}

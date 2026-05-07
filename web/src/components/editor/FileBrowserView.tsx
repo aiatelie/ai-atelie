@@ -13,6 +13,7 @@ import s from "./fileBrowserView.module.css";
 import { readRecents, pushRecent } from "./recents";
 import { readFolderState, writeFolderState } from "./folderState";
 import { EmptyState } from "../feedback";
+import { toast } from "../toast";
 
 export type SandboxFile = {
   path: string;
@@ -163,6 +164,30 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
     setRecents(pushRecent(projectId, f.path));
   };
 
+  const deleteFile = async (f: SandboxFile) => {
+    if (!projectId) return;
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/file/delete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: f.path }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(`Couldn't delete ${f.name}: ${err.error ?? `HTTP ${res.status}`}`);
+        return;
+      }
+      // Drop the now-stale entry from the preview pane and recents,
+      // then refetch the tree.
+      setSelected((cur) => (cur?.path === f.path ? null : cur));
+      setRecents((prev) => prev.filter((p) => p !== f.path));
+      await refresh();
+      toast.success(`Deleted ${f.name}`);
+    } catch (err) {
+      toast.error(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   const uploadFiles = async (files: FileList | File[]) => {
     if (!projectId) return;
     const list = Array.from(files);
@@ -236,6 +261,7 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
                   onSelect={() => setSelected(f)}
                   onActivate={() => openFile(f)}
                   onContextMenu={openMenu(f)}
+                  onOpenMenu={openMenu(f)}
                 />
               ))}
             </Section>
@@ -270,6 +296,7 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
                       onSelect={() => setSelected(f)}
                       onActivate={() => openFile(f)}
                       onContextMenu={openMenu(f)}
+                      onOpenMenu={openMenu(f)}
                       indent
                     />
                   ))}
@@ -299,6 +326,7 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
               onSelect={() => setSelected(f)}
               onActivate={() => openFile(f)}
               onContextMenu={openMenu(f)}
+              onOpenMenu={openMenu(f)}
             />
           ))}
         </Section>
@@ -317,6 +345,7 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
                 onSelect={() => setSelected(f)}
                 onActivate={() => openFile(f)}
                 onContextMenu={openMenu(f)}
+                onOpenMenu={openMenu(f)}
               />
             ))}
           </Section>
@@ -336,6 +365,7 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
                 onSelect={() => setSelected(f)}
                 onActivate={() => openFile(f)}
                 onContextMenu={openMenu(f)}
+                onOpenMenu={openMenu(f)}
               />
             ))}
           </Section>
@@ -355,6 +385,7 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
                 onSelect={() => setSelected(f)}
                 onActivate={() => openFile(f)}
                 onContextMenu={openMenu(f)}
+                onOpenMenu={openMenu(f)}
               />
             ))}
           </Section>
@@ -377,7 +408,9 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
           file={menu.file}
           x={menu.x}
           y={menu.y}
+          projectId={projectId}
           onOpen={() => { openFile(menu.file); setMenu(null); }}
+          onDelete={() => { void deleteFile(menu.file); }}
           onClose={() => setMenu(null)}
         />
       )}
@@ -386,14 +419,17 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
 }
 
 function FileContextMenu({
-  file, x, y, onOpen, onClose,
+  file, x, y, projectId, onOpen, onDelete, onClose,
 }: {
   file: SandboxFile;
   x: number;
   y: number;
+  projectId: string;
   onOpen: () => void;
+  onDelete: () => void;
   onClose: () => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     const onClick = () => onClose();
@@ -410,6 +446,7 @@ function FileContextMenu({
     navigator.clipboard?.writeText(text).catch(() => { /* ignore */ });
     onClose();
   };
+  const downloadHref = `/p/${encodeURIComponent(projectId)}/${encodePath(file.path)}`;
   return (
     <div
       className={s.menu}
@@ -418,8 +455,32 @@ function FileContextMenu({
       role="menu"
     >
       <button className={s.menuItem} onClick={onOpen}>Open</button>
+      <a
+        className={s.menuItem}
+        href={downloadHref}
+        download={file.name}
+        onClick={onClose}
+      >
+        Download
+      </a>
       <button className={s.menuItem} onClick={() => copy(file.path)}>Copy path</button>
       <button className={s.menuItem} onClick={() => copy(file.name)}>Copy filename</button>
+      <div className={s.menuDivider} role="separator" />
+      {confirming ? (
+        <button
+          className={`${s.menuItem} ${s.menuItemDanger}`}
+          onClick={() => { onDelete(); onClose(); }}
+        >
+          Confirm delete
+        </button>
+      ) : (
+        <button
+          className={`${s.menuItem} ${s.menuItemDanger}`}
+          onClick={(e) => { e.stopPropagation(); setConfirming(true); }}
+        >
+          Delete…
+        </button>
+      )}
     </div>
   );
 }
@@ -443,7 +504,7 @@ function Section({ label, count, children }: { label: string; count?: number; ch
 }
 
 function FileRow({
-  file, selected, activeTab, openInTab, pulse, onSelect, onActivate, onContextMenu, indent,
+  file, selected, activeTab, openInTab, pulse, onSelect, onActivate, onContextMenu, onOpenMenu, indent,
 }: {
   file: SandboxFile;
   selected: boolean;
@@ -453,6 +514,8 @@ function FileRow({
   onSelect: () => void;
   onActivate: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** Open the row's kebab menu anchored to the click point. */
+  onOpenMenu?: (e: React.MouseEvent) => void;
   indent?: boolean;
 }) {
   const Icon = file.kind === "component" ? ComponentIcon : file.kind === "asset" ? AssetIcon : PageIcon;
@@ -499,6 +562,17 @@ function FileRow({
       </div>
       {openInTab && !activeTab && <span className={s.dotOpen} aria-label="Open in tab" />}
       <span className={s.modified}>{timeAgo(file.modified)}</span>
+      {onOpenMenu && (
+        <button
+          type="button"
+          className={s.kebab}
+          onClick={(e) => { e.stopPropagation(); onOpenMenu(e); }}
+          aria-label={`Actions for ${file.name}`}
+          title="More actions"
+        >
+          ⋯
+        </button>
+      )}
     </div>
   );
 }
