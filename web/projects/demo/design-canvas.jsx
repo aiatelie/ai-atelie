@@ -624,6 +624,86 @@ function DCArtboardFrame({
   const id = rawId != null ? rawId : rawLabel;
   const ref = useRef(null);
 
+  // Live drag-reorder. The dragged card sticks to the cursor; siblings slide
+  // into their would-be positions in real time via translateX. The DOM
+  // order only changes once on drop (via onReorder) — during drag we
+  // mutate inline transforms imperatively so React doesn't re-render the
+  // section tree on every mousemove.
+  const onGripDown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const me = ref.current;
+    if (!me) return;
+    // translateX is applied in local (pre-zoom) space, but pointer deltas
+    // are screen-space — divide by the world's current scale so the
+    // dragged card tracks the cursor at any zoom level. world's scale is
+    // (rendered width) / (offset width).
+    const scale = me.getBoundingClientRect().width / me.offsetWidth || 1;
+    const peers = Array.from(
+      document.querySelectorAll(`[data-dc-section="${sectionId}"] [data-dc-slot]`),
+    );
+    const homes = peers.map((el) => ({
+      el,
+      id: el.dataset.dcSlot,
+      x: el.getBoundingClientRect().left,
+    }));
+    const slotXs = homes.map((h) => h.x);
+    const startIdx = order.indexOf(id);
+    const startX = e.clientX;
+    let liveOrder = order.slice();
+    me.classList.add("dc-dragging");
+
+    const layout = () => {
+      for (const h of homes) {
+        if (h.id === id) continue;
+        const slot = liveOrder.indexOf(h.id);
+        h.el.style.transform = `translateX(${(slotXs[slot] - h.x) / scale}px)`;
+      }
+    };
+
+    const move = (ev) => {
+      const dx = ev.clientX - startX;
+      me.style.transform = `translateX(${dx / scale}px)`;
+      const cur = homes[startIdx].x + dx;
+      let nearest = 0,
+        best = Infinity;
+      for (let i = 0; i < slotXs.length; i++) {
+        const d = Math.abs(slotXs[i] - cur);
+        if (d < best) {
+          best = d;
+          nearest = i;
+        }
+      }
+      if (liveOrder.indexOf(id) !== nearest) {
+        liveOrder = order.filter((k) => k !== id);
+        liveOrder.splice(nearest, 0, id);
+        layout();
+      }
+    };
+
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      const finalSlot = liveOrder.indexOf(id);
+      me.classList.remove("dc-dragging");
+      me.style.transform = `translateX(${(slotXs[finalSlot] - homes[startIdx].x) / scale}px)`;
+      // After the settle transition, kill transitions + clear transforms +
+      // commit the reorder in the same frame so there's no visual snap-back.
+      setTimeout(() => {
+        for (const h of homes) {
+          h.el.style.transition = "none";
+          h.el.style.transform = "";
+        }
+        if (liveOrder.join("|") !== order.join("|")) onReorder(liveOrder);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          for (const h of homes) h.el.style.transition = "";
+        }));
+      }, 180);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  };
+
   return (
     <div ref={ref} data-dc-slot={id} style={{ position: "relative", flexShrink: 0 }}>
       <div
@@ -636,6 +716,20 @@ function DCArtboardFrame({
           color: `var(--dc-label, ${DC.label})`,
         }}
       >
+        <div
+          className="dc-grip"
+          onPointerDown={onGripDown}
+          title="Drag to reorder"
+        >
+          <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor" aria-hidden="true">
+            <circle cx="2" cy="2" r="1.1" />
+            <circle cx="7" cy="2" r="1.1" />
+            <circle cx="2" cy="6.5" r="1.1" />
+            <circle cx="7" cy="6.5" r="1.1" />
+            <circle cx="2" cy="11" r="1.1" />
+            <circle cx="7" cy="11" r="1.1" />
+          </svg>
+        </div>
         <div className="dc-labeltext" onClick={onFocus} title="Click to focus">
           <DCEditable
             value={label}
