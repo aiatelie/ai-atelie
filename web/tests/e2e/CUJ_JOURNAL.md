@@ -24,6 +24,14 @@ See [`.claude/skills/cuj-guardian/SKILL.md`](../../../.claude/skills/cuj-guardia
 
 ---
 
+## 2026-05-07 — PR pending — evolved (modal step removed)
+
+- **Change kind**: `evolved` (one step removed; flow shortens by one click).
+- **Before**: step 1 expected a "+ New project" button visible, step 2 clicked it to open a modal that rendered the name input, step 3 filled the input and clicked Create.
+- **After**: steps 1+2 collapse — the name input is rendered on first paint (a sidebar form replaces the modal). Step 1 navigates to / and asserts the input is visible; step 2 fills it and clicks Create. Same user-observable success criterion (name input → Create → editor URL with new project id) but one fewer click.
+- **Why**: Phase 1 of the home-page redesign moved project creation from "+ New project → modal" into an always-visible sidebar form. The button is gone; clicking it would throw. See `web/src/routes/Projects.tsx` and `web/src/components/projects/NewProjectForm.tsx`.
+- **Proof of value**: ran the new step 1 manually against the new home — name input is visible without any click. The Create button selector (`{ name: /^create$/i }`) is unchanged because the new form's submit button still reads "Create".
+
 ## 2026-05-06 — PR #57 — evolved (file-structure poll → iframe poll)
 
 - **Change kind**: `evolved` (the user-observable assertion is unchanged; the *path* used to detect agent completion shifted).

@@ -40,17 +40,16 @@ test.describe("Critical User Journey", () => {
     const snapshotBefore = (await readdir(PROJECTS_DIR)).sort();
 
     try {
-      // ─── 1. Home loads ─────────────────────────────────────────────
+      // ─── 1. Home loads with the always-visible sidebar form ──────
+      // Project creation now lives in a sidebar form that is rendered
+      // on first paint — no modal to open. The name input itself is
+      // the entry affordance.
       await page.goto("/", { waitUntil: "domcontentloaded" });
       await expect(page).toHaveTitle(/AI Atelie/i);
-      await expect(page.getByRole("button", { name: /new project/i }).first()).toBeVisible();
-
-      // ─── 2. Open New Project modal ────────────────────────────────
-      await page.getByRole("button", { name: /new project/i }).first().click();
       const nameInput = page.locator("input[placeholder*='YouTube banner']");
       await expect(nameInput).toBeVisible();
 
-      // ─── 3. Name + create ─────────────────────────────────────────
+      // ─── 2. Name + create ─────────────────────────────────────────
       await nameInput.fill("CUJ Hello World");
       await page.getByRole("button", { name: /^create$/i }).click();
 
