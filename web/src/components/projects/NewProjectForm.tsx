@@ -47,6 +47,7 @@ export function NewProjectForm({ onSubmit }: Props) {
       </label>
       <input
         id="new-project-name"
+        data-testid="create-project-name"
         autoFocus
         className={s.formInput}
         value={name}
@@ -65,6 +66,7 @@ export function NewProjectForm({ onSubmit }: Props) {
 
       <button
         type="submit"
+        data-testid="create-project-submit"
         className={s.formCreateBtn}
         disabled={submitting}
       >

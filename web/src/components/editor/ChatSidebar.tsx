@@ -681,6 +681,7 @@ function Composer({
       <textarea
         ref={ref}
         className={s.composerField}
+        data-testid="chat-composer"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onPaste={async (e) => {
@@ -764,6 +765,7 @@ function Composer({
           <button
             type="submit"
             className={s.composerSend}
+            data-testid="chat-send"
             disabled={!text.trim()}
             title={
               disabled
