@@ -23,6 +23,7 @@ import {
   useComments,
   type LocalComment,
 } from "../../lib/comments";
+import { smartLabel } from "../../lib/smartLabel";
 import {
   ModelPicker,
   loadModelId,
@@ -478,7 +479,18 @@ function CommentItem({
           <img className={s.commentThumb} src={comment.thumbnail} alt="" loading="lazy" />
         )}
         <div className={s.commentRef}>
-          {comment.tag && <span className={s.refTag}>&lt;{comment.tag}&gt;</span>}
+          {(comment.tag || comment.descriptor) && (() => {
+            const lbl = smartLabel({
+              descriptor: comment.descriptor,
+              kind: comment.kind,
+              tag: comment.tag,
+            });
+            return (
+              <span className={s.refTag} title={comment.descriptor?.label ?? lbl.full}>
+                {lbl.full}
+              </span>
+            );
+          })()}
           {comment.innerText && (
             <span className={s.commentSnippet}>"{comment.innerText.slice(0, 48)}"</span>
           )}

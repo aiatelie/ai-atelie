@@ -72,6 +72,7 @@ import type { ChatMessage, ChatThread, ThreadArchive, QueuedMessage } from "../c
 import { loadThreads as libLoadThreads, saveThreads, subscribeThreads, releaseProject as releaseThreadsProject } from "../lib/threads";
 import { attachStreamToThread, detachStream, isThreadShadowed } from "../lib/streamPersistence";
 import { cssPath, resolveCssPath, buildDescriptor } from "../lib/cssPath";
+import { classifyKind, computedHints, smartLabel } from "../lib/smartLabel";
 import { applyOverrides, setOverride, clearRoute, readRoute, useOverrideCount, useDirtyRoutes } from "../lib/editorOverrides";
 import { notifyTurnComplete } from "../lib/notifications";
 import { trackEvent } from "../lib/telemetry";
@@ -906,6 +907,7 @@ export default function Editor() {
           innerText: undefined,
           outerHtml: undefined,
           descriptor: lastUser.descriptor,
+          kind: lastUser.kind,
         } as CommentTarget
       : null);
 
@@ -918,6 +920,7 @@ export default function Editor() {
       tag: target?.tag,
       innerText: target?.innerText,
       descriptor: target?.descriptor,
+      kind: target?.kind,
       attachments: opts.attachments.length > 0 ? opts.attachments : undefined,
       preamble: opts.preamble,
       // Pre-populate the thumbnail when the caller has one ready (Draw
@@ -1253,7 +1256,13 @@ export default function Editor() {
           tag: anchor.tag ?? "",
           innerText: anchor.innerText,
           outerHtml: undefined,
-          descriptor: anchorDescriptor,
+          descriptor: anchor.descriptor ?? anchorDescriptor,
+          // Prefer the kind captured at comment time (computed style was
+          // live then). Fall back to a fresh classification — tag-only,
+          // good enough for h1/button/a/img.
+          kind: anchor.kind ?? (anchorDescriptor
+            ? classifyKind({ descriptor: anchorDescriptor })
+            : undefined),
         } as CommentTarget)
       : null;
 
@@ -2194,8 +2203,15 @@ export default function Editor() {
             // Show the picked element whenever there IS one — both Edit
             // (inspector mode) and Select (no tool) populate `selected`,
             // so the chat always knows what the user is pointing at.
+            // The pill is medium-width; the smart label collapses real
+            // semantic tags ("Heading" for an <h1>) and reveals the
+            // structural truth on heading-styled divs ("Heading · div .title").
             selected
-              ? `${activeTab.route} · ${selected.descriptor?.label ?? `<${selected.tag}>`}`
+              ? `${activeTab.route} · ${smartLabel({
+                  descriptor: selected.descriptor,
+                  tag: selected.tag,
+                  computed: computedHints(selected.computed),
+                }).medium}`
               : activeTab.route
           }
           onClearComposerContext={selected ? () => {
@@ -2630,6 +2646,10 @@ export default function Editor() {
                   selector: target.selector,
                   tag: target.tag,
                   innerText: target.innerText,
+                  // Persist the rich profile + kind we resolved at click
+                  // time so the comments panel stays smart across reloads.
+                  descriptor: target.descriptor,
+                  kind: target.kind,
                   body: text,
                   x: target.localX,
                   y: target.localY,
@@ -2747,13 +2767,21 @@ export default function Editor() {
               if (!selected) return;
               const doc = iframeRef.current?.contentDocument ?? null;
               const el = doc ? (resolveCssPath(doc, selected.selector) as HTMLElement | null) : null;
+              const askDescriptor = selected.descriptor ?? (el ? buildDescriptor(el) : undefined);
+              const askKind = askDescriptor
+                ? classifyKind({
+                    descriptor: askDescriptor,
+                    computed: computedHints(selected.computed, el ?? undefined),
+                  })
+                : undefined;
               const target: CommentTarget = {
                 x: 0, y: 0, localX: 0, localY: 0,
                 selector: selected.selector,
                 tag: selected.tag,
                 innerText: el?.innerText?.slice(0, 280),
                 outerHtml: el?.outerHTML?.slice(0, 1500),
-                descriptor: selected.descriptor ?? (el ? buildDescriptor(el) : undefined),
+                descriptor: askDescriptor,
+                kind: askKind,
               };
               setChatTabSwitchKey((k) => k + 1);
               await runTurn({ text, attachments: [], target, modelId });
@@ -4107,6 +4135,15 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
       const x = ifrRect.left + e.clientX * k - canvasRect.left;
       const y = ifrRect.top + e.clientY * k - canvasRect.top;
 
+      // Resolve smart-label kind right here while computed style is
+      // live — the bubble + LocalComment + chat ref all consume `kind`
+      // and `descriptor.label` is byte-frozen for the AI prompt path.
+      const commentDescriptor = buildDescriptor(target);
+      const commentComputed = doc.defaultView!.getComputedStyle(target);
+      const commentKind = classifyKind({
+        descriptor: commentDescriptor,
+        computed: computedHints(commentComputed, target),
+      });
       onComment({
         x,
         y,
@@ -4116,7 +4153,8 @@ const CanvasFrame = forwardRef<CanvasFrameHandle, {
         tag: target.tagName.toLowerCase(),
         innerText: (target as HTMLElement).innerText?.slice(0, 280),
         outerHtml: (target as HTMLElement).outerHTML?.slice(0, 1500),
-        descriptor: buildDescriptor(target),
+        descriptor: commentDescriptor,
+        kind: commentKind,
       });
     };
     // Hover outline — imperative DOM write coalesced to one repaint
