@@ -466,17 +466,30 @@ function EnumMulti({
 
   const knownChosen = value.filter((v) => knownSet.has(v));
 
+  // Mutate `value` in place so the otherText (if any) keeps its
+  // relative position. The previous always-append-at-end shape was
+  // correct on the wire, but caused the model to see the array
+  // re-order on every toggle.
   const toggle = (opt: string) => {
-    if (knownChosen.includes(opt)) {
-      onChange([...knownChosen.filter((v) => v !== opt), ...(otherText ? [otherText] : [])]);
+    if (value.includes(opt)) {
+      onChange(value.filter((v) => v !== opt));
     } else {
-      onChange([...knownChosen, opt, ...(otherText ? [otherText] : [])]);
+      onChange([...value, opt]);
     }
   };
 
   const setOtherText = (text: string) => {
     setOtherActive(true);
-    onChange(text ? [...knownChosen, text] : [...knownChosen]);
+    if (otherText && text) {
+      // Replace existing otherText in place.
+      onChange(value.map((v) => (v === otherText ? text : v)));
+    } else if (otherText && !text) {
+      // Remove existing otherText (user cleared the input).
+      onChange(value.filter((v) => v !== otherText));
+    } else if (!otherText && text) {
+      // First keystroke — append.
+      onChange([...value, text]);
+    }
   };
 
   return (
@@ -523,6 +536,22 @@ function EnumMulti({
   );
 }
 
+/** Strip the obvious XSS vectors out of an inline-SVG option string.
+ *  The model is trusted in normal use, but tool_results can echo
+ *  user-uploaded content into a future ask_user call — so even a
+ *  trusted agent could end up rendering attacker-controlled SVG.
+ *  Drops `<script>` blocks and inline event handlers; leaves the
+ *  drawing intact otherwise. */
+function sanitizeSvg(raw: string): string {
+  return raw
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script\s*>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
+    .replace(/\s(?:href|xlink:href)\s*=\s*"javascript:[^"]*"/gi, "")
+    .replace(/\s(?:href|xlink:href)\s*=\s*'javascript:[^']*'/gi, "");
+}
+
 /** Visual-options grid — each option is an inline SVG (~80×56). The
  *  wire value is the option's index as a string ("0", "1", …) so the
  *  model can match against `optionLabels[i]`. Decide-for-me / Other
@@ -566,7 +595,7 @@ function SvgOptions({
               onClick={() => { setOtherActive(false); onChange(idx); }}
               title={labels[i] ?? `Option ${i + 1}`}
             >
-              <span className={s.elicitSvgInner} dangerouslySetInnerHTML={{ __html: svg }} />
+              <span className={s.elicitSvgInner} dangerouslySetInnerHTML={{ __html: sanitizeSvg(svg) }} />
               <span className={s.elicitSvgLabel}>{labels[i] ?? `Option ${i + 1}`}</span>
             </button>
           );

@@ -70,6 +70,7 @@ import { captureIframeAsDataUrl, captureElementAsDataUrl, downloadDataUrl, type 
 import { useTweakBridge } from "../lib/tweakBridge";
 import type { ChatMessage, ChatThread, ThreadArchive, QueuedMessage } from "../components/editor/ChatSidebar";
 import { ElicitForm } from "../components/editor/ElicitForm";
+import { parsePartialQuestions } from "../lib/streamingJson";
 import { loadThreads as libLoadThreads, saveThreads, subscribeThreads, releaseProject as releaseThreadsProject } from "../lib/threads";
 import { attachStreamToThread, detachStream, isThreadShadowed } from "../lib/streamPersistence";
 import { cssPath, resolveCssPath, buildDescriptor } from "../lib/cssPath";
@@ -302,7 +303,12 @@ function formatTime(ts: number): string {
 
 /** Count the questions in an active elicit or its streaming preview.
  *  Used to decide whether the form is big enough to mount in a
- *  dedicated tab versus inline in the chat sidebar. */
+ *  dedicated tab versus inline in the chat sidebar.
+ *
+ *  Real schema → keys of `properties`. Preview → defers to the
+ *  lenient parser the form itself uses, so the count is consistent
+ *  with what's actually rendered (and we don't double-implement
+ *  the JSON walker). */
 function countElicitQuestions(
   request: ElicitRequest | undefined | null,
   preview: { partialJson: string } | undefined | null,
@@ -313,29 +319,7 @@ function countElicitQuestions(
   }
   if (preview?.partialJson) {
     try {
-      // Cheap regex: count balanced `{...}` siblings inside the
-      // first `[...]` array. Good enough as a heuristic — when the
-      // form actually mounts, the lenient parser does the real work.
-      const arrayStart = preview.partialJson.indexOf("[");
-      if (arrayStart < 0) return 0;
-      let depth = 0;
-      let count = 0;
-      let inString = false;
-      let escape = false;
-      for (let i = arrayStart + 1; i < preview.partialJson.length; i++) {
-        const c = preview.partialJson[i];
-        if (escape) { escape = false; continue; }
-        if (inString) {
-          if (c === "\\") { escape = true; continue; }
-          if (c === '"') { inString = false; continue; }
-          continue;
-        }
-        if (c === '"') { inString = true; continue; }
-        if (c === "{") { if (depth === 0) count++; depth++; }
-        else if (c === "}") depth--;
-        else if (c === "]" && depth === 0) break;
-      }
-      return count;
+      return parsePartialQuestions(preview.partialJson).questions.length;
     } catch {
       return 0;
     }
@@ -2454,6 +2438,10 @@ export default function Editor() {
         }}
         showQuestionsTab={shouldMountElicitInTab}
         questionsTabBadge={elicitQuestionCount}
+        // Only allow ×-close once the real elicit fires. Closing during
+        // preview-only would race: the cancel POST has no `id` yet, so
+        // the elicit would still arrive and resurrect the form.
+        canCloseQuestionsTab={!!pendingElicit}
         onCloseQuestionsTab={() => {
           // Closing the Questions tab cancels the elicitation.
           // Build the same answer-echo a Cancel click would.
@@ -3224,6 +3212,7 @@ function TabBar({
   onCloseMany,
   showQuestionsTab,
   questionsTabBadge,
+  canCloseQuestionsTab,
   onCloseQuestionsTab,
 }: {
   projectTitle: string;
@@ -3250,6 +3239,11 @@ function TabBar({
   showQuestionsTab: boolean;
   /** Question count to surface as a small badge on the tab. */
   questionsTabBadge: number;
+  /** True only once the form has a real elicitation id to cancel
+   *  against. False during preview-only state — the × is hidden so
+   *  the user can't trigger a no-op cancel that would let the
+   *  about-to-arrive elicit resurrect the form. */
+  canCloseQuestionsTab: boolean;
   /** Cancels the elicitation and removes the tab. */
   onCloseQuestionsTab: () => void;
 }) {
@@ -3301,12 +3295,14 @@ function TabBar({
             <path d="M6 6.5 a2 2 0 0 1 4 0 c0 1.5 -2 1.5 -2 3" />
           </svg>
           <span className={s.label}>Questions</span>
-          <button
-            type="button"
-            className={s.x}
-            aria-label="Cancel and close"
-            onClick={(e) => { e.stopPropagation(); onCloseQuestionsTab(); }}
-          >×</button>
+          {canCloseQuestionsTab && (
+            <button
+              type="button"
+              className={s.x}
+              aria-label="Cancel and close"
+              onClick={(e) => { e.stopPropagation(); onCloseQuestionsTab(); }}
+            >×</button>
+          )}
         </div>
       )}
       {tabs.map((t) => (

@@ -90,6 +90,14 @@ export function parsePartialQuestions(partial: string): StreamingParse {
   return out;
 }
 
+/** Escape regex metacharacters in `key` so callers can safely pass
+ *  arbitrary strings. Today we only ever pass "title" and
+ *  "questions" but the helpers are exported-shape, so make them
+ *  robust to misuse. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Find the index of the `[` that opens the array value of `key` at
  *  the top level of `partial`, or -1 if not found / not yet open.
  *  Tolerates other keys appearing first. */
@@ -97,7 +105,7 @@ function findKeyArrayStart(partial: string, key: string): number {
   // Look for `"key"\s*:\s*[`. We don't bother with full JSON-aware
   // search — partial inputs don't have nested keys with this name in
   // the questions_v2 shape.
-  const re = new RegExp(`"${key}"\\s*:\\s*\\[`);
+  const re = new RegExp(`"${escapeRegex(key)}"\\s*:\\s*\\[`);
   const m = re.exec(partial);
   if (!m) return -1;
   return m.index + m[0].length - 1;
@@ -106,7 +114,7 @@ function findKeyArrayStart(partial: string, key: string): number {
 /** Pluck out a top-level string value for `key` if its closing quote
  *  has arrived. Returns undefined otherwise. */
 function matchTopLevelString(partial: string, key: string): string | undefined {
-  const re = new RegExp(`"${key}"\\s*:\\s*"`);
+  const re = new RegExp(`"${escapeRegex(key)}"\\s*:\\s*"`);
   const m = re.exec(partial);
   if (!m) return undefined;
   let i = m.index + m[0].length;
@@ -127,7 +135,13 @@ function matchTopLevelString(partial: string, key: string): string | undefined {
       if (next === "b") { out += "\b"; i += 2; continue; }
       if (next === "f") { out += "\f"; i += 2; continue; }
       if (next === "u" && i + 5 < partial.length) {
-        out += String.fromCharCode(parseInt(partial.slice(i + 2, i + 6), 16));
+        const code = parseInt(partial.slice(i + 2, i + 6), 16);
+        // Non-hex (e.g. `\u00xy`) → bail. Without this guard
+        // String.fromCharCode(NaN) silently emits NUL and corrupts
+        // the title; the parent re-runs us on every delta so we can
+        // afford to wait for cleaner data.
+        if (Number.isNaN(code)) return undefined;
+        out += String.fromCharCode(code);
         i += 6; continue;
       }
       return undefined;
