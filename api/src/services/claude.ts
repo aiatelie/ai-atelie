@@ -88,6 +88,11 @@ export async function runClaude(
         : { sessionId: sid }
       : {};
 
+    // Track the in-flight ask_user tool_use so the next onElicitation
+    // call can attach the matching toolUseId to the SSE elicit event.
+    // Reset on each new ask_user start.
+    let lastAskUserToolUseId: string | undefined;
+
     const q = query({
       prompt,
       options: {
@@ -141,6 +146,11 @@ export async function runClaude(
           const { id, promise } = createPending(streamId);
           send("elicit", {
             id,
+            // Tying the elicit event to the most recently announced
+            // ask_user tool_use lets the frontend promote a streaming
+            // preview form into a real one in place. Cleared after
+            // emission so the next ask_user call starts fresh.
+            previewToolUseId: lastAskUserToolUseId,
             serverName: req.serverName,
             message: req.message,
             mode: req.mode,
@@ -149,6 +159,7 @@ export async function runClaude(
             displayName: req.displayName,
             description: req.description,
           });
+          lastAskUserToolUseId = undefined;
           const result = await promise;
           return result as any;
         },
@@ -157,7 +168,12 @@ export async function runClaude(
 
     try {
       for await (const msg of q) {
-        for (const evt of sdkMessageToAgentEvents(msg)) send("agent", evt);
+        for (const evt of sdkMessageToAgentEvents(msg)) {
+          if (evt.type === "elicitPreviewStart") {
+            lastAskUserToolUseId = evt.toolUseId;
+          }
+          send("agent", evt);
+        }
       }
       return; // success
     } catch (err) {
