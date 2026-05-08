@@ -1311,6 +1311,48 @@
   border-color: var(--brand-strong);
 }
 .elicitOption input { accent-color: var(--brand); }
+
+/* SVG-options grid — wrap-grid of small visual cards. The inline SVG
+ * sits in a fixed 80x56 frame so cards line up cleanly regardless of
+ * the agent's drawing size. */
+.elicitSvgGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+.elicitSvgCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1px solid var(--ink-10);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.elicitSvgCard:hover { background: var(--surface-4); }
+.elicitSvgCardOn {
+  background: var(--brand-bg);
+  border-color: var(--brand-strong);
+}
+.elicitSvgInner {
+  width: 80px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+.elicitSvgInner > svg { max-width: 100%; max-height: 100%; }
+.elicitSvgLabel {
+  font-size: 11.5px;
+  color: var(--ink-70);
+  text-align: center;
+}
 .elicitInput, .elicitTextarea {
   width: 100%;
   border: 1px solid var(--ink-15);
@@ -1435,6 +1477,35 @@
   color: var(--ink-50);
   font-style: italic;
 }
+.elicitMissingHint {
+  font-size: 11.5px;
+  color: var(--ink-60);
+}
+
+/* 22×22 paperclip button anchored to the bottom-right corner of a
+ * freeform textarea. Triggers the per-question file picker — same
+ * upload path as paste/drop, just visible. Mirrors the affordance
+ * Claude Design exposes on every freeform question. */
+.elicitTextareaAttach {
+  position: absolute;
+  right: 8px;
+  bottom: 24px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--ink-15);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-60);
+  padding: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.elicitTextareaAttach:hover { background: var(--surface-4); color: var(--brand); }
+.elicitTextareaAttach:disabled { opacity: 0.5; cursor: not-allowed; }
+.elicitTextareaWrap { position: relative; }
 /* Subtle visual hint that the form is still in preview-mode (the
  * model is mid-write); the card pulses gently and we soften the
  * border so it doesn't compete with the live action buttons. */

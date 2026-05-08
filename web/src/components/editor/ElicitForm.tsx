@@ -120,7 +120,13 @@ export function ElicitForm({ request, preview, onResolved }: Props) {
     });
   }, [questions]);
 
-  const allValid = !isPreview && questions.every((q) => !q.required || isValid(q.schema, answers[q.id]));
+  // Per-question required-and-not-yet-valid count. Drives the "(N more)"
+  // hint next to a disabled Continue button so the user knows what's
+  // standing between them and submission.
+  const missingRequired = isPreview
+    ? questions.filter((q) => q.required).length
+    : questions.filter((q) => q.required && !isValid(q.schema, answers[q.id])).length;
+  const allValid = !isPreview && missingRequired === 0;
 
   const send = async (action: "accept" | "decline" | "cancel") => {
     if (submitting || !request) return;
@@ -174,9 +180,13 @@ export function ElicitForm({ request, preview, onResolved }: Props) {
       {errorMsg && <div className={s.elicitError}>{errorMsg}</div>}
 
       <div className={s.elicitActions}>
-        {isPreview && (
+        {isPreview ? (
           <span className={s.elicitGenerating}>Generating questions…</span>
-        )}
+        ) : missingRequired > 0 && questions.length > 0 ? (
+          <span className={s.elicitMissingHint}>
+            {missingRequired} more required
+          </span>
+        ) : null}
         <div className={s.elicitActionsSpacer} />
         <button
           className={s.elicitBtn}
@@ -220,6 +230,21 @@ function streamingQuestionToQuestion(q: StreamingQuestion): Question {
     schema = q.multi
       ? { type: "array", items: { type: "string", enum: finalOptions }, "x-other-input": true }
       : { type: "string", enum: finalOptions, "x-other-input": true };
+  } else if (kind === "svg-options") {
+    const opts = Array.isArray(q.options) ? q.options.filter((o): o is string => typeof o === "string") : [];
+    const labels = Array.isArray(q.optionLabels)
+      ? (q.optionLabels as unknown[]).filter((l): l is string => typeof l === "string")
+      : [];
+    const indexOptions = opts.map((_, i) => String(i));
+    const finalOptions = [...indexOptions, "Decide for me", "Other"];
+    schema = {
+      type: "string",
+      enum: finalOptions,
+      "x-input": "svg-options",
+      "x-svg-options": opts,
+      "x-svg-labels": labels,
+      "x-other-input": true,
+    };
   } else if (kind === "number") {
     schema = {
       type: "number",
@@ -299,6 +324,14 @@ function QuestionSection({
         <EnumMulti
           field={question.schema}
           value={Array.isArray(value) ? (value as string[]) : []}
+          onChange={(v) => onChange(v)}
+        />
+      )}
+
+      {effectiveKind === "svg-options" && (
+        <SvgOptions
+          field={question.schema}
+          value={typeof value === "string" ? value : ""}
           onChange={(v) => onChange(v)}
         />
       )}
@@ -484,6 +517,80 @@ function EnumMulti({
           placeholder="Other…"
           value={otherText}
           onChange={(e) => setOtherText(e.target.value)}
+        />
+      )}
+    </>
+  );
+}
+
+/** Visual-options grid — each option is an inline SVG (~80×56). The
+ *  wire value is the option's index as a string ("0", "1", …) so the
+ *  model can match against `optionLabels[i]`. Decide-for-me / Other
+ *  resolve to their literal label strings as in the text-options case. */
+function SvgOptions({
+  field, value, onChange,
+}: { field: Schema; value: string; onChange: (v: string) => void }) {
+  const f = (field ?? {}) as {
+    enum?: string[];
+    ["x-svg-options"]?: string[];
+    ["x-svg-labels"]?: string[];
+    ["x-other-input"]?: boolean;
+  };
+  const svgs = Array.isArray(f["x-svg-options"]) ? f["x-svg-options"] : [];
+  const labels = Array.isArray(f["x-svg-labels"]) ? f["x-svg-labels"] : [];
+  const hasOther = !!f["x-other-input"];
+
+  const isOtherSelected = hasOther && value !== "" && value !== "Decide for me"
+    && Number.isNaN(Number(value));
+  const [otherActive, setOtherActive] = useState(() => isOtherSelected);
+  const otherSelected = otherActive || isOtherSelected;
+
+  return (
+    <>
+      <div className={s.elicitSvgGrid}>
+        {svgs.map((svg, i) => {
+          const idx = String(i);
+          const checked = value === idx && !otherSelected;
+          return (
+            <button
+              key={idx}
+              type="button"
+              className={`${s.elicitSvgCard} ${checked ? s.elicitSvgCardOn : ""}`}
+              onClick={() => { setOtherActive(false); onChange(idx); }}
+              title={labels[i] ?? `Option ${i + 1}`}
+            >
+              <span className={s.elicitSvgInner} dangerouslySetInnerHTML={{ __html: svg }} />
+              <span className={s.elicitSvgLabel}>{labels[i] ?? `Option ${i + 1}`}</span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className={`${s.elicitSvgCard} ${value === "Decide for me" && !otherSelected ? s.elicitSvgCardOn : ""}`}
+          onClick={() => { setOtherActive(false); onChange("Decide for me"); }}
+        >
+          <span className={s.elicitSvgInner} aria-hidden>✦</span>
+          <span className={s.elicitSvgLabel}>Decide for me</span>
+        </button>
+        {hasOther && (
+          <button
+            type="button"
+            className={`${s.elicitSvgCard} ${otherSelected ? s.elicitSvgCardOn : ""}`}
+            onClick={() => { setOtherActive(true); onChange(""); }}
+          >
+            <span className={s.elicitSvgInner} aria-hidden>…</span>
+            <span className={s.elicitSvgLabel}>Other</span>
+          </button>
+        )}
+      </div>
+      {hasOther && otherSelected && (
+        <input
+          type="text"
+          className={s.elicitOtherInput}
+          autoFocus
+          placeholder="Other…"
+          value={isOtherSelected ? value : ""}
+          onChange={(e) => { setOtherActive(true); onChange(e.target.value); }}
         />
       )}
     </>
@@ -682,6 +789,7 @@ function PasteableTextarea({
     }
   };
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   return (
     <div
       className={`${s.elicitTextareaWrap} ${dragOver ? s.elicitTextareaDrag : ""}`}
@@ -718,6 +826,33 @@ function PasteableTextarea({
         rows={multiline ? 4 : 2}
         style={{ maxHeight: maxPx }}
       />
+      {/* Per-question image-attach trigger — same upload path as
+       *  paste/drop, just visible. Lives in the bottom-right corner
+       *  of the textarea so it doesn't compete with the typed text. */}
+      <button
+        type="button"
+        className={s.elicitTextareaAttach}
+        onClick={() => fileInputRef.current?.click()}
+        disabled={busy}
+        title="Attach an image"
+        aria-label="Attach an image"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M11 4 V11 a3 3 0 0 1 -6 0 V5 a2 2 0 0 1 4 0 V10 a1 1 0 0 1 -2 0 V6" />
+        </svg>
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: "none" }}
+        onChange={async (e) => {
+          const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith("image/"));
+          for (const f of files) await uploadAndAppend(f);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }}
+      />
       <div className={s.elicitTextareaHint}>
         {busy ? "Uploading…" : "⌘V to paste · drop images · ⌘↵ to send"}
       </div>
@@ -731,6 +866,7 @@ function PasteableTextarea({
 type FieldKind =
   | "enum-single"
   | "enum-multi"
+  | "svg-options"
   | "number"
   | "boolean"
   | "dropzone"
@@ -770,6 +906,7 @@ function detectKind(field: Schema): FieldKind {
     ["x-input"]?: string;
     format?: string;
   };
+  if (f.type === "string" && f["x-input"] === "svg-options") return "svg-options";
   if (f.type === "array" && Array.isArray(f.items?.enum)) return "enum-multi";
   if (Array.isArray(f.enum)) return "enum-single";
   if (f.type === "number" || f.type === "integer") return "number";
@@ -796,6 +933,7 @@ function initialValue(schema: Schema): unknown {
   switch (kind) {
     case "enum-single": return typeof f.default === "string" ? f.default : "";
     case "enum-multi":  return Array.isArray(f.default) ? f.default : [];
+    case "svg-options": return typeof f.default === "string" ? f.default : "";
     case "number":
       if (typeof f.default === "number") return f.default;
       if (typeof f.minimum === "number") return f.minimum;
@@ -812,6 +950,7 @@ function isValid(schema: Schema, value: unknown): boolean {
   switch (kind) {
     case "enum-single": return typeof value === "string" && value.length > 0;
     case "enum-multi":  return Array.isArray(value) && value.length > 0;
+    case "svg-options": return typeof value === "string" && value.length > 0;
     case "number":      return typeof value === "number" && Number.isFinite(value);
     case "boolean":     return true;
     case "dropzone":    return typeof value === "string" && value.length > 0;
