@@ -657,6 +657,24 @@
   display: flex;
 }
 .rightBody > .canvas { flex: 1; min-width: 0; }
+
+/* Body of the Questions tab — a centered scroll column so the form
+ * doesn't stretch full-width on a wide canvas (which would dilute
+ * its informational density). The form's own card chrome handles
+ * its borders + spacing; this container just constrains width and
+ * centers the column. */
+.questionsTabBody {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  background: var(--surface);
+}
+.questionsTabBody > * {
+  width: min(720px, 100%);
+  margin: 32px 24px;
+}
 .canvas {
   position: relative;
   overflow: hidden;

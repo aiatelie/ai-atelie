@@ -180,6 +180,9 @@ export function ChatTab({
   onRestore,
   pendingElicit,
   pendingElicitPreview,
+  elicitMountedInTab,
+  onFocusQuestionsTab,
+  elicitQuestionCount,
   onElicitResolved,
   onStop,
   composerContext,
@@ -212,6 +215,13 @@ export function ChatTab({
    *  request arrives. Promoted in place when the matching `elicit`
    *  event fires (matched by `previewToolUseId`). */
   pendingElicitPreview?: { toolUseId: string; partialJson: string; done: boolean } | null;
+  /** When true, the form is rendered in the Questions canvas tab — the
+   *  chat shows a compact link card instead of the inline form. */
+  elicitMountedInTab?: boolean;
+  /** Brings the Questions tab into focus from the chat link card. */
+  onFocusQuestionsTab?: () => void;
+  /** Used to label the link card ("3 questions →"). */
+  elicitQuestionCount?: number;
   onElicitResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
   onStop?: () => void;
   /** Human-readable label of the context the next turn will carry. */
@@ -268,7 +278,24 @@ export function ChatTab({
           setEditSeed({ text, nonce: Date.now() });
         }}
       />
-      {pendingElicit ? (
+      {(pendingElicit || pendingElicitPreview) && elicitMountedInTab ? (
+        // Form lives in the Questions canvas tab; render a compact
+        // link card here so the chat scroll stays usable but the user
+        // still sees that an ask is open.
+        <button
+          type="button"
+          className={s.elicitLinkCard}
+          onClick={() => onFocusQuestionsTab?.()}
+        >
+          <span className={s.elicitLinkIcon} aria-hidden>⚠</span>
+          <span className={s.elicitLinkBody}>
+            <span className={s.elicitLinkTitle}>
+              Claude has {elicitQuestionCount ?? "some"} question{elicitQuestionCount === 1 ? "" : "s"}
+            </span>
+            <span className={s.elicitLinkHint}>Tap to answer →</span>
+          </span>
+        </button>
+      ) : pendingElicit ? (
         <ElicitForm
           // Key off the preview's toolUseId when there's a matching
           // preview, so the streaming form's component identity

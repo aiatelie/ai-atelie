@@ -1388,6 +1388,48 @@
   gap: 8px;
 }
 .elicitActionsSpacer { flex: 1; }
+
+/* Compact link card shown in the chat sidebar when the form has been
+ * moved to the Questions canvas tab. Click → focuses the tab. Mirrors
+ * the size of a regular tool-call chip so the chat scroll stays
+ * visually consistent. */
+.elicitLinkCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: var(--brand-bg);
+  border: 1px solid var(--brand-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  margin: 6px 0;
+  transition: background 0.12s ease;
+}
+.elicitLinkCard:hover { background: var(--brand-soft); }
+.elicitLinkIcon {
+  font-size: 16px;
+  color: var(--brand-strong);
+  flex-shrink: 0;
+}
+.elicitLinkBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.elicitLinkTitle {
+  font-weight: 600;
+  color: var(--ink);
+}
+.elicitLinkHint {
+  font-size: 11.5px;
+  color: var(--ink-60);
+}
+
 .elicitGenerating {
   font-size: 11.5px;
   color: var(--ink-50);

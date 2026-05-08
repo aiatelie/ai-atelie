@@ -69,6 +69,7 @@ import { captureDomSnapshot, restoreDomSnapshot } from "../lib/domSnapshot";
 import { captureIframeAsDataUrl, captureElementAsDataUrl, downloadDataUrl, type ExportFormat } from "../lib/screenshot";
 import { useTweakBridge } from "../lib/tweakBridge";
 import type { ChatMessage, ChatThread, ThreadArchive, QueuedMessage } from "../components/editor/ChatSidebar";
+import { ElicitForm } from "../components/editor/ElicitForm";
 import { loadThreads as libLoadThreads, saveThreads, subscribeThreads, releaseProject as releaseThreadsProject } from "../lib/threads";
 import { attachStreamToThread, detachStream, isThreadShadowed } from "../lib/streamPersistence";
 import { cssPath, resolveCssPath, buildDescriptor } from "../lib/cssPath";
@@ -125,6 +126,19 @@ function defaultDisplay(route: string): DisplayMode {
  *  openTabs. It always sits at the start of the tab strip and renders a
  *  full file browser + preview pane in place of the iframe canvas. */
 const DESIGN_FILES_TAB_ID = "__design_files__";
+
+/** Synthetic tab id used when the active ask_user form has enough
+ *  questions (>= QUESTIONS_TAB_THRESHOLD) to warrant moving out of
+ *  the chat sidebar's inline scroll into a dedicated canvas tab.
+ *  Auto-mounts when the threshold is met; auto-removes when the
+ *  form resolves. Closing the tab via × cancels the elicitation. */
+const QUESTIONS_TAB_ID = "__questions__";
+
+/** Render the form in a dedicated tab once it carries this many
+ *  questions. Below the threshold the inline chat-sidebar form is
+ *  fine — the goal is keeping the chat scroll usable for long
+ *  forms, not forcing a context switch on every clarifying ask. */
+const QUESTIONS_TAB_THRESHOLD = 3;
 
 function uniqueTabId(): string {
   return Math.random().toString(36).slice(2, 9);
@@ -284,6 +298,49 @@ function normalizeTools(raw: unknown): ToolCall[] {
 function formatTime(ts: number): string {
   const d = new Date(ts);
   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+}
+
+/** Count the questions in an active elicit or its streaming preview.
+ *  Used to decide whether the form is big enough to mount in a
+ *  dedicated tab versus inline in the chat sidebar. */
+function countElicitQuestions(
+  request: ElicitRequest | undefined | null,
+  preview: { partialJson: string } | undefined | null,
+): number {
+  if (request?.schema && typeof request.schema === "object") {
+    const props = (request.schema as { properties?: Record<string, unknown> }).properties;
+    if (props && typeof props === "object") return Object.keys(props).length;
+  }
+  if (preview?.partialJson) {
+    try {
+      // Cheap regex: count balanced `{...}` siblings inside the
+      // first `[...]` array. Good enough as a heuristic — when the
+      // form actually mounts, the lenient parser does the real work.
+      const arrayStart = preview.partialJson.indexOf("[");
+      if (arrayStart < 0) return 0;
+      let depth = 0;
+      let count = 0;
+      let inString = false;
+      let escape = false;
+      for (let i = arrayStart + 1; i < preview.partialJson.length; i++) {
+        const c = preview.partialJson[i];
+        if (escape) { escape = false; continue; }
+        if (inString) {
+          if (c === "\\") { escape = true; continue; }
+          if (c === '"') { inString = false; continue; }
+          continue;
+        }
+        if (c === '"') { inString = true; continue; }
+        if (c === "{") { if (depth === 0) count++; depth++; }
+        else if (c === "}") depth--;
+        else if (c === "]" && depth === 0) break;
+      }
+      return count;
+    } catch {
+      return 0;
+    }
+  }
+  return 0;
 }
 
 /** Build the chat-echo string emitted as a synthetic user message after
@@ -1688,6 +1745,31 @@ export default function Editor() {
   }, [activeProject.id]);
 
   const isDesignFiles = activeTabId === DESIGN_FILES_TAB_ID;
+  const isQuestionsTab = activeTabId === QUESTIONS_TAB_ID;
+
+  // Move the elicit form out of the chat scroll into a dedicated tab
+  // whenever the form is large enough to warrant the context switch.
+  // The threshold is conservative — small clarifying asks (1-2 fields)
+  // stay inline so they don't force the user to leave the chat.
+  const elicitQuestionCount = countElicitQuestions(pendingElicit?.request, pendingElicitPreview);
+  const shouldMountElicitInTab = elicitQuestionCount >= QUESTIONS_TAB_THRESHOLD;
+
+  // Auto-activate the Questions tab the moment the form crosses the
+  // threshold (it pops into existence in the tab bar; the user
+  // shouldn't have to also click into it). When the form resolves
+  // and the tab disappears, fall back to whatever tab they were on
+  // before — or Design Files if we don't know.
+  const previousActiveTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (shouldMountElicitInTab && activeTabId !== QUESTIONS_TAB_ID) {
+      previousActiveTabRef.current = activeTabId || null;
+      setActiveTabId(QUESTIONS_TAB_ID);
+    } else if (!shouldMountElicitInTab && activeTabId === QUESTIONS_TAB_ID) {
+      const fallback = previousActiveTabRef.current ?? DESIGN_FILES_TAB_ID;
+      previousActiveTabRef.current = null;
+      setActiveTabId(fallback);
+    }
+  }, [shouldMountElicitInTab, activeTabId, setActiveTabId]);
   // When the synthetic Design Files tab is active, fall back to the first
   // real tab so downstream handlers (toolbar callbacks, applyToSelection)
   // still resolve a route without null-checking everywhere. The toolbar +
@@ -2363,6 +2445,32 @@ export default function Editor() {
             return next;
           });
         }}
+        showQuestionsTab={shouldMountElicitInTab}
+        questionsTabBadge={elicitQuestionCount}
+        onCloseQuestionsTab={() => {
+          // Closing the Questions tab cancels the elicitation.
+          // Build the same answer-echo a Cancel click would.
+          const threadId = pendingElicit?.threadId ?? pendingElicitPreview?.threadId;
+          if (threadId) {
+            const echo = formatElicitAnswerEcho("cancel", undefined);
+            if (echo) {
+              setThreads((prev) => prev.map((t) => t.id === threadId
+                ? { ...t, messages: [...t.messages, { role: "user", content: echo, ts: Date.now() } as ChatMessage] }
+                : t));
+            }
+          }
+          // POST cancel so the model unblocks; the server-side
+          // pending elicitation needs an explicit resolve.
+          if (pendingElicit) {
+            void fetch("/api/elicit-response", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ id: pendingElicit.request.id, action: "cancel" }),
+            }).catch(() => {});
+          }
+          setPendingElicit(null);
+          setPendingElicitPreview(null);
+        }}
       />
 
       <div className={s.stage}>
@@ -2393,6 +2501,12 @@ export default function Editor() {
           chatTabSwitchKey={chatTabSwitchKey}
           pendingElicit={pendingElicit?.request ?? null}
           pendingElicitPreview={pendingElicitPreview ?? null}
+          /* When the form is mounted in the Questions tab, the chat
+           * sidebar shows a compact link card pointing the user there
+           * — no need to render two copies of the form. */
+          elicitMountedInTab={shouldMountElicitInTab}
+          onFocusQuestionsTab={() => setActiveTabId(QUESTIONS_TAB_ID)}
+          elicitQuestionCount={elicitQuestionCount}
           onElicitResolved={(action, answers) => {
             // Echo the user's answers (or skip notice) into the chat as a
             // synthetic user-role message so the conversation stays
@@ -2725,7 +2839,28 @@ export default function Editor() {
             }}
           />}
           <div className={s.rightBody}>
-        {isDesignFiles ? (
+        {isQuestionsTab ? (
+          <div className={s.questionsTabBody}>
+            <ElicitForm
+              key={pendingElicit?.request.previewToolUseId ?? pendingElicit?.request.id ?? pendingElicitPreview?.toolUseId ?? "questions"}
+              request={pendingElicit?.request ?? null}
+              preview={pendingElicit ? null : (pendingElicitPreview ?? null)}
+              onResolved={(action, answers) => {
+                const threadId = pendingElicit?.threadId ?? pendingElicitPreview?.threadId;
+                if (threadId) {
+                  const echo = formatElicitAnswerEcho(action, answers);
+                  if (echo) {
+                    setThreads((prev) => prev.map((t) => t.id === threadId
+                      ? { ...t, messages: [...t.messages, { role: "user", content: echo, ts: Date.now() } as ChatMessage] }
+                      : t));
+                  }
+                }
+                setPendingElicit(null);
+                setPendingElicitPreview(null);
+              }}
+            />
+          </div>
+        ) : isDesignFiles ? (
           <FileBrowserView
             projectId={activeProject.id}
             onOpenRoute={openRouteAsTab}
@@ -3080,6 +3215,9 @@ function TabBar({
   dirtyRoutes,
   onReorder,
   onCloseMany,
+  showQuestionsTab,
+  questionsTabBadge,
+  onCloseQuestionsTab,
 }: {
   projectTitle: string;
   onRenameProject: (next: string) => void;
@@ -3099,6 +3237,14 @@ function TabBar({
   onReorder: (fromId: string, toId: string) => void;
   /** Bulk close — used by the IDE-style context-menu items. */
   onCloseMany: (predicate: (t: Tab) => boolean) => void;
+  /** Render the synthetic Questions tab when the agent has a
+   *  >=QUESTIONS_TAB_THRESHOLD form open. The tab disappears when the
+   *  form resolves; closing it via × cancels the elicitation. */
+  showQuestionsTab: boolean;
+  /** Question count to surface as a small badge on the tab. */
+  questionsTabBadge: number;
+  /** Cancels the elicitation and removes the tab. */
+  onCloseQuestionsTab: () => void;
 }) {
   const [menu, setMenu] = useState<{ tab: Tab; x: number; y: number } | null>(null);
   const tabbarRef = useRef<HTMLDivElement>(null);
@@ -3136,6 +3282,26 @@ function TabBar({
         </svg>
         <span className={s.label}>Design Files</span>
       </div>
+      {showQuestionsTab && (
+        <div
+          className={`${s.tab} ${activeId === QUESTIONS_TAB_ID ? s.active : ""}`}
+          onClick={() => onActivate(QUESTIONS_TAB_ID)}
+          title={`Claude has ${questionsTabBadge} question${questionsTabBadge === 1 ? "" : "s"}`}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="8" r="6.5" />
+            <path d="M8 11 V11.5" />
+            <path d="M6 6.5 a2 2 0 0 1 4 0 c0 1.5 -2 1.5 -2 3" />
+          </svg>
+          <span className={s.label}>Questions</span>
+          <button
+            type="button"
+            className={s.x}
+            aria-label="Cancel and close"
+            onClick={(e) => { e.stopPropagation(); onCloseQuestionsTab(); }}
+          >×</button>
+        </div>
+      )}
       {tabs.map((t) => (
         <TabCell
           key={t.id}
