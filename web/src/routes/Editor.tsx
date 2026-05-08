@@ -286,6 +286,40 @@ function formatTime(ts: number): string {
   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
 }
 
+/** Build the chat-echo string emitted as a synthetic user message after
+ *  the user submits an ElicitForm. The real tool-result return value
+ *  (which the model sees) is unaffected — this is purely a chat
+ *  rendering artifact for human-readable audit trail. */
+function formatElicitAnswerEcho(
+  action: "accept" | "decline" | "cancel",
+  answers: Record<string, unknown> | undefined,
+): string | null {
+  if (action !== "accept") return "Skipped — proceed with your best judgment.";
+  if (!answers || Object.keys(answers).length === 0) return null;
+  const lines: string[] = ["Answer:"];
+  for (const [key, raw] of Object.entries(answers)) {
+    const v = formatElicitValue(raw);
+    if (v === null) continue;
+    lines.push(`- ${key}: ${v}`);
+  }
+  return lines.length > 1 ? lines.join("\n") : null;
+}
+
+function formatElicitValue(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : null;
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (Array.isArray(v)) {
+    const parts = v.map(formatElicitValue).filter((x): x is string => x !== null);
+    return parts.length > 0 ? parts.join(", ") : null;
+  }
+  try { return JSON.stringify(v); } catch { return String(v); }
+}
+
 function uniqueFiles(tools: ToolCall[]): string[] {
   const seen = new Set<string>();
   for (const t of tools) {
@@ -1541,21 +1575,23 @@ export default function Editor() {
       ``,
       `**Don't touch any file yet.** First, understand what I want. Follow this order:`,
       ``,
-      `1. **Open with one structured question** via \`mcp__ask-user__ask_user\` to nail down the artifact type. Use \`kind: "enum"\` with options like:`,
-      `   "Lower third", "Titling system", "Thumbnail", "Opening title", "Animated overlay", "Episode card", "Other"`,
+      `1. **Call \`mcp__ask-user__ask_user\` ONCE** with a batched form. Pass { title, questions: [...] } where each question has { id, kind, title, options? }. The form auto-injects "Decide for me" / "Explore a few" / "Other" — don't add them to your options.`,
       ``,
-      `2. Once I pick, follow up with **5–8 more questions**. Mix structured (\`ask_user\`) and prose. Cover:`,
+      `2. The first question pins down the artifact type:`,
+      `   \`{ id: "artifact_type", kind: "enum", title: "What kind of artifact?", options: ["Lower third", "Titling system", "Thumbnail", "Opening title", "Animated overlay", "Episode card"] }\``,
+      ``,
+      `3. Follow up in the SAME batched form with 5-8 more questions covering:`,
       `   • aspect ratio / platform (YouTube 16:9, Shorts 9:16, podcast 1:1, etc.)`,
       `   • tone & aesthetic direction (editorial, broadcast, cinematic, brutalist, soft-minimal, etc.)`,
       `   • brand context — existing system, references to upload, or starting from scratch?`,
       `   • how many variations and across which dimensions (color, layout, motion, copy)?`,
       `   • constraints (safe areas, broadcast-safe colors, copy length, motion timing)`,
       ``,
-      `3. After I've answered, **invoke the \`frontend-design\` skill** (via the Skill tool) for guidance on committing to a bold aesthetic direction before writing any code.`,
+      `4. After I've answered, **invoke the \`frontend-design\` skill** (via the Skill tool) for guidance on committing to a bold aesthetic direction before writing any code.`,
       ``,
-      `4. Then plan briefly (one short paragraph), and only then start building inside the sandbox dir.`,
+      `5. Then plan briefly (one short paragraph), and only then start building inside the sandbox dir.`,
       ``,
-      `Don't ask all questions at once — one form at a time, conversational. Don't read the starter files yet; they're just empty scaffolding.`,
+      `One batched form first; conversational follow-ups only if something genuinely needs nuance after I answer. Don't read the starter files yet; they're just empty scaffolding.`,
       ``,
       `---`,
       ``,
@@ -2308,7 +2344,22 @@ export default function Editor() {
           } : undefined}
           chatTabSwitchKey={chatTabSwitchKey}
           pendingElicit={pendingElicit?.request ?? null}
-          onElicitResolved={() => setPendingElicit(null)}
+          onElicitResolved={(action, answers) => {
+            // Echo the user's answers (or skip notice) into the chat as a
+            // synthetic user-role message so the conversation stays
+            // auditable. The model already has the answers via the tool
+            // result return value — this is purely a UI artifact.
+            const threadId = pendingElicit?.threadId;
+            if (threadId) {
+              const echo = formatElicitAnswerEcho(action, answers);
+              if (echo) {
+                setThreads((prev) => prev.map((t) => t.id === threadId
+                  ? { ...t, messages: [...t.messages, { role: "user", content: echo, ts: Date.now() } as ChatMessage] }
+                  : t));
+              }
+            }
+            setPendingElicit(null);
+          }}
           onStop={() => {
             // Abort the in-flight stream — server's req.on("close")
             // aborts the SDK query and cancels any pending elicitation.

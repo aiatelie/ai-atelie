@@ -67,7 +67,7 @@ type Props = {
   ) => void;
   onRestore?: (m: Extract<ChatThread["messages"][number], { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
-  onElicitResolved?: () => void;
+  onElicitResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
   onStop?: () => void;
   /** A message held until the active turn drains. Rendered above the
    *  composer as a dimmer "queued" bubble. See route-level queueOrSend. */

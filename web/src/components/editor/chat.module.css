@@ -1253,7 +1253,41 @@
 }
 .elicitBody {
   margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
+
+/* Per-question section inside a multi-question form. */
+.elicitSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.elicitSectionTitle {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink);
+}
+.elicitSectionSubtitle {
+  font-size: 12px;
+  color: var(--ink-60);
+  margin-top: -2px;
+  margin-bottom: 4px;
+}
+.elicitOtherInput {
+  width: 100%;
+  border: 1px solid var(--ink-15);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--surface);
+  outline: none;
+  margin-top: 4px;
+}
+.elicitOtherInput:focus { border-color: var(--brand); }
+
 .elicitOptions {
   display: flex;
   flex-direction: column;

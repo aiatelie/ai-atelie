@@ -53,7 +53,7 @@ These coexist; `_inspector_edits.css` uses `!important` so it always wins the ca
 
 | Server | Tool | Purpose |
 |---|---|---|
-| `ask-user-server.mjs` | `ask_user` | structured-form questions in chat using the `questions_v2`-style schema |
+| `ask-user-server.mjs` | `ask_user` | batched structured-form questions in chat (`{ title, questions: [...] }`) — auto-injects Decide for me / Explore a few / Other on every enum question |
 | `starters-server.mjs` | `copy_starter`, `list_starters` | drops `Stage16x9.jsx`, `Stage9x16.jsx`, `LowerThird.jsx` etc. into the project |
 
 ### Skills

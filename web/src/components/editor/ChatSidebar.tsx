@@ -22,7 +22,7 @@ import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
-import { kindOf, KIND_VERB, type ToolKind } from "../../lib/toolKind";
+import { kindOf, verbOf, type ToolKind } from "../../lib/toolKind";
 import { smartLabel } from "../../lib/smartLabel";
 
 /* KindIcon — 12px inline SVG icons for tool-call chips. Lucide-style
@@ -206,7 +206,7 @@ export function ChatTab({
   ) => void;
   onRestore?: (m: Extract<ChatMessage, { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
-  onElicitResolved?: () => void;
+  onElicitResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
   onStop?: () => void;
   /** Human-readable label of the context the next turn will carry. */
   composerContext?: string;
@@ -1079,7 +1079,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { name: "/plan", description: "Plan the change before editing — files, diffs, visual goal", kind: "prompt", prompt: "Before doing it, write me a plan: list the files you'll touch, the changes per file, and the visual goal. Don't edit yet." },
   { name: "/diff", description: "Summarize the most recent edits this turn made", kind: "prompt", prompt: "Summarize the most recent edits — list each file changed and the gist of what changed." },
   { name: "/screenshot", description: "Take a fresh screenshot of the active page", kind: "prompt", prompt: "Take a fresh screenshot of the active page so you can see the current state." },
-  { name: "/export", description: "Export the selected element — picks PNG / JPEG / OGraf", kind: "prompt", prompt: "Use the export skill on the currently selected element. If the format isn't obvious from what I've said, ask me with a single mcp__ask-user__ask_user enum question whether I want PNG (transparent), JPEG (smaller), or OGraf (Resolve 21+). Otherwise just call the right capability and tell me what you saved." },
+  { name: "/export", description: "Export the selected element — picks PNG / JPEG / OGraf", kind: "prompt", prompt: "Use the export skill on the currently selected element. If the format isn't obvious from what I've said, ask me with mcp__ask-user__ask_user — pass { title: 'Quick question about the export', questions: [{ id: 'format', kind: 'enum', title: 'Which format?', options: ['PNG (transparent)', 'JPEG (smaller)', 'OGraf (Resolve 21+)'] }] }. Otherwise just call the right capability and tell me what you saved." },
   { name: "/explain", description: "Walk through what's currently on the active page", kind: "prompt", prompt: "Walk me through what's currently on the active page — components, layout decisions, design choices." },
   { name: "/refactor", description: "Refactor the active component without changing visuals", kind: "prompt", prompt: "Refactor the active component for cleaner structure without changing the visual output." },
   { name: "/test", description: "Suggest a small test for the most recent change", kind: "prompt", prompt: "Suggest a small test or visual sanity check for the most recent change." },
@@ -1721,7 +1721,7 @@ function LiveStatus({ tools, since }: { tools: ToolCall[]; since?: number }) {
   let verb = "Working";
   let target = "";
   if (last) {
-    verb = KIND_VERB[kindOf(last.name)];
+    verb = verbOf(last.name);
     const label = last.label || "";
     const m = label.match(/^[^·]+·\s*(.+)$/);
     target = m ? m[1].trim() : "";
