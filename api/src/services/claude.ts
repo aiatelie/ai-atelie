@@ -21,7 +21,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { ENV, screenshotDirFor } from "../env.ts";
 import { preparePromptForPayload, UUID_RE } from "./promptBuilder.ts";
 import { createPending } from "./elicitBus.ts";
-import { sdkMessageToAgentEvents } from "./agentEvents.ts";
+import { sdkMessageToAgentEvents, newAgentEventState } from "./agentEvents.ts";
 import { ASK_USER_STDIO, STARTERS, CAPABILITIES } from "../agents/shared/mcpServers.ts";
 import { effectiveSessionId, orphanSession, sessionRemapSize } from "../agents/shared/sessionStore.ts";
 import type { CommentPayload, Emitter } from "./types.ts";
@@ -166,9 +166,13 @@ export async function runClaude(
       },
     });
 
+    // Per-call state for content_block index tracking. A module-level
+    // Map would cross-contaminate concurrent runs (two tabs, two
+    // projects) since their content-block indices both start at 0.
+    const agentState = newAgentEventState();
     try {
       for await (const msg of q) {
-        for (const evt of sdkMessageToAgentEvents(msg)) {
+        for (const evt of sdkMessageToAgentEvents(msg, agentState)) {
           if (evt.type === "elicitPreviewStart") {
             lastAskUserToolUseId = evt.toolUseId;
           }

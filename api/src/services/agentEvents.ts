@@ -57,13 +57,22 @@ type SdkMsg = {
   model?: string;
 };
 
-/** Module-scoped state for tracking which content_block index belongs
- *  to which ask_user tool_use call. Filled by content_block_start,
- *  consumed by content_block_delta and content_block_stop. The index
- *  numbering is per-message, but we don't need to scope further: the
- *  SDK iterator interleaves messages and we only need pairing within
- *  a single tool-use lifetime which is bounded by start/stop. */
-const askUserBlocks = new Map<number, { toolUseId: string; toolName: string }>();
+/** Per-call state for tracking which content_block index belongs to
+ *  which ask_user tool_use call. Filled by content_block_start,
+ *  consumed by content_block_delta and content_block_stop.
+ *
+ *  Each `runClaude` invocation should mint its own `AgentEventState`
+ *  via `newAgentEventState()` and pass it as the second arg to
+ *  `sdkMessageToAgentEvents`. Two concurrent runs (two tabs, two
+ *  projects) emit overlapping content-block indices — sharing one
+ *  module-level Map would cross-contaminate them. */
+export type AgentEventState = {
+  askUserBlocks: Map<number, { toolUseId: string; toolName: string }>;
+};
+
+export function newAgentEventState(): AgentEventState {
+  return { askUserBlocks: new Map() };
+}
 
 /** True if `name` is one of our ask_user tool aliases. The model may
  *  see either the bare name (when running outside the MCP envelope)
@@ -103,10 +112,18 @@ function extractSdkUsage(m: SdkMsg): AgentUsage | undefined {
 /** Map one Anthropic claude-agent-sdk message to zero or more AgentEvents.
  *  Handles stream_event deltas (text/thinking), assistant tool_use blocks,
  *  user tool_result blocks, and the terminal `result` message (finalText
- *  + per-turn usage). Mirrors chatStream.ts:parseSseBlock pre-Phase-1. */
-export function sdkMessageToAgentEvents(msg: unknown): AgentEvent[] {
+ *  + per-turn usage). Mirrors chatStream.ts:parseSseBlock pre-Phase-1.
+ *
+ *  Pass a per-`runClaude` `state` (via `newAgentEventState()`) to scope
+ *  the content-block tracking. Concurrent calls without per-call state
+ *  would collide on overlapping indices. */
+export function sdkMessageToAgentEvents(
+  msg: unknown,
+  state: AgentEventState = newAgentEventState(),
+): AgentEvent[] {
   if (!msg || typeof msg !== "object") return [];
   const m = msg as SdkMsg;
+  const askUserBlocks = state.askUserBlocks;
 
   if (m.type === "stream_event") {
     // Tool-use streaming: announce the start of an ask_user tool_use
