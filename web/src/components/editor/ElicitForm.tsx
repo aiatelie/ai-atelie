@@ -97,11 +97,57 @@ export function ElicitForm({ request, preview, onResolved }: Props) {
     return "";
   }, [request?.message, preview?.partialJson]);
 
-  const [answers, setAnswers] = useState<Record<string, unknown>>(() =>
-    Object.fromEntries(questions.map((q) => [q.id, initialValue(q.schema)])),
-  );
+  // Persist in-progress answers to localStorage so a page reload
+  // doesn't drop everything the user already typed. The key is keyed
+  // off the elicit's id (real form) or the toolUseId (preview state),
+  // whichever is the stable handle right now. When promotion happens
+  // (preview gets its real id), we copy the draft over so nothing is
+  // lost across the transition. Cleared on resolve.
+  const draftKey = request?.id ? `elicit-draft:${request.id}` : preview ? `elicit-draft:preview:${preview.toolUseId}` : null;
+  const [answers, setAnswers] = useState<Record<string, unknown>>(() => {
+    const fromQuestions = Object.fromEntries(questions.map((q) => [q.id, initialValue(q.schema)]));
+    if (!draftKey) return fromQuestions;
+    try {
+      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(draftKey) : null;
+      if (!raw) return fromQuestions;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      // Merge: fromQuestions provides defaults; parsed wins per-key.
+      return { ...fromQuestions, ...parsed };
+    } catch {
+      return fromQuestions;
+    }
+  });
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Migrate the draft when the elicit promotes from preview→real.
+  // Both keys live in localStorage simultaneously for a beat; we
+  // copy from the preview key over the real key, then clear the
+  // preview key so it doesn't accumulate.
+  useEffect(() => {
+    if (!request?.id || !preview?.toolUseId) return;
+    if (typeof localStorage === "undefined") return;
+    const previewKey = `elicit-draft:preview:${preview.toolUseId}`;
+    const realKey = `elicit-draft:${request.id}`;
+    const previewDraft = localStorage.getItem(previewKey);
+    if (previewDraft && !localStorage.getItem(realKey)) {
+      localStorage.setItem(realKey, previewDraft);
+      localStorage.removeItem(previewKey);
+    }
+  }, [request?.id, preview?.toolUseId]);
+
+  // Write answers to localStorage on every change. Cheap (small JSON,
+  // synchronous) and keeps reload-survival reliable. The cleanup on
+  // resolve happens in `send()` below.
+  useEffect(() => {
+    if (!draftKey || typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify(answers));
+    } catch {
+      // Quota exceeded or private mode — non-fatal; the form just
+      // won't survive a reload, which is the prior behavior.
+    }
+  }, [draftKey, answers]);
 
   // Sync answers map when new questions arrive during streaming. We
   // only ADD missing keys; existing user input is preserved across
@@ -150,6 +196,14 @@ export function ElicitForm({ request, preview, onResolved }: Props) {
         setErrorMsg(j?.error ?? `HTTP ${res.status}`);
         setSubmitting(false);
         return;
+      }
+      // Clear both potential draft keys (real + preview) so the
+      // form starts clean next time. Cheap and idempotent.
+      if (typeof localStorage !== "undefined") {
+        try {
+          if (request?.id) localStorage.removeItem(`elicit-draft:${request.id}`);
+          if (preview?.toolUseId) localStorage.removeItem(`elicit-draft:preview:${preview.toolUseId}`);
+        } catch { /* ignore */ }
       }
       onResolved?.(action, action === "accept" ? answers : undefined);
     } catch (err) {
@@ -698,25 +752,43 @@ function NumberInput({
 function BooleanToggle({
   value, onChange, required,
 }: { value: unknown; onChange: (v: boolean | string) => void; required: boolean }) {
-  // Required boolean questions default to nothing-selected so the user
-  // is forced to pick (or pick "Decide for me"). Optional booleans can
-  // start at false; they don't surface the defer affordance.
+  // Sliding switch with a Yes/No track. Required questions also surface
+  // a separate "Decide for me" link below so the user can defer
+  // (matches the number-input defer pattern). Optional questions skip
+  // the link — they just don't gate Continue if left untouched.
   const isYes = value === true;
   const isNo = value === false;
   const isDefer = value === "Decide for me";
+  // The switch shows "unset" visually when no choice has been made
+  // (initial state for required booleans). Click anywhere on the
+  // track to commit Yes or No; click "Decide for me" to defer.
+  const state: "yes" | "no" | "unset" | "defer" = isYes ? "yes" : isNo ? "no" : isDefer ? "defer" : "unset";
   return (
-    <div className={s.elicitOptions}>
-      <label className={`${s.elicitOption} ${isYes ? s.elicitOptionOn : ""}`}>
-        <input type="radio" checked={isYes} onChange={() => onChange(true)} /><span>Yes</span>
-      </label>
-      <label className={`${s.elicitOption} ${isNo ? s.elicitOptionOn : ""}`}>
-        <input type="radio" checked={isNo} onChange={() => onChange(false)} /><span>No</span>
-      </label>
+    <div className={s.elicitBoolean}>
+      <button
+        type="button"
+        className={s.elicitSwitch}
+        role="switch"
+        aria-checked={isYes}
+        data-state={state}
+        onClick={() => onChange(!isYes)}
+        title={isYes ? "Yes — click to flip to No" : isNo ? "No — click to flip to Yes" : "Click to set Yes"}
+      >
+        <span className={s.elicitSwitchTrack}>
+          <span className={s.elicitSwitchThumb} aria-hidden />
+        </span>
+        <span className={s.elicitSwitchLabel}>
+          {state === "yes" ? "Yes" : state === "no" ? "No" : state === "defer" ? "Decide for me" : "—"}
+        </span>
+      </button>
       {required && (
-        <label className={`${s.elicitOption} ${isDefer ? s.elicitOptionOn : ""}`}>
-          <input type="radio" checked={isDefer} onChange={() => onChange("Decide for me")} />
-          <span>Decide for me</span>
-        </label>
+        <button
+          type="button"
+          className={s.elicitDeferToggle}
+          onClick={() => onChange(isDefer ? false : "Decide for me")}
+        >
+          {isDefer ? "← Pick Yes / No" : "Decide for me"}
+        </button>
       )}
     </div>
   );

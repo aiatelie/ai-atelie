@@ -2534,7 +2534,23 @@ export default function Editor() {
               void notifyServerStop(streamId);
               abortStream(streamId);
             }
+            // If a question form was up when Stop was pressed, echo the
+            // same "Skipped — proceed with your best judgment." message
+            // we'd echo on Cancel. Without this, the form just disappears
+            // and the chat scroll has no record of why the user killed
+            // the run. Symmetric with the Cancel button's behavior.
+            const hadElicit = (pendingElicit && pendingElicit.threadId === t.id)
+              || (pendingElicitPreview && pendingElicitPreview.threadId === t.id);
+            if (hadElicit) {
+              const echo = formatElicitAnswerEcho("cancel", undefined);
+              if (echo) {
+                setThreads((prev) => prev.map((th) => th.id === t.id
+                  ? { ...th, messages: [...th.messages, { role: "user", content: echo, ts: Date.now() } as ChatMessage] }
+                  : th));
+              }
+            }
             setPendingElicit((p) => (p && p.threadId === t.id ? null : p));
+            setPendingElicitPreview((p) => (p && p.threadId === t.id ? null : p));
             // No live stream to abort (page reloaded mid-turn, watchdog
             // missed the stall, etc.). The pending:true is just stale —
             // flip it locally so the composer unblocks. Save useEffect
@@ -3287,7 +3303,7 @@ function TabBar({
         <div
           className={`${s.tab} ${activeId === QUESTIONS_TAB_ID ? s.active : ""}`}
           onClick={() => onActivate(QUESTIONS_TAB_ID)}
-          title={`Claude has ${questionsTabBadge} question${questionsTabBadge === 1 ? "" : "s"}`}
+          title={`${questionsTabBadge} quick question${questionsTabBadge === 1 ? "" : "s"} to answer`}
         >
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="8" cy="8" r="6.5" />

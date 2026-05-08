@@ -20,7 +20,7 @@ import { access } from "node:fs/promises";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { ENV, screenshotDirFor } from "../env.ts";
 import { preparePromptForPayload, UUID_RE } from "./promptBuilder.ts";
-import { createPending } from "./elicitBus.ts";
+import { createPending, hasStreamEmitter } from "./elicitBus.ts";
 import { sdkMessageToAgentEvents, newAgentEventState } from "./agentEvents.ts";
 import { ASK_USER_STDIO, STARTERS, CAPABILITIES } from "../agents/shared/mcpServers.ts";
 import { effectiveSessionId, orphanSession, sessionRemapSize } from "../agents/shared/sessionStore.ts";
@@ -147,6 +147,16 @@ export async function runClaude(
             : {}),
         },
         onElicitation: async (req: any) => {
+          // No client subscribed → the SSE elicit event would emit into
+          // the void. The grace timer (GRACE_DISCONNECT_MS) usually
+          // covers brief disconnects, but if the user has fully gone
+          // away the pending would hang the agent forever. Resolve
+          // immediately as cancel so the agent's `ask_user` returns
+          // and the run can either continue ("user skipped") or wind
+          // down cleanly via the existing abort path.
+          if (!hasStreamEmitter(streamId)) {
+            return { action: "cancel", content: { _reason: "no-active-client" } } as any;
+          }
           const { id, promise } = createPending(streamId);
           send("elicit", {
             id,

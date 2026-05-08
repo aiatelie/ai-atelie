@@ -62,6 +62,20 @@ export function unregisterStreamEmitter(streamId: string): void {
   streamEmitters.delete(streamId);
 }
 
+/** True if a stream emitter is currently registered for `streamId`.
+ *  The Claude SDK's onElicitation path uses this as a probe before
+ *  creating a pending: with no emitter the SSE event would never
+ *  reach a client, so we resolve as cancel instead of hanging.
+ *
+ *  Multi-tab limitation: only one emitter is registered per streamId
+ *  at a time (Map.set replaces), so this also returns false during
+ *  a brief window between SSE disconnect and resume. The
+ *  GRACE_DISCONNECT_MS window covers that — if the same streamId
+ *  resumes, the new emitter registers in time. */
+export function hasStreamEmitter(streamId: string): boolean {
+  return streamEmitters.has(streamId);
+}
+
 /** Schema shape forwarded to the editor's ElicitForm. Mirrors the fields
  *  the Claude `onElicitation` callback emits today, so the frontend can
  *  treat both sources identically. */

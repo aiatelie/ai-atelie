@@ -1674,6 +1674,84 @@
 .elicitNumberRow[data-deferred="true"] {
   opacity: 0.5;
 }
+
+/* Sliding-switch boolean. Replaces the previous Yes/No radio pair
+ * with a single tap target the user toggles between two states.
+ * "Unset" (no value picked yet) shows a centered greyed thumb so
+ * the user knows the question still needs an answer. "Decide for
+ * me" surfaces as a separate text-link below to keep the switch
+ * semantically binary. */
+.elicitBoolean {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.elicitSwitch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+.elicitSwitchTrack {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--ink-15);
+  border: 1px solid var(--ink-15);
+  transition: background 0.18s ease, border-color 0.18s ease;
+  flex-shrink: 0;
+}
+.elicitSwitchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: left 0.18s ease, background 0.18s ease;
+}
+/* Yes — track tinted brand, thumb at right. */
+.elicitSwitch[data-state="yes"] .elicitSwitchTrack {
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+}
+.elicitSwitch[data-state="yes"] .elicitSwitchThumb {
+  left: 24px;
+}
+/* No — track neutral, thumb at left. */
+.elicitSwitch[data-state="no"] .elicitSwitchTrack {
+  background: var(--ink-20);
+  border-color: var(--ink-20);
+}
+/* Unset — thumb centered, dimmed; visual hint that the question is
+ * unanswered. Hover slides toward Yes since that's the default
+ * commit on click. */
+.elicitSwitch[data-state="unset"] .elicitSwitchTrack {
+  background: var(--ink-10);
+  border-color: var(--ink-15);
+  border-style: dashed;
+}
+.elicitSwitch[data-state="unset"] .elicitSwitchThumb {
+  left: 13px;
+  background: var(--ink-15);
+}
+.elicitSwitch[data-state="defer"] {
+  opacity: 0.55;
+}
+.elicitSwitchLabel {
+  font-size: 13px;
+  font-weight: 500;
+}
 .elicitBtn {
   font: inherit;
   font-size: 12.5px;

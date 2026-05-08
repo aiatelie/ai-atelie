@@ -290,7 +290,7 @@ export function ChatTab({
           <span className={s.elicitLinkIcon} aria-hidden>⚠</span>
           <span className={s.elicitLinkBody}>
             <span className={s.elicitLinkTitle}>
-              Claude has {elicitQuestionCount ?? "some"} question{elicitQuestionCount === 1 ? "" : "s"}
+              {elicitQuestionCount === 1 ? "A quick question" : `${elicitQuestionCount ?? "A few"} quick questions`}
             </span>
             <span className={s.elicitLinkHint}>Tap to answer →</span>
           </span>
