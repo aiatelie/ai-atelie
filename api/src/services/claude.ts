@@ -88,10 +88,14 @@ export async function runClaude(
         : { sessionId: sid }
       : {};
 
-    // Track the in-flight ask_user tool_use so the next onElicitation
-    // call can attach the matching toolUseId to the SSE elicit event.
-    // Reset on each new ask_user start.
-    let lastAskUserToolUseId: string | undefined;
+    // Track in-flight ask_user tool_uses in FIFO order so each
+    // onElicitation pairs with its originating tool_use even when the
+    // model emits two ask_user blocks in one assistant message. Single
+    // `let lastAskUserToolUseId` would lose the first id when the
+    // second block's start event arrived; the SDK then awaits the
+    // elicit callbacks serially in block order, so a queue (pushed on
+    // preview start, shifted on onElicitation) lines up correctly.
+    const pendingAskUserToolUseIds: string[] = [];
 
     const q = query({
       prompt,
@@ -146,11 +150,11 @@ export async function runClaude(
           const { id, promise } = createPending(streamId);
           send("elicit", {
             id,
-            // Tying the elicit event to the most recently announced
-            // ask_user tool_use lets the frontend promote a streaming
-            // preview form into a real one in place. Cleared after
-            // emission so the next ask_user call starts fresh.
-            previewToolUseId: lastAskUserToolUseId,
+            // FIFO match against the queue of in-flight ask_user
+            // tool_uses. The SDK invokes onElicitation in the same
+            // order the content blocks completed, so the oldest
+            // queued id is the one this elicit corresponds to.
+            previewToolUseId: pendingAskUserToolUseIds.shift(),
             serverName: req.serverName,
             message: req.message,
             mode: req.mode,
@@ -159,7 +163,6 @@ export async function runClaude(
             displayName: req.displayName,
             description: req.description,
           });
-          lastAskUserToolUseId = undefined;
           const result = await promise;
           return result as any;
         },
@@ -174,7 +177,7 @@ export async function runClaude(
       for await (const msg of q) {
         for (const evt of sdkMessageToAgentEvents(msg, agentState)) {
           if (evt.type === "elicitPreviewStart") {
-            lastAskUserToolUseId = evt.toolUseId;
+            pendingAskUserToolUseIds.push(evt.toolUseId);
           }
           send("agent", evt);
         }
