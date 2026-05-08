@@ -1450,19 +1450,6 @@
   margin-bottom: 6px;
   line-height: 1.4;
 }
-.elicitOtherInput {
-  width: 100%;
-  border: 1px solid var(--ink-15);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-family: inherit;
-  background: var(--surface);
-  outline: none;
-  margin-top: 4px;
-}
-.elicitOtherInput:focus { border-color: var(--brand); }
-
 /* Options flow as horizontal pills that wrap onto multiple rows.
  * Matches the canvas-style question pattern (Claude Design): chips
  * are scannable left-to-right, the native checkbox/radio is hidden

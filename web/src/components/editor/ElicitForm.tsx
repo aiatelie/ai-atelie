@@ -27,12 +27,13 @@
  *   - string       → text input   { type:"string" }
  *
  * Two escape-hatch patterns coexist:
- *   1. ENUM kinds: when the field schema has `x-other-input: true`, we
- *      render an inline `Other…` textarea below the chip row. Selecting
- *      an "Other" chip focuses the textarea; typed content REPLACES
- *      "Other" in the answer (so the model sees the literal user text).
- *      The MCP server auto-injects "Decide for me" / "Explore a few" /
- *      "Other" options server-side for every enum question.
+ *   1. ENUM kinds: the MCP server auto-injects "Decide for me" /
+ *      "Explore a few" / "Other" options into the enum list for every
+ *      enum question. The user picks one of those chips like any other
+ *      option — the value submitted is the literal label string. There
+ *      is no inline freeform input on enum kinds: the SDK strict-validates
+ *      the elicit reply against the enum, so a custom string would fail.
+ *      Use a follow-up text question if free-form text is needed.
  *   2. NON-ENUM kinds (number, boolean, dropzone): a per-question
  *      "Other" toggle bypasses the structured input and falls back to
  *      a freeform textarea — useful when the model's choices don't
@@ -296,12 +297,13 @@ function streamingQuestionToQuestion(q: StreamingQuestion): Question {
     const RESERVED = new Set(["Decide for me", "Explore a few", "Other"]);
     const userOpts = opts.filter((o) => !RESERVED.has(o));
     const finalOptions = [...userOpts, "Decide for me", "Explore a few", "Other"];
-    // Mirror the server-side schema synthesis: x-options for the UI,
-    // unconstrained type for the wire so free-form Other text passes
-    // elicit validation.
+    // Strict enum to match the server schema (the MCP SDK rejects
+    // requestedSchema with unknown fields). The "Other" pick is a
+    // literal sentinel — no inline freeform input, since custom
+    // strings fail enum validation on submit.
     schema = q.multi
-      ? { type: "array", items: { type: "string" }, "x-options": finalOptions, "x-other-input": true }
-      : { type: "string", "x-options": finalOptions, "x-other-input": true };
+      ? { type: "array", items: { type: "string", enum: finalOptions } }
+      : { type: "string", enum: finalOptions };
   } else if (kind === "svg-options") {
     const opts = Array.isArray(q.options) ? q.options.filter((o): o is string => typeof o === "string") : [];
     const labels = Array.isArray(q.optionLabels)
@@ -311,11 +313,10 @@ function streamingQuestionToQuestion(q: StreamingQuestion): Question {
     const finalOptions = [...indexOptions, "Decide for me", "Other"];
     schema = {
       type: "string",
-      "x-options": finalOptions,
+      enum: finalOptions,
       "x-input": "svg-options",
       "x-svg-options": opts,
       "x-svg-labels": labels,
-      "x-other-input": true,
     };
   } else if (kind === "number") {
     schema = {
@@ -458,116 +459,48 @@ function QuestionSection({
 
 /* ─── Sub-controls ──────────────────────────────────────────── */
 
-/** Single-select chips with an optional "Other" inline textarea.
- *  When the field schema has `x-other-input: true`:
- *  - "Other" appears in the option list (placed there by the MCP server)
- *  - Selecting "Other" focuses the inline textarea below
- *  - Typing in the textarea makes that text the answer (REPLACES "Other") */
+/** Single-select chips. The MCP SDK strictly validates the elicit reply
+ *  against `enum`, so the "Other" chip is a literal sentinel — picking
+ *  it submits the string "Other" and the agent can ask a follow-up. */
 function EnumSingle({
   field, value, onChange,
 }: { field: Schema; value: string; onChange: (v: string) => void }) {
-  const allOptions = enumOptions(field);
-  const hasOther = !!(field as { ["x-other-input"]?: boolean })?.["x-other-input"];
-  const knownOptions = hasOther ? allOptions.filter((o) => o !== "Other") : allOptions;
-
-  // The user is in "Other" mode when:
-  //   - they've picked the "Other" chip explicitly (otherActive=true), OR
-  //   - the value is non-empty and not in the canonical options list
-  //     (e.g. they typed custom text into the Other input).
-  // Clicking the Other chip seeds value to the literal "Other" so a
-  // user who clicks Other and submits without typing sends a clear
-  // sentinel — not an empty string that fails required-validity.
-  const [otherActive, setOtherActive] = useState(
-    () => hasOther && value !== "" && !knownOptions.includes(value),
-  );
-  const otherSelected = hasOther && (otherActive || (value === "Other") || (value !== "" && !knownOptions.includes(value)));
-  const otherText = otherSelected && value !== "Other" && !knownOptions.includes(value) ? value as string : "";
-
+  const options = enumOptions(field);
   // Decide for me / Explore a few / Other are escape hatches — render
   // them with a distinct data-attribute so CSS can mute them slightly
   // (italic, dimmer) so the eye lands on canonical options first.
-  const ESCAPE = new Set(["Decide for me", "Explore a few"]);
+  const ESCAPE = new Set(["Decide for me", "Explore a few", "Other"]);
   return (
-    <>
-      <div className={s.elicitOptions}>
-        {knownOptions.map((opt) => {
-          const checked = value === opt && !otherSelected;
-          const isEscape = ESCAPE.has(opt);
-          return (
-            <label
-              key={opt}
-              className={`${s.elicitOption} ${checked ? s.elicitOptionOn : ""}`}
-              data-escape={isEscape ? "true" : undefined}
-            >
-              <input
-                type="radio"
-                name="elicit-radio"
-                checked={checked}
-                onChange={() => { setOtherActive(false); onChange(opt); }}
-              />
-              <span>{opt}</span>
-            </label>
-          );
-        })}
-        {hasOther && (
+    <div className={s.elicitOptions}>
+      {options.map((opt) => {
+        const checked = value === opt;
+        const isEscape = ESCAPE.has(opt);
+        return (
           <label
-            className={`${s.elicitOption} ${otherSelected ? s.elicitOptionOn : ""}`}
-            data-escape="true"
+            key={opt}
+            className={`${s.elicitOption} ${checked ? s.elicitOptionOn : ""}`}
+            data-escape={isEscape ? "true" : undefined}
           >
             <input
               type="radio"
               name="elicit-radio"
-              checked={otherSelected}
-              onChange={() => { setOtherActive(true); onChange("Other"); }}
+              checked={checked}
+              onChange={() => onChange(opt)}
             />
-            <span>Other</span>
+            <span>{opt}</span>
           </label>
-        )}
-      </div>
-      {hasOther && otherSelected && (
-        <input
-          type="text"
-          className={s.elicitOtherInput}
-          autoFocus
-          placeholder="Type your own…"
-          value={otherText}
-          onChange={(e) => {
-            setOtherActive(true);
-            // Empty input → keep "Other" sentinel; non-empty → use the typed text.
-            onChange(e.target.value || "Other");
-          }}
-        />
-      )}
-    </>
+        );
+      })}
+    </div>
   );
 }
 
-/** Multi-select chips with an optional "Other" inline textarea.
- *  When the user types into Other, that string is added to the answer
- *  array (in place of "Other"). */
+/** Multi-select chips. "Other" is a literal sentinel (no inline
+ *  freeform input — strict enum validation rejects custom strings). */
 function EnumMulti({
   field, value, onChange,
 }: { field: Schema; value: string[]; onChange: (v: string[]) => void }) {
-  const allOptions = enumOptions(field);
-  const hasOther = !!(field as { ["x-other-input"]?: boolean })?.["x-other-input"];
-  const knownOptions = hasOther ? allOptions.filter((o) => o !== "Other") : allOptions;
-  const knownSet = new Set(knownOptions);
-
-  // Anything in `value` that isn't a canonical option is either the
-  // literal "Other" sentinel (user clicked Other but didn't type) or
-  // the user's freeform Other text. We collapse them into one
-  // "extra" string for display purposes.
-  const extra = value.find((v) => !knownSet.has(v)) ?? "";
-  const otherText = extra && extra !== "Other" ? extra : "";
-  const [otherActive, setOtherActive] = useState(() => hasOther && extra !== "");
-  const otherSelected = hasOther && (otherActive || extra !== "");
-
-  const knownChosen = value.filter((v) => knownSet.has(v));
-
-  // Mutate `value` in place so the otherText (if any) keeps its
-  // relative position. The previous always-append-at-end shape was
-  // correct on the wire, but caused the model to see the array
-  // re-order on every toggle.
+  const options = enumOptions(field);
   const toggle = (opt: string) => {
     if (value.includes(opt)) {
       onChange(value.filter((v) => v !== opt));
@@ -576,73 +509,24 @@ function EnumMulti({
     }
   };
 
-  const setOtherText = (text: string) => {
-    setOtherActive(true);
-    // Replace whatever extra string is in the array (literal "Other"
-    // sentinel OR previous typed text) with the new value. If text
-    // is empty, fall back to the "Other" sentinel so a chip click
-    // without typing still records a choice.
-    const next = text || "Other";
-    if (extra) {
-      onChange(value.map((v) => (v === extra ? next : v)));
-    } else {
-      onChange([...value, next]);
-    }
-  };
-
-  const ESCAPE = new Set(["Decide for me", "Explore a few"]);
+  const ESCAPE = new Set(["Decide for me", "Explore a few", "Other"]);
   return (
-    <>
-      <div className={s.elicitOptions}>
-        {knownOptions.map((opt) => {
-          const checked = knownChosen.includes(opt);
-          const isEscape = ESCAPE.has(opt);
-          return (
-            <label
-              key={opt}
-              className={`${s.elicitOption} ${checked ? s.elicitOptionOn : ""}`}
-              data-escape={isEscape ? "true" : undefined}
-            >
-              <input type="checkbox" checked={checked} onChange={() => toggle(opt)} />
-              <span>{opt}</span>
-            </label>
-          );
-        })}
-        {hasOther && (
+    <div className={s.elicitOptions}>
+      {options.map((opt) => {
+        const checked = value.includes(opt);
+        const isEscape = ESCAPE.has(opt);
+        return (
           <label
-            className={`${s.elicitOption} ${otherSelected ? s.elicitOptionOn : ""}`}
-            data-escape="true"
+            key={opt}
+            className={`${s.elicitOption} ${checked ? s.elicitOptionOn : ""}`}
+            data-escape={isEscape ? "true" : undefined}
           >
-            <input
-              type="checkbox"
-              checked={otherSelected}
-              onChange={() => {
-                if (otherSelected) {
-                  setOtherActive(false);
-                  onChange(knownChosen);
-                } else {
-                  setOtherActive(true);
-                  // Seed the array with the "Other" sentinel so
-                  // submitting without typing still records the pick.
-                  if (!extra) onChange([...value, "Other"]);
-                }
-              }}
-            />
-            <span>Other</span>
+            <input type="checkbox" checked={checked} onChange={() => toggle(opt)} />
+            <span>{opt}</span>
           </label>
-        )}
-      </div>
-      {hasOther && otherSelected && (
-        <input
-          type="text"
-          className={s.elicitOtherInput}
-          autoFocus
-          placeholder="Type your own…"
-          value={otherText}
-          onChange={(e) => setOtherText(e.target.value)}
-        />
-      )}
-    </>
+        );
+      })}
+    </div>
   );
 }
 
@@ -673,73 +557,52 @@ function SvgOptions({
     enum?: string[];
     ["x-svg-options"]?: string[];
     ["x-svg-labels"]?: string[];
-    ["x-other-input"]?: boolean;
   };
   const svgs = Array.isArray(f["x-svg-options"]) ? f["x-svg-options"] : [];
   const labels = Array.isArray(f["x-svg-labels"]) ? f["x-svg-labels"] : [];
-  const hasOther = !!f["x-other-input"];
-
-  // Index strings the agent assigned to each SVG option ("0", "1", …).
-  // Anything else is either a reserved escape-hatch label or the user's
-  // free-text from the Other input — never a numeric "42" misclassified
-  // as a valid index (which the previous `Number.isNaN` check let through
-  // when the user happened to type digits into Other).
-  const indexOptions = svgs.map((_, i) => String(i));
-  const isOtherTyped = hasOther && value !== ""
-    && !indexOptions.includes(value)
-    && value !== "Decide for me";
-  const [otherActive, setOtherActive] = useState(() => isOtherTyped);
-  const otherSelected = otherActive || isOtherTyped;
+  // The enum list determines which sentinels are valid (it's what the
+  // SDK validates the reply against). Always render Decide for me; only
+  // render Other if it was emitted as a valid sentinel by the server.
+  const validSentinels = new Set(Array.isArray(f.enum) ? f.enum : []);
+  const hasOther = validSentinels.has("Other");
 
   return (
-    <>
-      <div className={s.elicitSvgGrid}>
-        {svgs.map((svg, i) => {
-          const idx = String(i);
-          const checked = value === idx && !otherSelected;
-          return (
-            <button
-              key={idx}
-              type="button"
-              className={`${s.elicitSvgCard} ${checked ? s.elicitSvgCardOn : ""}`}
-              onClick={() => { setOtherActive(false); onChange(idx); }}
-              title={labels[i] ?? `Option ${i + 1}`}
-            >
-              <span className={s.elicitSvgInner} dangerouslySetInnerHTML={{ __html: sanitizeSvg(svg) }} />
-              <span className={s.elicitSvgLabel}>{labels[i] ?? `Option ${i + 1}`}</span>
-            </button>
-          );
-        })}
+    <div className={s.elicitSvgGrid}>
+      {svgs.map((svg, i) => {
+        const idx = String(i);
+        const checked = value === idx;
+        return (
+          <button
+            key={idx}
+            type="button"
+            className={`${s.elicitSvgCard} ${checked ? s.elicitSvgCardOn : ""}`}
+            onClick={() => onChange(idx)}
+            title={labels[i] ?? `Option ${i + 1}`}
+          >
+            <span className={s.elicitSvgInner} dangerouslySetInnerHTML={{ __html: sanitizeSvg(svg) }} />
+            <span className={s.elicitSvgLabel}>{labels[i] ?? `Option ${i + 1}`}</span>
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        className={`${s.elicitSvgCard} ${value === "Decide for me" ? s.elicitSvgCardOn : ""}`}
+        onClick={() => onChange("Decide for me")}
+      >
+        <span className={s.elicitSvgInner} aria-hidden>✦</span>
+        <span className={s.elicitSvgLabel}>Decide for me</span>
+      </button>
+      {hasOther && (
         <button
           type="button"
-          className={`${s.elicitSvgCard} ${value === "Decide for me" && !otherSelected ? s.elicitSvgCardOn : ""}`}
-          onClick={() => { setOtherActive(false); onChange("Decide for me"); }}
+          className={`${s.elicitSvgCard} ${value === "Other" ? s.elicitSvgCardOn : ""}`}
+          onClick={() => onChange("Other")}
         >
-          <span className={s.elicitSvgInner} aria-hidden>✦</span>
-          <span className={s.elicitSvgLabel}>Decide for me</span>
+          <span className={s.elicitSvgInner} aria-hidden>…</span>
+          <span className={s.elicitSvgLabel}>Other</span>
         </button>
-        {hasOther && (
-          <button
-            type="button"
-            className={`${s.elicitSvgCard} ${otherSelected ? s.elicitSvgCardOn : ""}`}
-            onClick={() => { setOtherActive(true); onChange(""); }}
-          >
-            <span className={s.elicitSvgInner} aria-hidden>…</span>
-            <span className={s.elicitSvgLabel}>Other</span>
-          </button>
-        )}
-      </div>
-      {hasOther && otherSelected && (
-        <input
-          type="text"
-          className={s.elicitOtherInput}
-          autoFocus
-          placeholder="Other…"
-          value={isOtherTyped ? value : ""}
-          onChange={(e) => { setOtherActive(true); onChange(e.target.value); }}
-        />
       )}
-    </>
+    </div>
   );
 }
 
@@ -1113,14 +976,12 @@ function detectKind(field: Schema): FieldKind {
     type?: string;
     enum?: string[];
     items?: { enum?: string[] };
-    ["x-options"]?: string[];
     ["x-input"]?: string;
     format?: string;
   };
   if (f.type === "string" && f["x-input"] === "svg-options") return "svg-options";
-  // x-options OR enum (legacy) on string array → multi-select chips.
-  if (f.type === "array" && (Array.isArray(f["x-options"]) || Array.isArray(f.items?.enum))) return "enum-multi";
-  if (Array.isArray(f["x-options"]) || Array.isArray(f.enum)) return "enum-single";
+  if (f.type === "array" && Array.isArray(f.items?.enum)) return "enum-multi";
+  if (Array.isArray(f.enum)) return "enum-single";
   if (f.type === "number" || f.type === "integer") return "number";
   if (f.type === "boolean") return "boolean";
   if (f.type === "string") {
@@ -1131,13 +992,10 @@ function detectKind(field: Schema): FieldKind {
   return "text";
 }
 
-/** Read the option list from x-options (preferred — used when the
- *  schema also accepts free-form Other text) or from enum (legacy
- *  strict-validated path, kept for backwards compat). */
+/** Read the option list off of `enum` (single) or `items.enum` (multi). */
 function enumOptions(field: Schema): string[] {
   if (!field || typeof field !== "object") return [];
-  const f = field as { enum?: string[]; items?: { enum?: string[] }; ["x-options"]?: string[] };
-  if (Array.isArray(f["x-options"])) return f["x-options"];
+  const f = field as { enum?: string[]; items?: { enum?: string[] } };
   if (Array.isArray(f.enum)) return f.enum;
   if (Array.isArray(f.items?.enum)) return f.items.enum;
   return [];

@@ -12,8 +12,12 @@
  * cases are just N=1.
  *
  * Each enum question gets three escape-hatch options auto-injected
- * server-side: "Decide for me", "Explore a few", and "Other" (paired
- * with an inline textarea via the `x-other-input` flag).
+ * server-side: "Decide for me", "Explore a few", and "Other". They
+ * are appended to the canonical `enum` list — picking one submits the
+ * literal label string. The MCP TS SDK strict-validates the elicit
+ * reply against `enum`, so there is no inline freeform input on enum
+ * kinds; the agent should ask a follow-up text question if the user
+ * picks "Other" and free-form text is needed.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -32,7 +36,7 @@ const server = new Server(
 const TOOL = {
   name: "ask_user",
   description:
-    "Ask the user a batched set of structured questions and wait for their answers. Use this BEFORE planning when the request is ambiguous — front-load all your clarifying questions in ONE call so the user fills one form and you proceed with full context. Returns { action: 'accept'|'decline'|'cancel', content?: { answers: { [questionId]: value } } }. Each enum question automatically gets 'Decide for me', 'Explore a few', and 'Other' (with inline free-text) appended — you don't need to add them yourself. Always prefer this over plain prose questions.",
+    "Ask the user a batched set of structured questions and wait for their answers. Use this BEFORE planning when the request is ambiguous — front-load all your clarifying questions in ONE call so the user fills one form and you proceed with full context. Returns { action: 'accept'|'decline'|'cancel', content?: { answers: { [questionId]: value } } }. Each enum question automatically gets 'Decide for me', 'Explore a few', and 'Other' appended — you don't need to add them yourself. The user picks 'Other' as a literal sentinel; if you need their free-form text, ask a follow-up text question. Always prefer this over plain prose questions.",
   inputSchema: {
     type: "object",
     properties: {
@@ -57,7 +61,7 @@ const TOOL = {
               type: "string",
               enum: ["enum", "svg-options", "number", "boolean", "text", "file"],
               description:
-                "'enum' = pick from `options` text labels (Decide for me / Explore a few / Other auto-added); 'svg-options' = same as enum but each option is an inline SVG string (~80×56 viewBox), use for visual choices like layouts/icons/swatches; 'number' = numeric (use min/max/step); 'boolean' = yes/no; 'text' = freeform (set multiline:true for textarea); 'file' = file dropzone (returns project-relative path).",
+                "'enum' = pick one of `options` text labels (Decide for me / Explore a few / Other auto-appended as literal sentinels — picking Other submits the literal string 'Other'); 'svg-options' = same as enum but each option is an inline SVG string (~80×56 viewBox), use for visual choices like layouts/icons/swatches; 'number' = numeric (use min/max/step); 'boolean' = yes/no; 'text' = freeform (set multiline:true for textarea); 'file' = file dropzone (returns project-relative path).",
             },
             title: {
               type: "string",
@@ -205,28 +209,29 @@ function buildFieldSchema(kind, q) {
     const RESERVED = new Set(["Decide for me", "Explore a few", "Other"]);
     const userOpts = options.filter((o) => !RESERVED.has(o));
     const finalOptions = [...userOpts, "Decide for me", "Explore a few", "Other"];
-    // When x-other-input is on, the user can submit free-form text via
-    // the Other input — so we CAN'T constrain `enum` (the SDK validates
-    // the elicit reply against the schema and rejects anything not in
-    // the enum). Move the canonical option list into a parallel
-    // `x-options` field so the UI still renders chips, and leave the
-    // schema's `type` open. When there's no other-input (rare), we
-    // could keep enum — but for consistency we always use x-options.
+    // The MCP TS SDK strictly validates `requestedSchema` against the
+    // PrimitiveSchemaDefinition union — string-with-enum is one branch,
+    // string-without-enum is another, but UNKNOWN fields (`x-options`
+    // etc.) cause the union validation to fail entirely (-32603
+    // invalid_union, observed in Phase 10 testing). So we keep the
+    // canonical option list in `enum` (the spec-supported field) and
+    // accept the trade-off: the user picks "Other" as a literal
+    // sentinel; if they want to elaborate, the agent can ask a
+    // follow-up free-form question. The inline Other-text input is
+    // intentionally dropped because its custom string would fail
+    // enum validation on submit.
     if (q?.multi) {
       return {
         schema: {
           type: "array",
-          items: { type: "string" },
-          "x-options": finalOptions,
-          "x-other-input": true,
+          items: { type: "string", enum: finalOptions },
         },
       };
     }
     return {
       schema: {
         type: "string",
-        "x-options": finalOptions,
-        "x-other-input": true,
+        enum: finalOptions,
       },
     };
   }
@@ -242,18 +247,19 @@ function buildFieldSchema(kind, q) {
     // resolve to literal strings, not indices.
     const indexOptions = options.map((_, i) => String(i));
     const finalOptions = [...indexOptions, "Decide for me", "Other"];
-    // Same reasoning as the text-enum case: keep canonical options in
-    // x-options so the UI can render the index list + escape hatches,
-    // but leave `type: "string"` unconstrained so a typed Other answer
-    // doesn't fail elicit validation.
+    // svg-options falls back to plain index radios under the SDK's
+    // strict schema validation (the actual SVG strings live in
+    // x-svg-options which gets stripped). A side-channel for the
+    // SVG payloads would be the proper fix — out of scope for this
+    // hot fix. For now we keep the `enum` strict and the x-* hints
+    // for any future SDK that does forward custom fields.
     return {
       schema: {
         type: "string",
-        "x-options": finalOptions,
+        enum: finalOptions,
         "x-input": "svg-options",
         "x-svg-options": options,
         "x-svg-labels": labels,
-        "x-other-input": true,
       },
     };
   }

@@ -71,7 +71,7 @@ const server = new Server(
 const TOOL = {
   name: "ask_user",
   description:
-    "Ask the user a batched set of structured questions and wait for their answers. Use this BEFORE planning when the request is ambiguous — front-load all your clarifying questions in ONE call so the user fills one form and you proceed with full context. Returns { action: 'accept'|'decline'|'cancel', content?: { answers: { [questionId]: value } } }. Each enum question automatically gets 'Decide for me', 'Explore a few', and 'Other' (with inline free-text) appended — you don't need to add them yourself. Always prefer this over plain prose questions.",
+    "Ask the user a batched set of structured questions and wait for their answers. Use this BEFORE planning when the request is ambiguous — front-load all your clarifying questions in ONE call so the user fills one form and you proceed with full context. Returns { action: 'accept'|'decline'|'cancel', content?: { answers: { [questionId]: value } } }. Each enum question automatically gets 'Decide for me', 'Explore a few', and 'Other' appended — you don't need to add them yourself. The user picks 'Other' as a literal sentinel; if you need their free-form text, ask a follow-up text question. Always prefer this over plain prose questions.",
   inputSchema: {
     type: "object",
     properties: {
@@ -92,7 +92,7 @@ const TOOL = {
               type: "string",
               enum: ["enum", "svg-options", "number", "boolean", "text", "file"],
               description:
-                "'enum' = pick from `options` text labels (Decide for me / Explore a few / Other auto-added); 'svg-options' = same but each option is an inline SVG (~80×56 viewBox); 'number'; 'boolean'; 'text' (multiline:true for textarea); 'file' (dropzone).",
+                "'enum' = pick one of `options` text labels (Decide for me / Explore a few / Other auto-appended as literal sentinels); 'svg-options' = same but each option is an inline SVG (~80×56 viewBox); 'number'; 'boolean'; 'text' (multiline:true for textarea); 'file' (dropzone).",
             },
             title: { type: "string" },
             subtitle: { type: "string" },
