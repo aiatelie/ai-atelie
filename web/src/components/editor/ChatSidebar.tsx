@@ -179,6 +179,7 @@ export function ChatTab({
   onSend,
   onRestore,
   pendingElicit,
+  pendingElicitPreview,
   onElicitResolved,
   onStop,
   composerContext,
@@ -206,6 +207,11 @@ export function ChatTab({
   ) => void;
   onRestore?: (m: Extract<ChatMessage, { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
+  /** Streaming preview of an in-flight ask_user form. The form renders
+   *  questions as the SDK writes the JSON, before the elicitation
+   *  request arrives. Promoted in place when the matching `elicit`
+   *  event fires (matched by `previewToolUseId`). */
+  pendingElicitPreview?: { toolUseId: string; partialJson: string; done: boolean } | null;
   onElicitResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
   onStop?: () => void;
   /** Human-readable label of the context the next turn will carry. */
@@ -262,13 +268,23 @@ export function ChatTab({
           setEditSeed({ text, nonce: Date.now() });
         }}
       />
-      {pendingElicit && (
+      {pendingElicit ? (
         <ElicitForm
-          key={pendingElicit.id}
+          // Key off the preview's toolUseId when there's a matching
+          // preview, so the streaming form's component identity
+          // survives the promote-to-real-elicit transition (preserves
+          // focus, scroll position, and any partially-filled answers).
+          // Falls back to the elicit id when there was no preview.
+          key={pendingElicit.previewToolUseId ?? pendingElicit.id}
           request={pendingElicit}
           onResolved={onElicitResolved ?? (() => {})}
         />
-      )}
+      ) : pendingElicitPreview ? (
+        <ElicitForm
+          key={pendingElicitPreview.toolUseId}
+          preview={pendingElicitPreview}
+        />
+      ) : null}
       {queuedMessage && (
         <QueuedBubble
           message={queuedMessage}

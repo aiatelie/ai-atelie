@@ -1388,6 +1388,22 @@
   gap: 8px;
 }
 .elicitActionsSpacer { flex: 1; }
+.elicitGenerating {
+  font-size: 11.5px;
+  color: var(--ink-50);
+  font-style: italic;
+}
+/* Subtle visual hint that the form is still in preview-mode (the
+ * model is mid-write); the card pulses gently and we soften the
+ * border so it doesn't compete with the live action buttons. */
+.elicitCard[data-preview="true"] {
+  border-color: var(--ink-15);
+  animation: elicit-preview-pulse 2.4s ease-in-out infinite;
+}
+@keyframes elicit-preview-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--brand-soft, rgba(217, 119, 87, 0.0)); }
+  50% { box-shadow: 0 0 0 3px var(--brand-soft, rgba(217, 119, 87, 0.18)); }
+}
 .elicitTextToggle {
   font: inherit;
   font-size: 11.5px;

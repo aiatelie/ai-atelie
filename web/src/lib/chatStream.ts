@@ -23,6 +23,27 @@ export type ElicitRequest = {
   title?: string;
   displayName?: string;
   description?: string;
+  /** When set, this elicit event corresponds to a streaming preview the
+   *  UI may already be rendering (keyed by `toolUseId`). The form
+   *  promotes its preview state to the real `id` in place rather than
+   *  remounting. */
+  previewToolUseId?: string;
+};
+
+/** Streaming preview state emitted during the SDK's tool-input phase
+ *  for an `ask_user` call, BEFORE the elicitation request fires. The
+ *  ElicitForm watches these to render question sections progressively
+ *  as the model writes the JSON, then promotes to the real form when
+ *  the matching `elicit` event arrives carrying the same toolUseId. */
+export type ElicitPreview = {
+  /** SDK tool_use_id; pairs the preview with the eventual elicit. */
+  toolUseId: string;
+  /** Concatenated `partial_json` chunks. Lenient-parsed by the form
+   *  so questions appear as soon as their JSON literal is complete. */
+  partialJson: string;
+  /** True after the SDK fired content_block_stop — the JSON is
+   *  complete; the elicit event should arrive any moment now. */
+  done: boolean;
 };
 
 /** A single tool invocation made by the assistant during a turn.
@@ -76,6 +97,9 @@ export type StreamEvent =
   | { type: "turnId"; turnId: string }
   | { type: "elicit"; request: ElicitRequest }
   | { type: "elicitClear"; id: string }
+  | { type: "elicitPreviewStart"; toolUseId: string }
+  | { type: "elicitPreviewDelta"; toolUseId: string; partialJson: string }
+  | { type: "elicitPreviewStop"; toolUseId: string }
   | { type: "usage"; usage: TurnUsage }
   | { type: "error"; message: string }
   | { type: "done" };
@@ -90,6 +114,11 @@ export type StreamState = {
   /** Currently-pending elicitation, if Claude called ask_user during this
    *  turn. Cleared when the user submits a response. */
   elicit?: ElicitRequest;
+  /** Streaming preview of the in-flight ask_user form. Mounted on the
+   *  first `elicitPreviewStart` event; promoted to `elicit` when the
+   *  matching MCP elicitation request fires server-side. Cleared
+   *  alongside `elicit` when the form resolves. */
+  elicitPreview?: ElicitPreview;
   /** Per-turn token + duration + model telemetry, populated when the SDK
    *  emits its terminal `result` message. Undefined on older / non-SDK
    *  providers, or until the turn finishes. */
@@ -216,9 +245,40 @@ export async function startStream({ streamId, body, listener, listeners }: Start
         break;
       }
       case "turnId":      stream.state.turnId = e.turnId;     break;
-      case "elicit":      stream.state.elicit = e.request;    break;
+      case "elicit":
+        // If a preview was streaming for this same tool_use, the form
+        // is already mounted — keep the preview state alive so its
+        // sub-component state (focus, scroll position, partially-filled
+        // answers) survives the promotion. The form keys itself off
+        // the preview.toolUseId until elicit arrives, then off elicit.id.
+        stream.state.elicit = e.request;
+        if (e.request.previewToolUseId && stream.state.elicitPreview?.toolUseId === e.request.previewToolUseId) {
+          // Preview matched and promoted; keep it for the form's match logic.
+        } else {
+          stream.state.elicitPreview = undefined;
+        }
+        break;
       case "elicitClear":
-        if (stream.state.elicit?.id === e.id) stream.state.elicit = undefined;
+        if (stream.state.elicit?.id === e.id) {
+          stream.state.elicit = undefined;
+          stream.state.elicitPreview = undefined;
+        }
+        break;
+      case "elicitPreviewStart":
+        stream.state.elicitPreview = { toolUseId: e.toolUseId, partialJson: "", done: false };
+        break;
+      case "elicitPreviewDelta":
+        if (stream.state.elicitPreview?.toolUseId === e.toolUseId) {
+          stream.state.elicitPreview = {
+            ...stream.state.elicitPreview,
+            partialJson: stream.state.elicitPreview.partialJson + e.partialJson,
+          };
+        }
+        break;
+      case "elicitPreviewStop":
+        if (stream.state.elicitPreview?.toolUseId === e.toolUseId) {
+          stream.state.elicitPreview = { ...stream.state.elicitPreview, done: true };
+        }
         break;
       case "usage":       stream.state.usage = e.usage;       break;
       case "error":       stream.state.error = e.message;     break;
@@ -411,9 +471,40 @@ export async function resumeStream(streamId: string, listeners: Listener[]): Pro
         break;
       }
       case "turnId":      stream.state.turnId = e.turnId;     break;
-      case "elicit":      stream.state.elicit = e.request;    break;
+      case "elicit":
+        // If a preview was streaming for this same tool_use, the form
+        // is already mounted — keep the preview state alive so its
+        // sub-component state (focus, scroll position, partially-filled
+        // answers) survives the promotion. The form keys itself off
+        // the preview.toolUseId until elicit arrives, then off elicit.id.
+        stream.state.elicit = e.request;
+        if (e.request.previewToolUseId && stream.state.elicitPreview?.toolUseId === e.request.previewToolUseId) {
+          // Preview matched and promoted; keep it for the form's match logic.
+        } else {
+          stream.state.elicitPreview = undefined;
+        }
+        break;
       case "elicitClear":
-        if (stream.state.elicit?.id === e.id) stream.state.elicit = undefined;
+        if (stream.state.elicit?.id === e.id) {
+          stream.state.elicit = undefined;
+          stream.state.elicitPreview = undefined;
+        }
+        break;
+      case "elicitPreviewStart":
+        stream.state.elicitPreview = { toolUseId: e.toolUseId, partialJson: "", done: false };
+        break;
+      case "elicitPreviewDelta":
+        if (stream.state.elicitPreview?.toolUseId === e.toolUseId) {
+          stream.state.elicitPreview = {
+            ...stream.state.elicitPreview,
+            partialJson: stream.state.elicitPreview.partialJson + e.partialJson,
+          };
+        }
+        break;
+      case "elicitPreviewStop":
+        if (stream.state.elicitPreview?.toolUseId === e.toolUseId) {
+          stream.state.elicitPreview = { ...stream.state.elicitPreview, done: true };
+        }
         break;
       case "usage":       stream.state.usage = e.usage;       break;
       case "error":       stream.state.error = e.message;     break;
@@ -486,7 +577,10 @@ type WireAgentEvent =
   | { type: "thinking"; chunk: string }
   | { type: "tool"; tool: { id?: string; name: string; input?: Record<string, unknown> } }
   | { type: "toolResult"; id: string; content: string; isError?: boolean }
-  | { type: "usage"; usage: TurnUsage };
+  | { type: "usage"; usage: TurnUsage }
+  | { type: "elicitPreviewStart"; toolUseId: string; toolName: string }
+  | { type: "elicitPreviewDelta"; toolUseId: string; partialJson: string }
+  | { type: "elicitPreviewStop"; toolUseId: string };
 
 function parseSseBlock(block: string): { events: StreamEvent[]; eventIndex: number | null } {
   let event = "message";
@@ -539,6 +633,9 @@ function parseSseBlock(block: string): { events: StreamEvent[]; eventIndex: numb
       case "tool":       return wrap([{ type: "tool", tool: makeToolCall(e.tool.name, e.tool.input, e.tool.id) }]);
       case "toolResult": return wrap([{ type: "toolResult", id: e.id, content: e.content, isError: e.isError }]);
       case "usage":      return wrap([{ type: "usage", usage: e.usage }]);
+      case "elicitPreviewStart": return wrap([{ type: "elicitPreviewStart", toolUseId: e.toolUseId }]);
+      case "elicitPreviewDelta": return wrap([{ type: "elicitPreviewDelta", toolUseId: e.toolUseId, partialJson: e.partialJson }]);
+      case "elicitPreviewStop":  return wrap([{ type: "elicitPreviewStop", toolUseId: e.toolUseId }]);
     }
     return wrap([]);
   }

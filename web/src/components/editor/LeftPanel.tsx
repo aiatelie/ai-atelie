@@ -67,6 +67,7 @@ type Props = {
   ) => void;
   onRestore?: (m: Extract<ChatThread["messages"][number], { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
+  pendingElicitPreview?: { toolUseId: string; partialJson: string; done: boolean } | null;
   onElicitResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
   onStop?: () => void;
   /** A message held until the active turn drains. Rendered above the
@@ -123,7 +124,7 @@ export function LeftPanel(props: Props) {
     projectId,
     threads, activeThread, onNewThread, onSwitchThread, onDeleteThread,
     onRenameThread, onUndo, onRetry, onDeleteMessage, onSend, onRestore,
-    pendingElicit, onElicitResolved, onStop,
+    pendingElicit, pendingElicitPreview, onElicitResolved, onStop,
     queuedMessage, onCancelQueued,
     activeFile, selectedPinId, onSelectPin, onPromoteComments, onRestoreComment,
     captureRouteScreenshot,
@@ -288,6 +289,7 @@ export function LeftPanel(props: Props) {
           onSend={onSend}
           onRestore={onRestore}
           pendingElicit={pendingElicit}
+          pendingElicitPreview={pendingElicitPreview}
           onElicitResolved={onElicitResolved}
           onStop={onStop}
           queuedMessage={queuedMessage}

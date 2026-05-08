@@ -39,9 +39,10 @@
  *      cover what the user wants.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import s from "./chat.module.css";
 import type { ElicitRequest } from "../../lib/chatStream";
+import { parsePartialQuestions, type StreamingQuestion } from "../../lib/streamingJson";
 
 type Schema = Record<string, unknown> | undefined;
 
@@ -54,26 +55,75 @@ type Question = {
 };
 
 type Props = {
-  request: ElicitRequest;
+  /** Real elicitation request — present once the MCP elicitation has
+   *  fired and the form is ready to accept answers. */
+  request?: ElicitRequest | null;
+  /** Streaming preview, before the elicitation fires. The form
+   *  derives questions by lenient-parsing `partialJson` and renders
+   *  them progressively without any submit affordance. */
+  preview?: { toolUseId: string; partialJson: string; done: boolean } | null;
   /** Called once the user submits / declines / cancels.
    *  When `accept`, `answers` carries the final per-question values
    *  so the parent can echo them into the chat as a synthetic user
-   *  message (see Editor.tsx). */
-  onResolved: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
+   *  message (see Editor.tsx). Required when `request` is set. */
+  onResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
 };
 
-export function ElicitForm({ request, onResolved }: Props) {
-  const questions = useMemo(() => parseQuestions(request.schema), [request.schema]);
+export function ElicitForm({ request, preview, onResolved }: Props) {
+  const isPreview = !request && !!preview;
+
+  // Source of truth for the question list. Real mode parses the
+  // server-built schema; preview mode lenient-parses the streaming
+  // JSON. The latter is recomputed on every delta — cheap enough at
+  // O(n) over partialJson, and the question id-set only ever grows
+  // monotonically so React diffs are well-behaved.
+  const questions = useMemo<Question[]>(() => {
+    if (request?.schema) return parseQuestions(request.schema);
+    if (preview) {
+      const parsed = parsePartialQuestions(preview.partialJson);
+      return parsed.questions.map(streamingQuestionToQuestion);
+    }
+    return [];
+  }, [request?.schema, preview?.partialJson]);
+
+  // Header text. Preview mode shows the streamed `title` as soon as
+  // its closing quote has arrived; real mode uses request.message.
+  const headerTitle = useMemo(() => {
+    if (request?.message) return request.message;
+    if (preview) {
+      const parsed = parsePartialQuestions(preview.partialJson);
+      return parsed.title ?? "Generating questions…";
+    }
+    return "";
+  }, [request?.message, preview?.partialJson]);
+
   const [answers, setAnswers] = useState<Record<string, unknown>>(() =>
     Object.fromEntries(questions.map((q) => [q.id, initialValue(q.schema)])),
   );
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const allValid = questions.every((q) => !q.required || isValid(q.schema, answers[q.id]));
+  // Sync answers map when new questions arrive during streaming. We
+  // only ADD missing keys; existing user input is preserved across
+  // delta updates and across the preview→real promotion.
+  useEffect(() => {
+    setAnswers((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const q of questions) {
+        if (!(q.id in next)) {
+          next[q.id] = initialValue(q.schema);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [questions]);
+
+  const allValid = !isPreview && questions.every((q) => !q.required || isValid(q.schema, answers[q.id]));
 
   const send = async (action: "accept" | "decline" | "cancel") => {
-    if (submitting) return;
+    if (submitting || !request) return;
     setSubmitting(true);
     setErrorMsg(null);
     const body: { id: string; action: string; content?: { answers: Record<string, unknown> } } = {
@@ -95,7 +145,7 @@ export function ElicitForm({ request, onResolved }: Props) {
         setSubmitting(false);
         return;
       }
-      onResolved(action, action === "accept" ? answers : undefined);
+      onResolved?.(action, action === "accept" ? answers : undefined);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setSubmitting(false);
@@ -103,10 +153,10 @@ export function ElicitForm({ request, onResolved }: Props) {
   };
 
   return (
-    <div className={s.elicitCard}>
+    <div className={s.elicitCard} data-preview={isPreview ? "true" : undefined}>
       <div className={s.elicitHeader}>
         <span className={s.elicitDot} />
-        <span className={s.elicitTitle}>{request.message}</span>
+        <span className={s.elicitTitle}>{headerTitle}</span>
       </div>
 
       <div className={s.elicitBody}>
@@ -124,24 +174,78 @@ export function ElicitForm({ request, onResolved }: Props) {
       {errorMsg && <div className={s.elicitError}>{errorMsg}</div>}
 
       <div className={s.elicitActions}>
+        {isPreview && (
+          <span className={s.elicitGenerating}>Generating questions…</span>
+        )}
         <div className={s.elicitActionsSpacer} />
         <button
           className={s.elicitBtn}
           onClick={() => send("cancel")}
-          disabled={submitting}
+          disabled={isPreview || submitting}
         >
           Cancel
         </button>
         <button
           className={`${s.elicitBtn} ${s.elicitPrimary}`}
           onClick={() => send("accept")}
-          disabled={!allValid || submitting}
+          disabled={isPreview || !allValid || submitting}
         >
           {submitting ? "Sending…" : questions.length > 1 ? "Continue" : "Send answer"}
         </button>
       </div>
     </div>
   );
+}
+
+/* ─── Streaming → Question schema adapter ───────────────────────── */
+
+/** Map a streaming-parsed question (shape from ask_user input JSON)
+ *  into the internal Question structure. Mirrors what the MCP server
+ *  does on its side for fully-formed inputs, but tolerant of missing
+ *  fields — the JSON is partial and the form needs to render even
+ *  when e.g. the options array hasn't streamed in yet. */
+function streamingQuestionToQuestion(q: StreamingQuestion): Question {
+  const id = typeof q.id === "string" ? q.id : "_unnamed";
+  const kind = typeof q.kind === "string" ? q.kind : "text";
+  const title = typeof q.title === "string" ? q.title : id;
+  const subtitle = typeof q.subtitle === "string" ? q.subtitle : undefined;
+  const required = q.required !== false;
+
+  let schema: Record<string, unknown>;
+  if (kind === "enum") {
+    const opts = Array.isArray(q.options) ? q.options.filter((o): o is string => typeof o === "string") : [];
+    const RESERVED = new Set(["Decide for me", "Explore a few", "Other"]);
+    const userOpts = opts.filter((o) => !RESERVED.has(o));
+    const finalOptions = [...userOpts, "Decide for me", "Explore a few", "Other"];
+    schema = q.multi
+      ? { type: "array", items: { type: "string", enum: finalOptions }, "x-other-input": true }
+      : { type: "string", enum: finalOptions, "x-other-input": true };
+  } else if (kind === "number") {
+    schema = {
+      type: "number",
+      ...(typeof q.min === "number" ? { minimum: q.min } : {}),
+      ...(typeof q.max === "number" ? { maximum: q.max } : {}),
+      ...(typeof q.step === "number" ? { multipleOf: q.step } : {}),
+    };
+  } else if (kind === "boolean") {
+    schema = { type: "boolean" };
+  } else if (kind === "file") {
+    schema = {
+      type: "string",
+      format: "uri",
+      "x-input": "dropzone",
+      "x-accept": typeof q.accept === "string" ? q.accept : undefined,
+    };
+  } else {
+    schema = {
+      type: "string",
+      ...(q.multiline ? { "x-input": "textarea" } : {}),
+    };
+  }
+  if (q.default !== undefined) schema.default = q.default;
+  schema.title = title;
+  if (subtitle) schema["x-subtitle"] = subtitle;
+  return { id, schema, required, title, subtitle };
 }
 
 /* ─── Question section ──────────────────────────────────────── */

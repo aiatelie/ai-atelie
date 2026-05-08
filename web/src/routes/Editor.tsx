@@ -477,6 +477,16 @@ export default function Editor() {
   // sidebar can auto-switch to that thread — otherwise the form floats
   // above an "empty" body when the user is on a different thread.
   const [pendingElicit, setPendingElicit] = useState<{ request: ElicitRequest; threadId: string } | null>(null);
+  // Streaming preview of an in-flight ask_user form. Mounted on the
+  // first elicitPreviewStart, grown by elicitPreviewDelta, promoted to
+  // pendingElicit when the matching MCP elicitation fires (matched by
+  // toolUseId carried on the elicit event as `previewToolUseId`).
+  const [pendingElicitPreview, setPendingElicitPreview] = useState<{
+    toolUseId: string;
+    partialJson: string;
+    done: boolean;
+    threadId: string;
+  } | null>(null);
   // One-slot composer queue. When the user types into a disabled
   // composer (assistant still streaming or an elicit form is open) and
   // hits Enter, the message lands here instead of dropping. A useEffect
@@ -828,16 +838,45 @@ export default function Editor() {
       if (e.type === "turnId") { updateAssistant((m) => ({ ...m, turnId: e.turnId })); return; }
       if (e.type === "elicit") {
         setPendingElicit({ request: e.request, threadId });
+        // If a preview was streaming for this same tool_use, drop it —
+        // the real form is now mounted in its place.
+        setPendingElicitPreview((p) =>
+          p && e.request.previewToolUseId === p.toolUseId ? null : p,
+        );
         // Force-switch the active thread to whichever one the model is
         // currently asking from. Stale switching shouldn't strand a form
         // on a thread the user can't see.
         setActiveThreadId(threadId);
         return;
       }
-      if (e.type === "elicitClear") { setPendingElicit((p) => (p && p.request.id === e.id ? null : p)); return; }
+      if (e.type === "elicitClear") {
+        setPendingElicit((p) => (p && p.request.id === e.id ? null : p));
+        setPendingElicitPreview(null);
+        return;
+      }
+      if (e.type === "elicitPreviewStart") {
+        setPendingElicitPreview({ toolUseId: e.toolUseId, partialJson: "", done: false, threadId });
+        setActiveThreadId(threadId);
+        return;
+      }
+      if (e.type === "elicitPreviewDelta") {
+        setPendingElicitPreview((p) =>
+          p && p.toolUseId === e.toolUseId
+            ? { ...p, partialJson: p.partialJson + e.partialJson }
+            : p,
+        );
+        return;
+      }
+      if (e.type === "elicitPreviewStop") {
+        setPendingElicitPreview((p) =>
+          p && p.toolUseId === e.toolUseId ? { ...p, done: true } : p,
+        );
+        return;
+      }
       if (e.type === "error") {
         flushText();
         setPendingElicit(null);
+        setPendingElicitPreview(null);
         updateAssistant((m) => ({ ...m, error: e.message, pending: false }));
         notifyTurnComplete({
           status: "failure",
@@ -850,6 +889,7 @@ export default function Editor() {
       if (e.type === "done") {
         flushText();
         setPendingElicit(null);
+        setPendingElicitPreview(null);
         updateAssistant((m) => {
           if (!m.content && !m.error && m.tools.length > 0) {
             const files = uniqueFiles(m.tools);
@@ -907,6 +947,14 @@ export default function Editor() {
         error: cur.error ?? m.error,
       }));
       if (cur.elicit) setPendingElicit({ request: cur.elicit, threadId: activeThread.id });
+      if (cur.elicitPreview && !cur.elicit) {
+        setPendingElicitPreview({
+          toolUseId: cur.elicitPreview.toolUseId,
+          partialJson: cur.elicitPreview.partialJson,
+          done: cur.elicitPreview.done,
+          threadId: activeThread.id,
+        });
+      }
       const handler = buildStreamHandler(activeThread.id, aIdx);
       return subscribeStream(streamId, handler);
     }
@@ -2344,6 +2392,7 @@ export default function Editor() {
           } : undefined}
           chatTabSwitchKey={chatTabSwitchKey}
           pendingElicit={pendingElicit?.request ?? null}
+          pendingElicitPreview={pendingElicitPreview ?? null}
           onElicitResolved={(action, answers) => {
             // Echo the user's answers (or skip notice) into the chat as a
             // synthetic user-role message so the conversation stays
