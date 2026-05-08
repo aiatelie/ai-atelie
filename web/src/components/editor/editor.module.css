@@ -658,22 +658,37 @@
 }
 .rightBody > .canvas { flex: 1; min-width: 0; }
 
-/* Body of the Questions tab — a centered scroll column so the form
- * doesn't stretch full-width on a wide canvas (which would dilute
- * its informational density). The form's own card chrome handles
- * its borders + spacing; this container just constrains width and
- * centers the column. */
+/* Body of the Questions tab — a centered scroll column with a
+ * warm-cream background that distinguishes the form surface from
+ * the canvas-rendering area below. The 720px max-width keeps chip
+ * rows readable at 4-6 chips per line on a typical 1440px viewport;
+ * wider would dilute density, narrower would force too many
+ * single-chip wrap rows. Centered via flexbox so auto margins
+ * survive the parent's flex-row layout. */
 .questionsTabBody {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow-y: auto;
+  background: var(--surface-warm);
+  scrollbar-gutter: stable;
   display: flex;
   justify-content: center;
-  background: var(--surface);
 }
 .questionsTabBody > * {
   width: min(720px, 100%);
-  margin: 32px 24px;
+  padding: 48px 32px 24px;
+  box-sizing: border-box;
+}
+@media (max-width: 720px) {
+  .questionsTabBody > * {
+    padding: 32px 20px 16px;
+  }
+}
+@media (max-width: 480px) {
+  .questionsTabBody > * {
+    padding: 24px 14px 12px;
+  }
 }
 .canvas {
   position: relative;

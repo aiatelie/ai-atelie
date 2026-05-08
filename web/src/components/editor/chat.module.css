@@ -1356,11 +1356,28 @@
   border-radius: 10px;
   box-shadow: 0 1px 0 var(--ink-02), 0 4px 14px var(--brand-soft);
 }
+/* Tab variant: a deliberate-feeling form on the warm-cream tab body.
+ * No card chrome at all (the surrounding warm bg already frames it);
+ * the title's serif italic does the gravitas work; sections breathe
+ * via vertical rhythm rather than borders. */
+.elicitCard[data-variant="tab"] {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
 .elicitHeader {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+.elicitCard[data-variant="tab"] .elicitHeader {
+  margin-bottom: 36px;
+  gap: 12px;
+  align-items: baseline;
 }
 .elicitDot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -1368,17 +1385,35 @@
   box-shadow: 0 0 0 3px var(--brand-border);
   flex-shrink: 0;
 }
+.elicitCard[data-variant="tab"] .elicitDot {
+  width: 8px; height: 8px;
+  align-self: center;
+  margin-bottom: 4px;
+}
 .elicitTitle {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-85);
   line-height: 1.35;
 }
+.elicitCard[data-variant="tab"] .elicitTitle {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 30px;
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+}
 .elicitBody {
   margin-bottom: 10px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+.elicitCard[data-variant="tab"] .elicitBody {
+  gap: 36px;
+  margin-bottom: 0;
 }
 
 /* Per-question section inside a multi-question form. */
@@ -1392,11 +1427,28 @@
   font-size: 13px;
   color: var(--ink);
 }
+.elicitCard[data-variant="tab"] .elicitSection {
+  gap: 10px;
+}
+.elicitCard[data-variant="tab"] .elicitSectionTitle {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin-bottom: 0;
+}
 .elicitSectionSubtitle {
   font-size: 12px;
   color: var(--ink-60);
   margin-top: -2px;
   margin-bottom: 4px;
+}
+.elicitCard[data-variant="tab"] .elicitSectionSubtitle {
+  font-size: 13px;
+  color: var(--ink-55);
+  margin-top: -4px;
+  margin-bottom: 6px;
+  line-height: 1.4;
 }
 .elicitOtherInput {
   width: 100%;
@@ -1411,29 +1463,101 @@
 }
 .elicitOtherInput:focus { border-color: var(--brand); }
 
+/* Options flow as horizontal pills that wrap onto multiple rows.
+ * Matches the canvas-style question pattern (Claude Design): chips
+ * are scannable left-to-right, the native checkbox/radio is hidden
+ * (the chip's filled state IS the affordance), and rows wrap
+ * naturally on narrow viewports without any media-query work. */
 .elicitOptions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
 }
 .elicitOption {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 0;
+  padding: 6px 12px;
   border: 1px solid var(--ink-10);
-  border-radius: 6px;
+  border-radius: 999px;
   background: var(--surface);
   font-size: 13px;
+  line-height: 1.2;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
+  user-select: none;
+  white-space: nowrap;
 }
 .elicitOption:hover { background: var(--surface-4); }
 .elicitOptionOn {
   background: var(--brand-bg);
   border-color: var(--brand-strong);
+  color: var(--brand-strong);
+  font-weight: 500;
 }
-.elicitOption input { accent-color: var(--brand); }
+/* Visually hide the native input but keep it focusable + screen-
+ * reader accessible. The chip's `data-on` (via parent selector
+ * `.elicitOptionOn`) is the visible-state authority. */
+.elicitOption input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* When focused via keyboard, surface a focus ring on the chip
+ * itself since the input is visually-hidden. */
+.elicitOption:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+/* Tab variant chips: softer, borderless pills on the cream tab body.
+ * Resting state is a slightly off-white that contrasts with the warm
+ * background; selected state fills with brand accent. The lack of a
+ * 1px border (vs the inline variant) makes them feel less like form
+ * fields and more like considered design tokens. */
+.elicitCard[data-variant="tab"] .elicitOption {
+  padding: 8px 14px;
+  font-size: 13.5px;
+  background: var(--surface);
+  border-color: transparent;
+  box-shadow: 0 1px 2px var(--ink-05, rgba(15, 12, 8, 0.04));
+  transition: background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+}
+.elicitCard[data-variant="tab"] .elicitOption:hover {
+  background: var(--brand-soft);
+  box-shadow: 0 1px 3px var(--ink-08);
+}
+.elicitCard[data-variant="tab"] .elicitOptionOn {
+  background: var(--brand-bg);
+  border-color: var(--brand-border);
+  color: var(--brand-fg);
+  box-shadow: 0 1px 2px var(--brand-soft);
+}
+/* Decide for me / Explore a few / Other are escape hatches — make
+ * them feel slightly secondary so the eye lands on the canonical
+ * options first. Italic + dimmer color marks them as auxiliary
+ * without hiding them. */
+.elicitCard[data-variant="tab"] .elicitOption[data-escape="true"] {
+  font-style: italic;
+  color: var(--ink-55);
+  background: transparent;
+  box-shadow: none;
+}
+.elicitCard[data-variant="tab"] .elicitOption[data-escape="true"]:hover {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+.elicitCard[data-variant="tab"] .elicitOption[data-escape="true"].elicitOptionOn {
+  font-style: normal;
+  color: var(--brand-fg);
+  background: var(--brand-bg);
+}
 
 /* SVG-options grid — wrap-grid of small visual cards. The inline SVG
  * sits in a fixed 80x56 frame so cards line up cleanly regardless of
@@ -1553,6 +1677,18 @@
   gap: 8px;
 }
 .elicitActionsSpacer { flex: 1; }
+/* Tab variant: stick the action bar to the bottom of the visible
+ * scroll viewport so Continue is always reachable on long forms.
+ * The translucent surface backdrop keeps content underneath
+ * readable through the bar instead of an opaque cut. */
+.elicitCard[data-variant="tab"] .elicitActions {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(to top, var(--surface) 75%, transparent);
+  margin: 0 -24px;
+  padding: 16px 24px;
+  z-index: 2;
+}
 
 /* Compact link card shown in the chat sidebar when the form has been
  * moved to the Questions canvas tab. Click → focuses the tab. Mirrors

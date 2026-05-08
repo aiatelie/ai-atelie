@@ -153,13 +153,17 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     return errResult(`elicit bridge unreachable: ${err?.message ?? String(err)}`);
   }
 
+  // Wrap under `answers` to match the docstring contract — see
+  // the matching note in ask-user-server.mjs.
   return {
     content: [
       {
         type: "text",
         text: JSON.stringify({
           action: response?.action ?? "unknown",
-          content: response?.content ?? null,
+          content: response?.action === "accept" && response?.content
+            ? { answers: response.content }
+            : response?.content ?? null,
         }),
       },
     ],

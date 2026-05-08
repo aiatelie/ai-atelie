@@ -129,13 +129,20 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     return errResult(`elicitation failed: ${err?.message ?? String(err)}`);
   }
 
+  // Wrap the elicitation result under `answers` so the agent's
+  // tool result matches the documented `{ action, content?: { answers: {...} } }`
+  // shape (and so the model can pluck `content.answers.<id>` cleanly).
+  // The wire format on the way IN is flat (matches requestedSchema);
+  // the wrap is purely a presentation contract for the model.
   return {
     content: [
       {
         type: "text",
         text: JSON.stringify({
           action: result?.action ?? "unknown",
-          content: result?.content ?? null,
+          content: result?.action === "accept" && result?.content
+            ? { answers: result.content }
+            : result?.content ?? null,
         }),
       },
     ],
@@ -198,11 +205,19 @@ function buildFieldSchema(kind, q) {
     const RESERVED = new Set(["Decide for me", "Explore a few", "Other"]);
     const userOpts = options.filter((o) => !RESERVED.has(o));
     const finalOptions = [...userOpts, "Decide for me", "Explore a few", "Other"];
+    // When x-other-input is on, the user can submit free-form text via
+    // the Other input — so we CAN'T constrain `enum` (the SDK validates
+    // the elicit reply against the schema and rejects anything not in
+    // the enum). Move the canonical option list into a parallel
+    // `x-options` field so the UI still renders chips, and leave the
+    // schema's `type` open. When there's no other-input (rare), we
+    // could keep enum — but for consistency we always use x-options.
     if (q?.multi) {
       return {
         schema: {
           type: "array",
-          items: { type: "string", enum: finalOptions },
+          items: { type: "string" },
+          "x-options": finalOptions,
           "x-other-input": true,
         },
       };
@@ -210,7 +225,7 @@ function buildFieldSchema(kind, q) {
     return {
       schema: {
         type: "string",
-        enum: finalOptions,
+        "x-options": finalOptions,
         "x-other-input": true,
       },
     };
@@ -227,10 +242,14 @@ function buildFieldSchema(kind, q) {
     // resolve to literal strings, not indices.
     const indexOptions = options.map((_, i) => String(i));
     const finalOptions = [...indexOptions, "Decide for me", "Other"];
+    // Same reasoning as the text-enum case: keep canonical options in
+    // x-options so the UI can render the index list + escape hatches,
+    // but leave `type: "string"` unconstrained so a typed Other answer
+    // doesn't fail elicit validation.
     return {
       schema: {
         type: "string",
-        enum: finalOptions,
+        "x-options": finalOptions,
         "x-input": "svg-options",
         "x-svg-options": options,
         "x-svg-labels": labels,

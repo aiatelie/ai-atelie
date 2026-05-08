@@ -2854,6 +2854,7 @@ export default function Editor() {
           <div className={s.questionsTabBody}>
             <ElicitForm
               key={pendingElicit?.request.previewToolUseId ?? pendingElicit?.request.id ?? pendingElicitPreview?.toolUseId ?? "questions"}
+              variant="tab"
               request={pendingElicit?.request ?? null}
               preview={pendingElicit ? null : (pendingElicitPreview ?? null)}
               onResolved={(action, answers) => {
