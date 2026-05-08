@@ -36,6 +36,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { buildBatchedSchema } from "./ask-user-server.mjs";
 
 const STREAM_ID = process.env.STREAM_ID || "";
 const WORKER_KEY = process.env.WORKER_KEY || "";
@@ -60,7 +61,7 @@ async function currentStreamId() {
 }
 
 const server = new Server(
-  { name: "ask-user", version: "0.1.0" },
+  { name: "ask-user", version: "0.2.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -70,48 +71,46 @@ const server = new Server(
 const TOOL = {
   name: "ask_user",
   description:
-    "Ask the user a structured question and wait for a response. Use this when you need clarification BEFORE building anything — pick from discrete options, get a number/range, ask for free text, or request a file. Returns { action: 'accept'|'decline'|'cancel', content?: { answer: ... } }. Always prefer this over plain prose questions when the answer fits a structured shape.",
+    "Ask the user a batched set of structured questions and wait for their answers. Use this BEFORE planning when the request is ambiguous — front-load all your clarifying questions in ONE call so the user fills one form and you proceed with full context. Returns { action: 'accept'|'decline'|'cancel', content?: { answers: { [questionId]: value } } }. Each enum question automatically gets 'Decide for me', 'Explore a few', and 'Other' (with inline free-text) appended — you don't need to add them yourself. Always prefer this over plain prose questions.",
   inputSchema: {
     type: "object",
     properties: {
-      message: {
+      title: {
         type: "string",
         description:
-          "The question to ask the user, in plain language. Keep it short — the form UI shows it as a header above the input.",
+          "Form header shown above all questions, e.g. 'Quick questions about the climbing event banners'. Keep it short.",
       },
-      kind: {
-        type: "string",
-        enum: ["text", "enum", "number", "boolean", "file"],
-        description:
-          "Input shape. 'text' (default) = freeform string; 'enum' = pick one of `options`; 'number' = numeric (use min/max/step); 'boolean' = yes/no; 'file' = file dropzone (returns project-relative path).",
-      },
-      options: {
+      questions: {
         type: "array",
-        items: { type: "string" },
         description:
-          "Choices for `kind: 'enum'`. Required for enum, ignored otherwise.",
-      },
-      multi: {
-        type: "boolean",
-        description:
-          "For `kind: 'enum'` — allow selecting multiple options (renders as checkboxes). Default false.",
-      },
-      multiline: {
-        type: "boolean",
-        description:
-          "For `kind: 'text'` — render a textarea instead of a one-line input. Default false.",
-      },
-      min: { type: "number", description: "For `kind: 'number'`." },
-      max: { type: "number", description: "For `kind: 'number'`." },
-      step: { type: "number", description: "For `kind: 'number'`." },
-      default: { description: "Optional default value pre-filled in the form." },
-      accept: {
-        type: "string",
-        description:
-          "For `kind: 'file'` — MIME filter (e.g. 'image/*', 'image/png,application/pdf').",
+          "Ordered list of questions. The user sees them in this order and fills them all before submitting once.",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "snake_case key for this question's answer." },
+            kind: {
+              type: "string",
+              enum: ["enum", "number", "boolean", "text", "file"],
+              description:
+                "'enum' = pick from `options` (Decide for me / Explore a few / Other auto-added); 'number'; 'boolean'; 'text' (multiline:true for textarea); 'file' (dropzone).",
+            },
+            title: { type: "string" },
+            subtitle: { type: "string" },
+            options: { type: "array", items: { type: "string" } },
+            multi: { type: "boolean" },
+            multiline: { type: "boolean" },
+            min: { type: "number" },
+            max: { type: "number" },
+            step: { type: "number" },
+            default: {},
+            accept: { type: "string" },
+            required: { type: "boolean", description: "Default true." },
+          },
+          required: ["id", "kind", "title"],
+        },
       },
     },
-    required: ["message"],
+    required: ["title", "questions"],
   },
 };
 
@@ -134,54 +133,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     );
   }
 
-  const message = String(args?.message ?? "");
-  const kind = (args?.kind ?? "text");
-  const options = Array.isArray(args?.options) ? args.options : null;
-  const multi = !!args?.multi;
-
-  // Build the same flat reply schema as ask-user-server.mjs so the
-  // editor's ElicitForm can render either source identically.
-  let answerSchema;
-  if (kind === "enum") {
-    if (!options?.length) {
-      return errResult("ask_user: kind='enum' requires non-empty `options`");
-    }
-    answerSchema = multi
-      ? { type: "array", items: { type: "string", enum: options }, title: "Pick one or more" }
-      : { type: "string", enum: options, title: "Pick one" };
-  } else if (kind === "number") {
-    answerSchema = {
-      type: "number",
-      title: "Enter a number",
-      ...(typeof args?.min === "number" ? { minimum: args.min } : {}),
-      ...(typeof args?.max === "number" ? { maximum: args.max } : {}),
-      ...(typeof args?.step === "number" ? { multipleOf: args.step } : {}),
-    };
-  } else if (kind === "boolean") {
-    answerSchema = { type: "boolean", title: "Yes / No" };
-  } else if (kind === "file") {
-    answerSchema = {
-      type: "string",
-      format: "uri",
-      title: "Drop a file",
-      description: args?.accept ? `Accepts: ${args.accept}` : undefined,
-      "x-input": "dropzone",
-      "x-accept": args?.accept ?? undefined,
-    };
-  } else {
-    answerSchema = {
-      type: "string",
-      title: args?.multiline ? "Your answer (multi-line)" : "Your answer",
-      ...(args?.multiline ? { "x-input": "textarea" } : {}),
-    };
-  }
-  if (args?.default !== undefined) answerSchema.default = args.default;
-
-  const requestedSchema = {
-    type: "object",
-    properties: { answer: answerSchema },
-    required: ["answer"],
-  };
+  const built = buildBatchedSchema(args);
+  if (built.error) return errResult(built.error);
+  const { message, requestedSchema } = built;
 
   let response;
   try {

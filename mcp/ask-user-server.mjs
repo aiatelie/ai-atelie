@@ -1,13 +1,19 @@
 /* ask-user-server.mjs — MCP server exposing one tool: `ask_user`.
  *
- * The model calls `ask_user` whenever it needs structured input from the
- * user mid-turn. The tool sends an MCP `elicitation/create` request up to
- * the host (the Claude Code SDK), which routes it to our editor frontend
- * via the SSE bridge in commentEdit.ts. The user submits the form, the
- * answer flows back, and the tool returns it as the tool result.
+ * The model calls `ask_user` with a BATCHED set of questions whenever it
+ * needs structured input from the user. The tool sends an MCP
+ * `elicitation/create` request up to the host (the Claude Code SDK),
+ * which routes it to our editor frontend via the SSE bridge in
+ * commentEdit.ts. The user submits the form, the answer flows back, and
+ * the tool returns it as the tool result.
  *
- * The schema for structured questions follows the `questions_v2` shape
- * commonly used by design-tool agents.
+ * The schema follows the `questions_v2` shape common in design-tool
+ * agents: one tool call yields N questions in one form. Single-question
+ * cases are just N=1.
+ *
+ * Each enum question gets three escape-hatch options auto-injected
+ * server-side: "Decide for me", "Explore a few", and "Other" (paired
+ * with an inline textarea via the `x-other-input` flag).
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -19,57 +25,81 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 const server = new Server(
-  { name: "ask-user", version: "0.1.0" },
+  { name: "ask-user", version: "0.2.0" },
   { capabilities: { tools: {} } },
 );
 
 const TOOL = {
   name: "ask_user",
   description:
-    "Ask the user a structured question and wait for a response. Use this when you need clarification BEFORE building anything — pick from discrete options, get a number/range, ask for free text, or request a file. Returns { action: 'accept'|'decline'|'cancel', content?: { answer: ... } }. Always prefer this over plain prose questions when the answer fits a structured shape.",
+    "Ask the user a batched set of structured questions and wait for their answers. Use this BEFORE planning when the request is ambiguous — front-load all your clarifying questions in ONE call so the user fills one form and you proceed with full context. Returns { action: 'accept'|'decline'|'cancel', content?: { answers: { [questionId]: value } } }. Each enum question automatically gets 'Decide for me', 'Explore a few', and 'Other' (with inline free-text) appended — you don't need to add them yourself. Always prefer this over plain prose questions.",
   inputSchema: {
     type: "object",
     properties: {
-      message: {
+      title: {
         type: "string",
         description:
-          "The question to ask the user, in plain language. Keep it short — the form UI shows it as a header above the input.",
+          "Form header shown above all questions, e.g. 'Quick questions about the climbing event banners'. Keep it short.",
       },
-      kind: {
-        type: "string",
-        enum: ["text", "enum", "number", "boolean", "file"],
-        description:
-          "Input shape. 'text' (default) = freeform string; 'enum' = pick one of `options`; 'number' = numeric (use min/max/step); 'boolean' = yes/no; 'file' = file dropzone (returns project-relative path).",
-      },
-      options: {
+      questions: {
         type: "array",
-        items: { type: "string" },
         description:
-          "Choices for `kind: 'enum'`. Required for enum, ignored otherwise.",
-      },
-      multi: {
-        type: "boolean",
-        description:
-          "For `kind: 'enum'` — allow selecting multiple options (renders as checkboxes). Default false.",
-      },
-      multiline: {
-        type: "boolean",
-        description:
-          "For `kind: 'text'` — render a textarea instead of a one-line input. Default false.",
-      },
-      min: { type: "number", description: "For `kind: 'number'`." },
-      max: { type: "number", description: "For `kind: 'number'`." },
-      step: { type: "number", description: "For `kind: 'number'`." },
-      default: {
-        description: "Optional default value pre-filled in the form.",
-      },
-      accept: {
-        type: "string",
-        description:
-          "For `kind: 'file'` — MIME filter (e.g. 'image/*', 'image/png,application/pdf').",
+          "Ordered list of questions. The user sees them in this order and fills them all before submitting once.",
+        items: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description:
+                "snake_case key for this question's answer in the result. Example: 'event_type', 'audience', 'banner_count'.",
+            },
+            kind: {
+              type: "string",
+              enum: ["enum", "number", "boolean", "text", "file"],
+              description:
+                "'enum' = pick from `options` (Decide for me / Explore a few / Other auto-added); 'number' = numeric (use min/max/step); 'boolean' = yes/no; 'text' = freeform (set multiline:true for textarea); 'file' = file dropzone (returns project-relative path).",
+            },
+            title: {
+              type: "string",
+              description: "Question header shown above the input.",
+            },
+            subtitle: {
+              type: "string",
+              description:
+                "Optional grey hint below the title, e.g. 'Pick one or a few' or 'Leave blank if you want me to invent placeholder content'.",
+            },
+            options: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Choices for kind:'enum'. Don't include 'Decide for me', 'Explore a few', or 'Other' — those are added automatically.",
+            },
+            multi: {
+              type: "boolean",
+              description: "For kind:'enum' — allow selecting multiple options (checkboxes vs radio). Default false.",
+            },
+            multiline: {
+              type: "boolean",
+              description: "For kind:'text' — render a textarea instead of a one-line input. Default false.",
+            },
+            min: { type: "number", description: "For kind:'number'." },
+            max: { type: "number", description: "For kind:'number'." },
+            step: { type: "number", description: "For kind:'number'." },
+            default: { description: "Optional default value pre-filled in the form." },
+            accept: {
+              type: "string",
+              description: "For kind:'file' — MIME filter (e.g. 'image/*', 'image/png,application/pdf').",
+            },
+            required: {
+              type: "boolean",
+              description: "If false, the user can leave this question blank. Default true.",
+            },
+          },
+          required: ["id", "kind", "title"],
+        },
       },
     },
-    required: ["message"],
+    required: ["title", "questions"],
   },
 };
 
@@ -79,59 +109,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args } = req.params;
   if (name !== "ask_user") throw new Error(`unknown tool: ${name}`);
 
-  const message = String(args?.message ?? "");
-  const kind = (args?.kind ?? "text");
-  const options = Array.isArray(args?.options) ? args.options : null;
-  const multi = !!args?.multi;
-
-  // Build an MCP-compliant flat JSON Schema for the elicitation reply.
-  // MCP elicitation supports only primitives + enum + arrays of primitives.
-  let answerSchema;
-  if (kind === "enum") {
-    if (!options?.length) {
-      return errResult("ask_user: kind='enum' requires non-empty `options`");
-    }
-    answerSchema = multi
-      ? { type: "array", items: { type: "string", enum: options }, title: "Pick one or more" }
-      : { type: "string", enum: options, title: "Pick one" };
-  } else if (kind === "number") {
-    answerSchema = {
-      type: "number",
-      title: "Enter a number",
-      ...(typeof args?.min === "number" ? { minimum: args.min } : {}),
-      ...(typeof args?.max === "number" ? { maximum: args.max } : {}),
-      ...(typeof args?.step === "number" ? { multipleOf: args.step } : {}),
-    };
-  } else if (kind === "boolean") {
-    answerSchema = { type: "boolean", title: "Yes / No" };
-  } else if (kind === "file") {
-    answerSchema = {
-      type: "string",
-      format: "uri",
-      title: "Drop a file",
-      description: args?.accept ? `Accepts: ${args.accept}` : undefined,
-      // Custom hint our editor reads to render a dropzone instead of a URL input.
-      "x-input": "dropzone",
-      "x-accept": args?.accept ?? undefined,
-    };
-  } else {
-    answerSchema = {
-      type: "string",
-      title: args?.multiline ? "Your answer (multi-line)" : "Your answer",
-      ...(args?.multiline ? { "x-input": "textarea" } : {}),
-    };
-  }
-
-  if (args?.default !== undefined) {
-    // JSON Schema's default is informational; the UI uses it as initial value.
-    answerSchema.default = args.default;
-  }
-
-  const requestedSchema = {
-    type: "object",
-    properties: { answer: answerSchema },
-    required: ["answer"],
-  };
+  const built = buildBatchedSchema(args);
+  if (built.error) return errResult(built.error);
+  const { message, requestedSchema } = built;
 
   let result;
   try {
@@ -145,10 +125,122 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
   return {
     content: [
-      { type: "text", text: JSON.stringify({ action: result?.action ?? "unknown", content: result?.content ?? null }) },
+      {
+        type: "text",
+        text: JSON.stringify({
+          action: result?.action ?? "unknown",
+          content: result?.content ?? null,
+        }),
+      },
     ],
   };
 });
+
+/** Build the MCP-compliant flat JSON Schema for the elicitation reply
+ *  from the model's batched questions[] input.
+ *  Returns { message, requestedSchema } on success, { error } on failure. */
+export function buildBatchedSchema(args) {
+  const title = String(args?.title ?? "").trim();
+  const questions = Array.isArray(args?.questions) ? args.questions : null;
+  if (!title) return { error: "ask_user: `title` is required." };
+  if (!questions?.length) return { error: "ask_user: `questions` must be a non-empty array." };
+
+  const properties = {};
+  const required = [];
+  const seenIds = new Set();
+
+  for (const q of questions) {
+    const id = String(q?.id ?? "").trim();
+    if (!id) return { error: "ask_user: every question needs an `id`." };
+    if (!/^[a-z][a-z0-9_]*$/.test(id)) {
+      return { error: `ask_user: question id '${id}' must be snake_case (a-z, 0-9, _).` };
+    }
+    if (seenIds.has(id)) return { error: `ask_user: duplicate question id '${id}'.` };
+    seenIds.add(id);
+
+    const kind = q?.kind ?? "text";
+    const qSchema = buildFieldSchema(kind, q);
+    if (qSchema.error) return { error: `ask_user[${id}]: ${qSchema.error}` };
+
+    qSchema.schema.title = String(q?.title ?? id);
+    if (q?.subtitle) qSchema.schema["x-subtitle"] = String(q.subtitle);
+    if (q?.default !== undefined) qSchema.schema.default = q.default;
+
+    properties[id] = qSchema.schema;
+    if (q?.required !== false) required.push(id);
+  }
+
+  return {
+    message: title,
+    requestedSchema: {
+      type: "object",
+      title,
+      properties,
+      ...(required.length ? { required } : {}),
+    },
+  };
+}
+
+/** Build a single-field JSON Schema for one question. Adds the
+ *  Decide for me / Explore a few / Other escape hatches on enum kinds. */
+function buildFieldSchema(kind, q) {
+  if (kind === "enum") {
+    const options = Array.isArray(q?.options) ? q.options.filter((o) => typeof o === "string") : null;
+    if (!options?.length) return { error: "kind='enum' requires non-empty `options`" };
+    // Strip any user-supplied collisions with our reserved escape-hatch labels
+    // so the auto-injected ones are unambiguous.
+    const RESERVED = new Set(["Decide for me", "Explore a few", "Other"]);
+    const userOpts = options.filter((o) => !RESERVED.has(o));
+    const finalOptions = [...userOpts, "Decide for me", "Explore a few", "Other"];
+    if (q?.multi) {
+      return {
+        schema: {
+          type: "array",
+          items: { type: "string", enum: finalOptions },
+          "x-other-input": true,
+        },
+      };
+    }
+    return {
+      schema: {
+        type: "string",
+        enum: finalOptions,
+        "x-other-input": true,
+      },
+    };
+  }
+  if (kind === "number") {
+    return {
+      schema: {
+        type: "number",
+        ...(typeof q?.min === "number" ? { minimum: q.min } : {}),
+        ...(typeof q?.max === "number" ? { maximum: q.max } : {}),
+        ...(typeof q?.step === "number" ? { multipleOf: q.step } : {}),
+      },
+    };
+  }
+  if (kind === "boolean") {
+    return { schema: { type: "boolean" } };
+  }
+  if (kind === "file") {
+    return {
+      schema: {
+        type: "string",
+        format: "uri",
+        description: q?.accept ? `Accepts: ${q.accept}` : undefined,
+        "x-input": "dropzone",
+        "x-accept": q?.accept ?? undefined,
+      },
+    };
+  }
+  // text (default)
+  return {
+    schema: {
+      type: "string",
+      ...(q?.multiline ? { "x-input": "textarea" } : {}),
+    },
+  };
+}
 
 function errResult(text) {
   return { content: [{ type: "text", text }], isError: true };
