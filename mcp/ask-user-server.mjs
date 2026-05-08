@@ -55,9 +55,9 @@ const TOOL = {
             },
             kind: {
               type: "string",
-              enum: ["enum", "number", "boolean", "text", "file"],
+              enum: ["enum", "svg-options", "number", "boolean", "text", "file"],
               description:
-                "'enum' = pick from `options` (Decide for me / Explore a few / Other auto-added); 'number' = numeric (use min/max/step); 'boolean' = yes/no; 'text' = freeform (set multiline:true for textarea); 'file' = file dropzone (returns project-relative path).",
+                "'enum' = pick from `options` text labels (Decide for me / Explore a few / Other auto-added); 'svg-options' = same as enum but each option is an inline SVG string (~80×56 viewBox), use for visual choices like layouts/icons/swatches; 'number' = numeric (use min/max/step); 'boolean' = yes/no; 'text' = freeform (set multiline:true for textarea); 'file' = file dropzone (returns project-relative path).",
             },
             title: {
               type: "string",
@@ -72,7 +72,13 @@ const TOOL = {
               type: "array",
               items: { type: "string" },
               description:
-                "Choices for kind:'enum'. Don't include 'Decide for me', 'Explore a few', or 'Other' — those are added automatically.",
+                "Choices for kind:'enum' (text labels) or kind:'svg-options' (inline SVG strings, ~80×56 viewBox). Don't include 'Decide for me', 'Explore a few', or 'Other' — those are added automatically.",
+            },
+            optionLabels: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "For kind:'svg-options' — optional human-readable label for each SVG option, in the same order as `options`. Falls back to a generic 'Option N' label when omitted.",
             },
             multi: {
               type: "boolean",
@@ -205,6 +211,29 @@ function buildFieldSchema(kind, q) {
       schema: {
         type: "string",
         enum: finalOptions,
+        "x-other-input": true,
+      },
+    };
+  }
+  if (kind === "svg-options") {
+    const options = Array.isArray(q?.options) ? q.options.filter((o) => typeof o === "string") : null;
+    if (!options?.length) return { error: "kind='svg-options' requires non-empty `options` (inline SVG strings)" };
+    const labels = Array.isArray(q?.optionLabels)
+      ? q.optionLabels.filter((l) => typeof l === "string")
+      : [];
+    // The wire value the user picks is the option's INDEX as a string
+    // (so the model can match against `options[i]`/`optionLabels[i]`).
+    // The `Decide for me` / `Other` escape hatches still apply but
+    // resolve to literal strings, not indices.
+    const indexOptions = options.map((_, i) => String(i));
+    const finalOptions = [...indexOptions, "Decide for me", "Other"];
+    return {
+      schema: {
+        type: "string",
+        enum: finalOptions,
+        "x-input": "svg-options",
+        "x-svg-options": options,
+        "x-svg-labels": labels,
         "x-other-input": true,
       },
     };

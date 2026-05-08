@@ -90,13 +90,14 @@ const TOOL = {
             id: { type: "string", description: "snake_case key for this question's answer." },
             kind: {
               type: "string",
-              enum: ["enum", "number", "boolean", "text", "file"],
+              enum: ["enum", "svg-options", "number", "boolean", "text", "file"],
               description:
-                "'enum' = pick from `options` (Decide for me / Explore a few / Other auto-added); 'number'; 'boolean'; 'text' (multiline:true for textarea); 'file' (dropzone).",
+                "'enum' = pick from `options` text labels (Decide for me / Explore a few / Other auto-added); 'svg-options' = same but each option is an inline SVG (~80×56 viewBox); 'number'; 'boolean'; 'text' (multiline:true for textarea); 'file' (dropzone).",
             },
             title: { type: "string" },
             subtitle: { type: "string" },
             options: { type: "array", items: { type: "string" } },
+            optionLabels: { type: "array", items: { type: "string" } },
             multi: { type: "boolean" },
             multiline: { type: "boolean" },
             min: { type: "number" },
