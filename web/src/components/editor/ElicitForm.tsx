@@ -181,7 +181,11 @@ export function ElicitForm({ request, preview, onResolved }: Props) {
 
       <div className={s.elicitActions}>
         {isPreview ? (
-          <span className={s.elicitGenerating}>Generating questions…</span>
+          <span className={s.elicitGenerating}>
+            {questions.length > 0
+              ? `Generating question ${questions.length + 1}…`
+              : "Generating questions…"}
+          </span>
         ) : missingRequired > 0 && questions.length > 0 ? (
           <span className={s.elicitMissingHint}>
             {missingRequired} more required
@@ -339,15 +343,17 @@ function QuestionSection({
       {effectiveKind === "number" && (
         <NumberInput
           field={question.schema}
-          value={typeof value === "number" ? value : Number(value ?? 0)}
+          value={value}
           onChange={(v) => onChange(v)}
+          required={question.required}
         />
       )}
 
       {effectiveKind === "boolean" && (
         <BooleanToggle
-          value={typeof value === "boolean" ? value : false}
+          value={value}
           onChange={(v) => onChange(v)}
+          required={question.required}
         />
       )}
 
@@ -634,47 +640,84 @@ function SvgOptions({
 }
 
 function NumberInput({
-  field, value, onChange,
-}: { field: Schema; value: number; onChange: (v: number) => void }) {
-  const f = (field ?? {}) as { minimum?: number; maximum?: number; multipleOf?: number };
+  field, value, onChange, required,
+}: { field: Schema; value: unknown; onChange: (v: number | string) => void; required: boolean }) {
+  const f = (field ?? {}) as { minimum?: number; maximum?: number; multipleOf?: number; default?: number };
   const showSlider = typeof f.minimum === "number" && typeof f.maximum === "number";
+  // The user has deferred to the agent — value is the literal string,
+  // not a number. We freeze the numeric controls to the schema default
+  // (or minimum) so the slider has a sensible position to return to
+  // if they un-defer.
+  const isDeferred = value === "Decide for me";
+  const numValue = typeof value === "number" && Number.isFinite(value)
+    ? value
+    : (typeof f.default === "number" ? f.default : (typeof f.minimum === "number" ? f.minimum : 0));
   return (
-    <div className={s.elicitNumberRow}>
-      {showSlider && (
+    <>
+      <div className={s.elicitNumberRow} data-deferred={isDeferred ? "true" : undefined}>
+        {showSlider && (
+          <input
+            type="range"
+            className={s.elicitSlider}
+            min={f.minimum}
+            max={f.maximum}
+            step={f.multipleOf ?? 1}
+            value={numValue}
+            disabled={isDeferred}
+            onChange={(e) => onChange(Number(e.target.value))}
+          />
+        )}
         <input
-          type="range"
-          className={s.elicitSlider}
+          type="number"
+          className={s.elicitNumber}
           min={f.minimum}
           max={f.maximum}
-          step={f.multipleOf ?? 1}
-          value={value}
+          step={f.multipleOf ?? "any"}
+          value={isDeferred ? "" : (Number.isFinite(numValue) ? numValue : "")}
+          disabled={isDeferred}
+          placeholder={isDeferred ? "Decide for me" : undefined}
           onChange={(e) => onChange(Number(e.target.value))}
         />
+      </div>
+      {required && (
+        <button
+          type="button"
+          className={s.elicitDeferToggle}
+          onClick={() => onChange(isDeferred
+            ? (typeof f.default === "number" ? f.default : (typeof f.minimum === "number" ? f.minimum : 0))
+            : "Decide for me",
+          )}
+        >
+          {isDeferred ? "← Pick a number" : "Decide for me"}
+        </button>
       )}
-      <input
-        type="number"
-        className={s.elicitNumber}
-        min={f.minimum}
-        max={f.maximum}
-        step={f.multipleOf ?? "any"}
-        value={Number.isFinite(value) ? value : ""}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </div>
+    </>
   );
 }
 
 function BooleanToggle({
-  value, onChange,
-}: { value: boolean; onChange: (v: boolean) => void }) {
+  value, onChange, required,
+}: { value: unknown; onChange: (v: boolean | string) => void; required: boolean }) {
+  // Required boolean questions default to nothing-selected so the user
+  // is forced to pick (or pick "Decide for me"). Optional booleans can
+  // start at false; they don't surface the defer affordance.
+  const isYes = value === true;
+  const isNo = value === false;
+  const isDefer = value === "Decide for me";
   return (
     <div className={s.elicitOptions}>
-      <label className={`${s.elicitOption} ${value === true  ? s.elicitOptionOn : ""}`}>
-        <input type="radio" checked={value === true}  onChange={() => onChange(true)} /><span>Yes</span>
+      <label className={`${s.elicitOption} ${isYes ? s.elicitOptionOn : ""}`}>
+        <input type="radio" checked={isYes} onChange={() => onChange(true)} /><span>Yes</span>
       </label>
-      <label className={`${s.elicitOption} ${value === false ? s.elicitOptionOn : ""}`}>
-        <input type="radio" checked={value === false} onChange={() => onChange(false)} /><span>No</span>
+      <label className={`${s.elicitOption} ${isNo ? s.elicitOptionOn : ""}`}>
+        <input type="radio" checked={isNo} onChange={() => onChange(false)} /><span>No</span>
       </label>
+      {required && (
+        <label className={`${s.elicitOption} ${isDefer ? s.elicitOptionOn : ""}`}>
+          <input type="radio" checked={isDefer} onChange={() => onChange("Decide for me")} />
+          <span>Decide for me</span>
+        </label>
+      )}
     </div>
   );
 }
@@ -983,7 +1026,11 @@ function initialValue(schema: Schema): unknown {
       if (typeof f.default === "number") return f.default;
       if (typeof f.minimum === "number") return f.minimum;
       return 0;
-    case "boolean":     return typeof f.default === "boolean" ? f.default : false;
+    // Initial undefined for boolean so the user has to explicitly
+    // pick (Yes / No / Decide for me) on required questions. A
+    // pre-selected `false` would silently submit "No" if Continue
+    // was clicked without interacting with the toggle.
+    case "boolean":     return typeof f.default === "boolean" ? f.default : undefined;
     case "dropzone":    return typeof f.default === "string" ? f.default : "";
     case "textarea":
     case "text":        return typeof f.default === "string" ? f.default : "";
@@ -992,12 +1039,19 @@ function initialValue(schema: Schema): unknown {
 
 function isValid(schema: Schema, value: unknown): boolean {
   const kind = detectKind(schema);
+  // "Decide for me" is a valid sentinel for any kind that auto-injects
+  // the defer affordance; it satisfies the required check identically
+  // to a real answer.
+  if (value === "Decide for me") return true;
   switch (kind) {
     case "enum-single": return typeof value === "string" && value.length > 0;
     case "enum-multi":  return Array.isArray(value) && value.length > 0;
     case "svg-options": return typeof value === "string" && value.length > 0;
     case "number":      return typeof value === "number" && Number.isFinite(value);
-    case "boolean":     return true;
+    // Required boolean questions need an explicit pick (incl. defer).
+    // Once we're here without "Decide for me", the value must be a
+    // real boolean.
+    case "boolean":     return typeof value === "boolean";
     case "dropzone":    return typeof value === "string" && value.length > 0;
     case "textarea":
     case "text":        return typeof value === "string" && value.trim().length > 0;

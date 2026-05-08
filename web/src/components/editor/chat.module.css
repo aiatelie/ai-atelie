@@ -681,6 +681,115 @@
 .toolChipWrap.toolChipOpen {
   flex-basis: 100%;
 }
+/* Group container for adjacent same-verb tool calls. The header looks
+ * like a single ToolChip ("Writing ×3 ▾") but expanding it reveals
+ * the per-call children stacked underneath. Borrows the kind-tinting
+ * variables from .toolChip so a Reading group reads as the same color
+ * as its individual chips. */
+.toolGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.toolGroupHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  background: var(--kind-other-bg, var(--brand-bg));
+  border: 1px solid var(--kind-other-border, var(--brand-border));
+  color: var(--kind-other-fg, var(--brand-fg));
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  appearance: none;
+  text-align: left;
+}
+.toolGroup[data-kind="read"]    > .toolGroupHeader { background: var(--kind-read-bg);    border-color: var(--kind-read-border);    color: var(--kind-read-fg); }
+.toolGroup[data-kind="edit"]    > .toolGroupHeader { background: var(--kind-edit-bg);    border-color: var(--kind-edit-border);    color: var(--kind-edit-fg); }
+.toolGroup[data-kind="execute"] > .toolGroupHeader { background: var(--kind-execute-bg); border-color: var(--kind-execute-border); color: var(--kind-execute-fg); }
+.toolGroup[data-kind="fetch"]   > .toolGroupHeader { background: var(--kind-fetch-bg);   border-color: var(--kind-fetch-border);   color: var(--kind-fetch-fg); }
+.toolGroup[data-kind="search"]  > .toolGroupHeader { background: var(--kind-search-bg);  border-color: var(--kind-search-border);  color: var(--kind-search-fg); }
+.toolGroup[data-error="true"] > .toolGroupHeader {
+  background: var(--kind-error-bg, #fee);
+  border-color: var(--kind-error-border, #f99);
+  color: var(--kind-error-fg, #c33);
+}
+.toolGroupLabel { white-space: nowrap; }
+.toolGroupChev { opacity: 0.6; }
+.toolGroupChildren {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 2px solid var(--ink-10);
+  margin-left: 8px;
+}
+
+/* TodoWrite/update_todos render as a dedicated card so the list
+ * actually shows up in chat instead of being a cryptic "Updating
+ * todos" chip. The "+" prefix on each row mirrors Claude Design's
+ * "Updated todos" framing — every visible entry is part of THIS
+ * push. (A future delta diff against the previous turn's list could
+ * upgrade "+" → "+/Δ/-" semantics.) */
+.todoCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--ink-10);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.todoCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--ink-70);
+}
+.todoCardIcon { font-size: 11px; color: var(--ink-50); }
+.todoCardLabel { font-size: 12px; }
+.todoList {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.todoItem {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.todoItem[data-status="completed"] .todoContent {
+  text-decoration: line-through;
+  color: var(--ink-60);
+}
+.todoItem[data-status="in_progress"] .todoContent {
+  font-weight: 500;
+  color: var(--ink);
+}
+.todoMark {
+  color: var(--brand-strong);
+  font-weight: 600;
+  flex-shrink: 0;
+  width: 10px;
+}
+.todoStatus {
+  font-size: 11px;
+  color: var(--ink-50);
+  flex-shrink: 0;
+  width: 12px;
+}
+.todoContent { color: var(--ink); }
+
 .toolChip {
   display: flex;
   justify-content: space-between;
@@ -1531,6 +1640,26 @@
 }
 .elicitTextToggle:hover { color: var(--brand); text-decoration-color: var(--brand); }
 .elicitTextToggle:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Defer ("Decide for me") toggle below a NumberInput. Same visual
+ * treatment as the Other toggle so the affordance set looks unified. */
+.elicitDeferToggle {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-50);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-20);
+  text-underline-offset: 2px;
+  align-self: flex-start;
+}
+.elicitDeferToggle:hover { color: var(--brand); text-decoration-color: var(--brand); }
+.elicitNumberRow[data-deferred="true"] {
+  opacity: 0.5;
+}
 .elicitBtn {
   font: inherit;
   font-size: 12.5px;

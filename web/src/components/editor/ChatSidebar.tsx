@@ -1710,16 +1710,22 @@ function basename(path: string): string {
 function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean }) {
   const [open, setOpen] = useState(false);
   if (tools.length === 0) return null;
+  // Group adjacent same-verb tools so a burst of e.g. three Read calls
+  // renders as "Reading ×3 ▾" instead of three discrete chips. The
+  // grouping is per-verb (kindOf-based), bounded at the chronological
+  // run — non-adjacent same-verb tools stay apart so the chat reflects
+  // the order the model actually emitted them.
+  const groups = groupConsecutiveByVerb(tools);
   // Pending OR few tools: always expanded.
-  const expanded = pending || tools.length <= 2 || open;
   if (pending || tools.length <= 2) {
     return (
       <div className={s.tools} data-compact={tools.length <= 2 ? "true" : "false"}>
-        {tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+        {groups.map((g, i) => <ToolChipGroup key={i} group={g} />)}
       </div>
     );
   }
   // Done + 3+ tools: collapsible summary footer.
+  const expanded = open;
   const fileSet = new Set<string>();
   for (const t of tools) {
     const m = (t.label || "").match(/·\s+(.+)/);
@@ -1743,9 +1749,121 @@ function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean })
       </button>
       {expanded && (
         <div className={s.tools} data-compact="false">
-          {tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+          {groups.map((g, i) => <ToolChipGroup key={i} group={g} />)}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Collapse adjacent tools sharing the same verb (per `verbOf`). A
+ *  three-Read burst becomes one group of size 3; a Read-Edit-Read
+ *  sequence stays as three separate groups so order is preserved. */
+type ToolGroup = { verb: string; kind: ToolKind; tools: ToolCall[] };
+function groupConsecutiveByVerb(tools: ToolCall[]): ToolGroup[] {
+  const out: ToolGroup[] = [];
+  for (const t of tools) {
+    const v = verbOf(t.name);
+    const k = kindOf(t.name);
+    const last = out[out.length - 1];
+    if (last && last.verb === v && last.kind === k) {
+      last.tools.push(t);
+    } else {
+      out.push({ verb: v, kind: k, tools: [t] });
+    }
+  }
+  return out;
+}
+
+/** Render one group: single-tool groups behave exactly like the
+ *  previous per-tool ToolChip; multi-tool groups collapse into a
+ *  count-merged header ("Writing ×3") that expands to show children. */
+function ToolChipGroup({ group }: { group: ToolGroup }) {
+  const [open, setOpen] = useState(false);
+  // Todo-writing tools render as a dedicated card showing the items
+  // and their statuses, with "+" prefixes to signal each entry is part
+  // of the just-pushed update. Mirrors Claude Design's "Updated todos"
+  // framing so users can scan the actual list instead of just seeing
+  // a cryptic "Updating todos" chip.
+  if (group.tools.length === 1) {
+    const t = group.tools[0];
+    const todos = extractTodos(t);
+    if (todos) return <TodoUpdateCard todos={todos} />;
+    return <ToolChip tool={t} />;
+  }
+  const anyError = group.tools.some((t) => t.isError);
+  return (
+    <div className={`${s.toolGroup} ${open ? s.toolGroupOpen : ""}`} data-kind={group.kind} data-error={anyError ? "true" : undefined}>
+      <button
+        type="button"
+        className={s.toolGroupHeader}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className={s.toolGroupLabel}>{group.verb} ×{group.tools.length}</span>
+        <span className={s.toolGroupChev} aria-hidden="true">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className={s.toolGroupChildren}>
+          {group.tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Extract the todos array from a TodoWrite/update_todos tool call's
+ *  `input`. The Claude Code SDK sends `{ todos: [{ content, status,
+ *  activeForm }, ...] }`. Returns null for non-todo tools or when the
+ *  shape isn't recognized. */
+type TodoItem = { content: string; status: "pending" | "in_progress" | "completed"; activeForm?: string };
+function extractTodos(tool: ToolCall): TodoItem[] | null {
+  const norm = tool.name.replace(/^mcp__[^_]+__/, "").toLowerCase();
+  if (norm !== "todowrite" && norm !== "update_todos") return null;
+  const todos = (tool.input as { todos?: unknown } | undefined)?.todos;
+  if (!Array.isArray(todos)) return null;
+  return todos
+    .map((raw): TodoItem | null => {
+      if (!raw || typeof raw !== "object") return null;
+      const r = raw as { content?: unknown; status?: unknown; activeForm?: unknown };
+      if (typeof r.content !== "string") return null;
+      const status = r.status === "in_progress" || r.status === "completed" ? r.status : "pending";
+      return {
+        content: r.content,
+        status,
+        activeForm: typeof r.activeForm === "string" ? r.activeForm : undefined,
+      };
+    })
+    .filter((x): x is TodoItem => x !== null);
+}
+
+/** Render the agent's just-pushed todo list. "+" prefix on every
+ *  entry mirrors Claude Design's "Updated todos" framing — every
+ *  visible item is part of THIS update. Status icon shows whether
+ *  each todo is pending / in progress / done. */
+function TodoUpdateCard({ todos }: { todos: TodoItem[] }) {
+  if (todos.length === 0) return null;
+  const inProgress = todos.find((t) => t.status === "in_progress");
+  const headline = inProgress
+    ? `Updated todos · ${inProgress.activeForm ?? inProgress.content}`
+    : `Updated todos · ${todos.length} item${todos.length === 1 ? "" : "s"}`;
+  return (
+    <div className={s.todoCard}>
+      <div className={s.todoCardHeader}>
+        <span className={s.todoCardIcon} aria-hidden>☰</span>
+        <span className={s.todoCardLabel}>{headline}</span>
+      </div>
+      <ul className={s.todoList}>
+        {todos.map((t, i) => (
+          <li key={i} className={s.todoItem} data-status={t.status}>
+            <span className={s.todoMark} aria-hidden>+</span>
+            <span className={s.todoStatus} aria-label={t.status}>
+              {t.status === "completed" ? "✓" : t.status === "in_progress" ? "→" : "○"}
+            </span>
+            <span className={s.todoContent}>{t.content}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
