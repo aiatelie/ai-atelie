@@ -1552,6 +1552,16 @@ function Bubble({
           const a = parseArtifact(t.result);
           return a ? <ArtifactCard key={`art-${i}`} artifact={a} /> : null;
         })}
+        {/* Todo updates render as a dedicated diff-aware card —
+         *  surfaced above the regular tool chips so the list is
+         *  always visible at the top of the bubble's tool block.
+         *  ToolFooter (below) skips todo tools to avoid duplication. */}
+        {m.tools.map((t, ti) => {
+          const todos = extractTodos(t);
+          if (!todos) return null;
+          const prev = previousTodosSnapshot(messages, index, ti);
+          return <TodoUpdateCard key={`todo-${ti}`} todos={todos} prevTodos={prev} />;
+        })}
         {/* Tool chips: collapsed-by-default footer when there are >2
          *  calls AFTER the turn finishes; while pending we always
          *  expand so the user sees chips appearing live as the model
@@ -1780,15 +1790,13 @@ function groupConsecutiveByVerb(tools: ToolCall[]): ToolGroup[] {
  *  count-merged header ("Writing ×3") that expands to show children. */
 function ToolChipGroup({ group }: { group: ToolGroup }) {
   const [open, setOpen] = useState(false);
-  // Todo-writing tools render as a dedicated card showing the items
-  // and their statuses, with "+" prefixes to signal each entry is part
-  // of the just-pushed update. Mirrors Claude Design's "Updated todos"
-  // framing so users can scan the actual list instead of just seeing
-  // a cryptic "Updating todos" chip.
+  // Todo-writing tools render as a dedicated TodoUpdateCard at the
+  // Bubble level (it has access to message history for delta diffing
+  // against the prior turn's snapshot). Skip them here so they're
+  // not double-rendered.
   if (group.tools.length === 1) {
     const t = group.tools[0];
-    const todos = extractTodos(t);
-    if (todos) return <TodoUpdateCard todos={todos} />;
+    if (extractTodos(t)) return null;
     return <ToolChip tool={t} />;
   }
   const anyError = group.tools.some((t) => t.isError);
@@ -1837,16 +1845,83 @@ function extractTodos(tool: ToolCall): TodoItem[] | null {
     .filter((x): x is TodoItem => x !== null);
 }
 
-/** Render the agent's just-pushed todo list. "+" prefix on every
- *  entry mirrors Claude Design's "Updated todos" framing — every
- *  visible item is part of THIS update. Status icon shows whether
- *  each todo is pending / in progress / done. */
-function TodoUpdateCard({ todos }: { todos: TodoItem[] }) {
-  if (todos.length === 0) return null;
+/** Walk back through `messages` (from `beforeIdx-1` down to 0) to
+ *  find the most recent todo-writing tool call BEFORE the one at
+ *  `messages[beforeIdx].tools[beforeToolIdx]`, and return its
+ *  `todos[]` snapshot. Empty array if none found.
+ *
+ *  Includes earlier todo tool calls within the SAME message (i.e.
+ *  the model called update_todos twice in one assistant turn) — the
+ *  snapshot is whatever was in the immediately preceding call. */
+function previousTodosSnapshot(
+  messages: ChatMessage[],
+  beforeIdx: number,
+  beforeToolIdx: number,
+): TodoItem[] {
+  // First, scan earlier tool calls in the SAME message.
+  const here = messages[beforeIdx];
+  if (here?.role === "assistant") {
+    for (let ti = beforeToolIdx - 1; ti >= 0; ti--) {
+      const todos = extractTodos(here.tools[ti]);
+      if (todos) return todos;
+    }
+  }
+  // Then earlier messages, walking back.
+  for (let mi = beforeIdx - 1; mi >= 0; mi--) {
+    const m = messages[mi];
+    if (m.role !== "assistant") continue;
+    for (let ti = m.tools.length - 1; ti >= 0; ti--) {
+      const todos = extractTodos(m.tools[ti]);
+      if (todos) return todos;
+    }
+  }
+  return [];
+}
+
+/** Diff two todo snapshots by `content` text identity. Items present
+ *  in `current` but not `prev` are ADDED; items in `prev` but not
+ *  `current` are REMOVED; items in both with a status change are
+ *  UPDATED; otherwise UNCHANGED. The order in the returned list
+ *  matches `current`, with REMOVED items inserted at the end so the
+ *  user sees the new state with the removals as a footnote. */
+type TodoDeltaKind = "added" | "removed" | "updated" | "unchanged";
+type TodoDeltaItem = TodoItem & { delta: TodoDeltaKind; prevStatus?: TodoItem["status"] };
+function computeTodoDelta(current: TodoItem[], prev: TodoItem[]): TodoDeltaItem[] {
+  const prevByContent = new Map(prev.map((t) => [t.content, t]));
+  const currentContents = new Set(current.map((t) => t.content));
+  const out: TodoDeltaItem[] = current.map((t) => {
+    const prior = prevByContent.get(t.content);
+    if (!prior) return { ...t, delta: "added" };
+    if (prior.status !== t.status) return { ...t, delta: "updated", prevStatus: prior.status };
+    return { ...t, delta: "unchanged" };
+  });
+  for (const p of prev) {
+    if (!currentContents.has(p.content)) out.push({ ...p, delta: "removed" });
+  }
+  return out;
+}
+
+/** Render the agent's just-pushed todo list with delta markers
+ *  computed against the most recent prior snapshot. "+" = added
+ *  this turn, "Δ" = status changed, "−" = removed, no marker =
+ *  carried forward. Mirrors Claude Design's "Updated todos"
+ *  framing: every visible item is part of THIS update. */
+function TodoUpdateCard({ todos, prevTodos }: { todos: TodoItem[]; prevTodos: TodoItem[] }) {
+  if (todos.length === 0 && prevTodos.length === 0) return null;
+  const items = computeTodoDelta(todos, prevTodos);
   const inProgress = todos.find((t) => t.status === "in_progress");
+  const addedCount = items.filter((i) => i.delta === "added").length;
+  const updatedCount = items.filter((i) => i.delta === "updated").length;
+  const removedCount = items.filter((i) => i.delta === "removed").length;
   const headline = inProgress
     ? `Updated todos · ${inProgress.activeForm ?? inProgress.content}`
-    : `Updated todos · ${todos.length} item${todos.length === 1 ? "" : "s"}`;
+    : addedCount + updatedCount + removedCount === 0
+      ? `Todos · ${todos.length} item${todos.length === 1 ? "" : "s"}`
+      : `Updated todos · ${[
+          addedCount && `+${addedCount}`,
+          updatedCount && `Δ${updatedCount}`,
+          removedCount && `−${removedCount}`,
+        ].filter(Boolean).join(" ")}`;
   return (
     <div className={s.todoCard}>
       <div className={s.todoCardHeader}>
@@ -1854,13 +1929,15 @@ function TodoUpdateCard({ todos }: { todos: TodoItem[] }) {
         <span className={s.todoCardLabel}>{headline}</span>
       </div>
       <ul className={s.todoList}>
-        {todos.map((t, i) => (
-          <li key={i} className={s.todoItem} data-status={t.status}>
-            <span className={s.todoMark} aria-hidden>+</span>
-            <span className={s.todoStatus} aria-label={t.status}>
-              {t.status === "completed" ? "✓" : t.status === "in_progress" ? "→" : "○"}
+        {items.map((it, i) => (
+          <li key={i} className={s.todoItem} data-status={it.status} data-delta={it.delta}>
+            <span className={s.todoMark} aria-hidden>
+              {it.delta === "added" ? "+" : it.delta === "removed" ? "−" : it.delta === "updated" ? "Δ" : " "}
             </span>
-            <span className={s.todoContent}>{t.content}</span>
+            <span className={s.todoStatus} aria-label={it.status}>
+              {it.status === "completed" ? "✓" : it.status === "in_progress" ? "→" : "○"}
+            </span>
+            <span className={s.todoContent}>{it.content}</span>
           </li>
         ))}
       </ul>

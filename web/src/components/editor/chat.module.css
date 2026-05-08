@@ -782,6 +782,20 @@
   flex-shrink: 0;
   width: 10px;
 }
+/* Color the delta marker by kind so the eye can scan the list and
+ * spot what's new/removed/changed at a glance. Carried-forward
+ * items show a blank gutter — matches Claude Design's pattern of
+ * ONLY drawing attention to what changed this turn. */
+.todoItem[data-delta="added"]   .todoMark { color: var(--brand-strong); }
+.todoItem[data-delta="updated"] .todoMark { color: var(--ink-60); }
+.todoItem[data-delta="removed"] .todoMark { color: var(--ink-50); }
+.todoItem[data-delta="removed"] .todoContent {
+  color: var(--ink-50);
+  text-decoration: line-through;
+}
+.todoItem[data-delta="unchanged"] {
+  opacity: 0.6;
+}
 .todoStatus {
   font-size: 11px;
   color: var(--ink-50);
