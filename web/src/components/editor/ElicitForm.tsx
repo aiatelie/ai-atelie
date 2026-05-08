@@ -39,7 +39,7 @@
  *      cover what the user wants.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import s from "./chat.module.css";
 import type { ElicitRequest } from "../../lib/chatStream";
 import { parsePartialQuestions, type StreamingQuestion } from "../../lib/streamingJson";
@@ -540,10 +540,17 @@ function SvgOptions({
   const labels = Array.isArray(f["x-svg-labels"]) ? f["x-svg-labels"] : [];
   const hasOther = !!f["x-other-input"];
 
-  const isOtherSelected = hasOther && value !== "" && value !== "Decide for me"
-    && Number.isNaN(Number(value));
-  const [otherActive, setOtherActive] = useState(() => isOtherSelected);
-  const otherSelected = otherActive || isOtherSelected;
+  // Index strings the agent assigned to each SVG option ("0", "1", …).
+  // Anything else is either a reserved escape-hatch label or the user's
+  // free-text from the Other input — never a numeric "42" misclassified
+  // as a valid index (which the previous `Number.isNaN` check let through
+  // when the user happened to type digits into Other).
+  const indexOptions = svgs.map((_, i) => String(i));
+  const isOtherTyped = hasOther && value !== ""
+    && !indexOptions.includes(value)
+    && value !== "Decide for me";
+  const [otherActive, setOtherActive] = useState(() => isOtherTyped);
+  const otherSelected = otherActive || isOtherTyped;
 
   return (
     <>
@@ -589,7 +596,7 @@ function SvgOptions({
           className={s.elicitOtherInput}
           autoFocus
           placeholder="Other…"
-          value={isOtherSelected ? value : ""}
+          value={isOtherTyped ? value : ""}
           onChange={(e) => { setOtherActive(true); onChange(e.target.value); }}
         />
       )}
@@ -753,9 +760,18 @@ function PasteableTextarea({
     el.style.height = Math.min(el.scrollHeight, maxPx) + "px";
   };
 
-  if (typeof requestAnimationFrame !== "undefined") {
-    requestAnimationFrame(onResize);
-  }
+  // Re-measure after the value changes (incl. external mutations like
+  // pasted images appending markdown). Using `useLayoutEffect` keeps
+  // the resize synchronous with paint so the textarea doesn't flicker
+  // between its old and new heights.
+  useLayoutEffect(() => {
+    onResize();
+    // onResize reads only `ref.current` and `maxPx` (closed over), so
+    // the deps array can stay value-only — eslint-react would warn
+    // about onResize, but it's stable enough across renders that we
+    // don't need to reify it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, maxPx]);
 
   const uploadAndAppend = async (file: File) => {
     setBusy(true);

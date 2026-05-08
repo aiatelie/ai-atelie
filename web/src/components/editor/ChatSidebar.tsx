@@ -323,7 +323,7 @@ export function ChatTab({
         onEdit={onOpenSkillsSettings ?? (() => {})}
       />
       <Composer
-        disabled={!!activeThread && (isAssistantPending(activeThread) || !!pendingElicit)}
+        disabled={!!activeThread && (isAssistantPending(activeThread) || !!pendingElicit || !!pendingElicitPreview)}
         hasQueued={!!queuedMessage}
         onSend={onSend}
         onStop={!!activeThread && isAssistantPending(activeThread) ? onStop : undefined}

@@ -1754,17 +1754,24 @@ export default function Editor() {
   const elicitQuestionCount = countElicitQuestions(pendingElicit?.request, pendingElicitPreview);
   const shouldMountElicitInTab = elicitQuestionCount >= QUESTIONS_TAB_THRESHOLD;
 
-  // Auto-activate the Questions tab the moment the form crosses the
-  // threshold (it pops into existence in the tab bar; the user
-  // shouldn't have to also click into it). When the form resolves
-  // and the tab disappears, fall back to whatever tab they were on
-  // before — or Design Files if we don't know.
+  // Auto-activate the Questions tab the moment the form FIRST crosses
+  // the threshold — but only on the false→true transition, not on
+  // every render where the threshold happens to still be met. Once
+  // active, the user is free to click back to any other tab without
+  // getting yanked back. When the form resolves (true→false), fall
+  // back to whatever tab they were on before crossing — or Design
+  // Files if we don't know.
   const previousActiveTabRef = useRef<string | null>(null);
+  const wasMountingInTabRef = useRef(false);
   useEffect(() => {
-    if (shouldMountElicitInTab && activeTabId !== QUESTIONS_TAB_ID) {
+    const prev = wasMountingInTabRef.current;
+    wasMountingInTabRef.current = shouldMountElicitInTab;
+    if (!prev && shouldMountElicitInTab) {
+      // Just crossed the threshold — bring the user to the form.
       previousActiveTabRef.current = activeTabId || null;
       setActiveTabId(QUESTIONS_TAB_ID);
-    } else if (!shouldMountElicitInTab && activeTabId === QUESTIONS_TAB_ID) {
+    } else if (prev && !shouldMountElicitInTab && activeTabId === QUESTIONS_TAB_ID) {
+      // Form resolved and the user was still on the tab — fall back.
       const fallback = previousActiveTabRef.current ?? DESIGN_FILES_TAB_ID;
       previousActiveTabRef.current = null;
       setActiveTabId(fallback);

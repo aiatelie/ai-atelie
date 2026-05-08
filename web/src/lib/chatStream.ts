@@ -281,9 +281,22 @@ export async function startStream({ streamId, body, listener, listeners }: Start
         }
         break;
       case "usage":       stream.state.usage = e.usage;       break;
-      case "error":       stream.state.error = e.message;     break;
+      case "error":
+        stream.state.error = e.message;
+        // Drop any pending elicit/preview — a late re-subscribe
+        // shouldn't replay a stale form whose backend pending
+        // promise was resolved with `cancel` by the bus's
+        // per-stream cancel path, or never resolved at all.
+        stream.state.elicit = undefined;
+        stream.state.elicitPreview = undefined;
+        break;
       case "done":
         stream.state.done = true;
+        // Same defense as `error`: if the run finished without an
+        // elicit firing (the model wrote partial JSON then aborted),
+        // don't strand a preview in StreamState.
+        stream.state.elicit = undefined;
+        stream.state.elicitPreview = undefined;
         if (stream.watchdog) {
           clearInterval(stream.watchdog);
           stream.watchdog = undefined;
@@ -507,9 +520,22 @@ export async function resumeStream(streamId: string, listeners: Listener[]): Pro
         }
         break;
       case "usage":       stream.state.usage = e.usage;       break;
-      case "error":       stream.state.error = e.message;     break;
+      case "error":
+        stream.state.error = e.message;
+        // Drop any pending elicit/preview — a late re-subscribe
+        // shouldn't replay a stale form whose backend pending
+        // promise was resolved with `cancel` by the bus's
+        // per-stream cancel path, or never resolved at all.
+        stream.state.elicit = undefined;
+        stream.state.elicitPreview = undefined;
+        break;
       case "done":
         stream.state.done = true;
+        // Same defense as `error`: if the run finished without an
+        // elicit firing (the model wrote partial JSON then aborted),
+        // don't strand a preview in StreamState.
+        stream.state.elicit = undefined;
+        stream.state.elicitPreview = undefined;
         if (stream.watchdog) {
           clearInterval(stream.watchdog);
           stream.watchdog = undefined;
