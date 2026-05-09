@@ -138,3 +138,9 @@ const server = Bun.serve({
   // inside commentEdit (RUN_MAX_DURATION_MS).
   idleTimeout: 255, // seconds; 255 is Bun's max
 });
+
+console.log(`[api] listening on http://localhost:${server.port}`);
+console.log(`[api] PROJECTS_ROOT=${ENV.PROJECTS_ROOT}`);
+console.log(`[api] SHARED_ROOT=${ENV.SHARED_ROOT}`);
+console.log(`[api] SKILLS_DIR=${ENV.SKILLS_DIR}`);
+console.log(`[api] MCP_DIR=${ENV.MCP_DIR}`);

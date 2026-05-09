@@ -159,10 +159,9 @@ export function attachStreamToThread(args: {
       entry.flushTimer = null;
     }
     if (!entry.textBuf && !entry.thinkBuf) return;
-    // Validate the target message still exists before consuming the buffer.
-    // mutateAssistant is synchronous and returns early if the archive
-    // hasn't loaded yet or the thread was deleted — clearing the buffer
-    // before that check would drop data on the floor.
+    // Validate the target message exists before consuming the buffer.
+    // mutateAssistant returns early if the archive hasn't loaded or the
+    // thread was deleted; clearing the buffer before that check drops data.
     const archive = libLoadThreads(entry.projectId);
     const threadIdx = archive.threads.findIndex((t) => t.id === entry.threadId);
     if (threadIdx === -1) return;
@@ -170,18 +169,11 @@ export function attachStreamToThread(args: {
     if (!m || m.role !== "assistant") return;
     const t = entry.textBuf; entry.textBuf = "";
     const k = entry.thinkBuf; entry.thinkBuf = "";
-    const next: AssistantMessage = {
+    mutateAssistant(entry, (m) => ({
       ...m,
       content: t ? m.content + t : m.content,
       thinking: k ? (m.thinking ?? "") + k : m.thinking,
-    };
-    if (next.content === m.content && next.thinking === m.thinking) return;
-    const messages = archive.threads[threadIdx].messages.slice();
-    messages[entry.msgIdx] = next;
-    const nextThread = { ...archive.threads[threadIdx], messages };
-    const threads = archive.threads.slice();
-    threads[threadIdx] = nextThread;
-    saveThreads(entry.projectId, { threads, activeId: archive.activeId });
+    }));
   };
 
   const scheduleFlush = () => {
