@@ -60,6 +60,9 @@ export class ProjectRepo {
         createdAt: m.createdAt,
         updatedAt: m.updatedAt,
         pages: m.pages,
+        ...(m.originProjectId != null && { originProjectId: m.originProjectId }),
+        ...(m.originProjectName != null && { originProjectName: m.originProjectName }),
+        ...(m.forkedAt != null && { forkedAt: m.forkedAt }),
       });
     }
     summaries.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -135,6 +138,51 @@ export class ProjectRepo {
       await files.write("design-canvas.jsx", input.designCanvas);
     }
     await this.writeManifest(input.id, manifest);
+    return manifest;
+  }
+
+  /** Fork a project: copy design files into a new project (skip uploads/,
+   *  thread/comment data, and .meta/ which BlobStore never exposes).
+   *  Returns the new project's manifest. */
+  async fork(sourceId: string, newId: string, newName: string): Promise<ProjectManifest> {
+    if (!ID_RE.test(sourceId)) throw new Error(`Invalid source project id: ${sourceId}`);
+    if (!ID_RE.test(newId)) throw new Error(`Invalid new project id: ${newId}`);
+    const sourceManifest = await this.getManifest(sourceId);
+    if (!sourceManifest) throw new Error(`Source project not found: ${sourceId}`);
+
+    // Create the target project directory first.
+    await this.driver.createProject(newId);
+
+    // Copy every file from source except uploads/ entries. The BlobStore
+    // list() already excludes .meta/ (dot-prefix segments are invisible),
+    // so we only need to filter the uploads/ prefix.
+    const sourceFiles = this.driver.project(sourceId).files;
+    const targetFiles = this.driver.project(newId).files;
+    const allFiles = await sourceFiles.list();
+    for (const { path } of allFiles) {
+      // Skip the uploads/ subtree — those are user-uploaded assets that
+      // belong to the thread context, not the design files.
+      if (path === "uploads" || path.startsWith("uploads/")) continue;
+      const result = await sourceFiles.read(path);
+      if (!result.ok) continue;
+      await targetFiles.write(path, result.bytes);
+    }
+
+    // Write a fresh manifest with fork provenance. Inherit pages, components,
+    // entry, and design selection from the source so the forked project opens
+    // correctly without a conversation to set it up.
+    const now = Date.now();
+    const manifest: ProjectManifest = {
+      ...sourceManifest,
+      id: newId,
+      name: newName,
+      createdAt: now,
+      updatedAt: now,
+      originProjectId: sourceId,
+      originProjectName: sourceManifest.name,
+      forkedAt: now,
+    };
+    await this.writeManifest(newId, manifest);
     return manifest;
   }
 

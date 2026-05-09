@@ -571,6 +571,58 @@ projectsRoutes.delete("/api/projects/:id", async (c) => {
   }
 });
 
+/** POST /api/projects/:id/fork — copy design files into a new project.
+ *  Body: { name?: string } — optional name override; defaults to
+ *  "{originalName} (Remix)". Increments the suffix for repeated forks:
+ *  (Remix 2), (Remix 3), etc. so names stay distinct.
+ *  Returns the new project's manifest. */
+projectsRoutes.post("/api/projects/:id/fork", async (c) => {
+  const sourceId = c.req.param("id");
+  if (!ID_RE.test(sourceId)) return c.json({ error: "Invalid project id" }, 400);
+  if (!await requireProject(sourceId)) return c.json({ error: "Project not found" }, 404);
+
+  let body: { name?: string } = {};
+  try { body = await c.req.json().catch(() => ({})); }
+  catch { body = {}; }
+
+  // Derive default name from the source manifest.
+  const sourceManifest = await getRepos().projects.getManifest(sourceId);
+  if (!sourceManifest) return c.json({ error: "Project not found" }, 404);
+
+  let newName: string;
+  if (typeof body.name === "string" && body.name.trim().length > 0) {
+    // Caller-supplied name: trim + cap at 200 chars (matches the intent of
+    // createProject's lightweight sanitization).
+    newName = body.name.trim().slice(0, 200);
+  } else {
+    // Auto-derive: strip any trailing "(Remix)" / "(Remix N)" and re-apply
+    // with the next counter so repeated forks don't collide.
+    const base = sourceManifest.name.replace(/\s*\(Remix(?:\s+\d+)?\)\s*$/, "").trim();
+    // Find existing projects whose names are "base (Remix)" or "base (Remix N)".
+    const existingNames = new Set(
+      (await getRepos().projects.list()).map((p) => p.name),
+    );
+    const candidate = `${base} (Remix)`;
+    if (!existingNames.has(candidate)) {
+      newName = candidate;
+    } else {
+      // Try (Remix 2), (Remix 3), … until we find a free slot.
+      let n = 2;
+      while (existingNames.has(`${base} (Remix ${n})`)) n++;
+      newName = `${base} (Remix ${n})`;
+    }
+  }
+
+  const newId = newProjectId();
+  try {
+    const manifest = await getRepos().projects.fork(sourceId, newId, newName);
+    broadcastShared("projects");
+    return c.json({ id: newId, manifest });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
 /* ─── /p/:id/* — sandbox content serve ─── */
 
 projectsRoutes.get("/p/:id/__reload", async (c) => {
