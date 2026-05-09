@@ -22,7 +22,7 @@ import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
-import { kindOf, verbOf, type ToolKind } from "../../lib/toolKind";
+import { kindOf, normalizeName, verbOf, type ToolKind } from "../../lib/toolKind";
 import { smartLabel } from "../../lib/smartLabel";
 
 /* KindIcon — 12px inline SVG icons for tool-call chips. Lucide-style
@@ -1665,11 +1665,14 @@ function basename(path: string): string {
  *  prose is the headline, "what I did" is a subtle footer the user can
  *  drill into if they're curious — but during the work itself, every
  *  tool call is visible feedback that something is happening. */
-/** Find the previous occurrence of a tool with the same name before index `i`. */
+/** Find the previous occurrence of a tool with the same name before index `i`.
+ *  Uses `normalizeName` to strip the `mcp__<server>__` prefix so that
+ *  `mcp__foo__todowrite` and `TodoWrite` are treated as the same tool,
+ *  matching the behaviour of `kindOf`/`verbOf`. */
 function prevToolOf(tools: ToolCall[], i: number): ToolCall | null {
-  const name = tools[i].name.toLowerCase();
+  const name = normalizeName(tools[i].name);
   for (let j = i - 1; j >= 0; j--) {
-    if (tools[j].name.toLowerCase() === name) return tools[j];
+    if (normalizeName(tools[j].name) === name) return tools[j];
   }
   return null;
 }
@@ -1895,7 +1898,10 @@ type TodoItem = {
   priority?: string;
 };
 
-/** Normalise a raw todos value into a typed array (or null on failure). */
+/** Normalise a raw todos value into a typed array (or null on failure).
+ *  Returns `[]` for a valid but empty array so that a "clear all" turn
+ *  (N items → 0) renders all previous items as removed rows in TodoDelta
+ *  instead of falling through to the raw JSON dump. */
 function parseTodos(raw: unknown): TodoItem[] | null {
   if (!Array.isArray(raw)) return null;
   const items: TodoItem[] = [];
@@ -1904,13 +1910,19 @@ function parseTodos(raw: unknown): TodoItem[] | null {
       items.push(item as TodoItem);
     }
   }
-  return items.length > 0 ? items : null;
+  return items;
 }
 
 /** Diff two todo lists and render with +/− prefix for changed items.
  *  Items are matched by `id` when available, otherwise by `content`.
  *  Unchanged items render without a prefix. Added items show "+",
- *  removed items show "−". */
+ *  removed items show "−".
+ *
+ *  Ordering: removed items are interleaved at their original position in
+ *  the previous snapshot rather than being hoisted to the top. We walk
+ *  `prev` index by index, emitting each item (as "removed" or "unchanged"),
+ *  then append any items that are new in `next`. This mirrors how a classic
+ *  line-diff reads — deletions appear where they used to be. */
 function TodoDelta({ prev, next }: { prev: TodoItem[] | null; next: TodoItem[] }) {
   type DiffRow = { prefix: "+" | "−" | " "; item: TodoItem };
   const rows: DiffRow[] = [];
@@ -1919,20 +1931,22 @@ function TodoDelta({ prev, next }: { prev: TodoItem[] | null; next: TodoItem[] }
     // No previous snapshot — show all items as-is (no diff possible).
     for (const item of next) rows.push({ prefix: " ", item });
   } else {
-    // Build a lookup of the previous state by id (or content as fallback).
+    // Build lookups keyed by id (or content as fallback).
     const prevById = new Map<string, TodoItem>();
     for (const p of prev) prevById.set(p.id ?? p.content, p);
     const nextById = new Map<string, TodoItem>();
     for (const n of next) nextById.set(n.id ?? n.content, n);
 
-    // Items in prev but not next → removed.
-    for (const [key, p] of prevById) {
-      if (!nextById.has(key)) rows.push({ prefix: "−", item: p });
+    // Walk prev in order: emit each item as "unchanged" or "removed",
+    // preserving its original position in the visual output.
+    for (const p of prev) {
+      const key = p.id ?? p.content;
+      rows.push({ prefix: nextById.has(key) ? " " : "−", item: p });
     }
-    // Items in next — unchanged or added.
+    // Append items that are new in next (added after prev was captured).
     for (const n of next) {
       const key = n.id ?? n.content;
-      rows.push({ prefix: prevById.has(key) ? " " : "+", item: n });
+      if (!prevById.has(key)) rows.push({ prefix: "+", item: n });
     }
   }
 
@@ -1941,6 +1955,7 @@ function TodoDelta({ prev, next }: { prev: TodoItem[] | null; next: TodoItem[] }
       {rows.map((row, i) => (
         <div
           key={i}
+          aria-label={row.prefix === "+" ? `added: ${row.item.content}` : row.prefix === "−" ? `removed: ${row.item.content}` : row.item.content}
           className={`${s.todoDeltaRow} ${row.prefix === "+" ? s.todoDeltaAdded : row.prefix === "−" ? s.todoDeltaRemoved : ""}`}
         >
           <span className={s.todoDeltaPrefix} aria-hidden="true">{row.prefix === " " ? " " : row.prefix}</span>
@@ -1962,7 +1977,7 @@ function ToolDetail({ tool, prevTool }: { tool: ToolCall; prevTool?: ToolCall | 
   // TodoWrite — render a diff against the previous TodoWrite snapshot
   // instead of the raw JSON dump. Card title "Updated todos" replaces
   // the generic "Edit · <file>" label for a much cleaner presentation.
-  if (name === "TodoWrite" || name.toLowerCase() === "todowrite") {
+  if (name.toLowerCase() === "todowrite") {
     const nextTodos = parseTodos(input.todos);
     const prevTodos = prevTool ? parseTodos(prevTool.input?.todos) : null;
     if (nextTodos) {

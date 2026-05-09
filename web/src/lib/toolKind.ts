@@ -65,8 +65,9 @@ const KIND_BY_NAME: Record<string, ToolKind> = {
 /** Strip MCP prefix (`mcp__server__tool` → `tool`) and lowercase
  *  for case-insensitive lookup. Tools from real Claude (`Read`),
  *  Kimi (`read_file`), OpenCode (`shell`), and MCP
- *  (`mcp__ask-user__ask_user`) all converge on the same lookup key. */
-function normalizeName(name: string): string {
+ *  (`mcp__ask-user__ask_user`) all converge on the same lookup key.
+ *  Exported so callers like `prevToolOf` can stay in lock-step. */
+export function normalizeName(name: string): string {
   const stripped = name.replace(/^mcp__[^_]+__/, "");
   return stripped.toLowerCase();
 }
