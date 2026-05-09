@@ -51,6 +51,11 @@ function isSafeStreamId(s: unknown): s is string {
  *  subprocesses, not to throttle thoughtful work. */
 const RUN_MAX_DURATION_MS = 10 * 60 * 1000;
 
+/** Reject request bodies larger than 10MB. The dominant payload component
+ *  is the base64-encoded screenshotDataUrl; a 4K retina canvas produces
+ *  ~2MB. 10MB gives headroom for multiple large image attachments. */
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
+
 async function runAgent(
   payload: CommentPayload,
   send: (event: string, data: unknown) => void,
@@ -65,8 +70,55 @@ async function runAgent(
 export const commentEditRoutes = new Hono();
 
 commentEditRoutes.post("/api/comment-edit", async (c) => {
+  // Strict body size enforcement: pre-check content-length so honest
+  // clients are rejected before we allocate, then stream-read with a
+  // running byte count so chunked or headerless transfers can't bypass
+  // the cap by omitting the header. Hono's c.req.json() buffers the
+  // entire body regardless of size; doing it ourselves means oversized
+  // payloads never inflate into JS objects.
+  const tooLarge413 = () => c.json(
+    { error: `Request body too large (max ${MAX_BODY_BYTES / 1024 / 1024}MB)` },
+    413,
+  );
+  const declaredLen = c.req.header("content-length");
+  if (declaredLen) {
+    const n = parseInt(declaredLen, 10);
+    if (Number.isFinite(n) && n > MAX_BODY_BYTES) return tooLarge413();
+  }
+  let rawBody: ArrayBuffer;
+  try {
+    const r = c.req.raw;
+    if (r.body && typeof ReadableStream !== "undefined") {
+      const reader = r.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        total += value.byteLength;
+        if (total > MAX_BODY_BYTES) {
+          reader.cancel();
+          return tooLarge413();
+        }
+      }
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+      rawBody = merged.buffer;
+    } else {
+      // Fallback path (no ReadableStream): we already pre-checked
+      // content-length above. If it was missing here we have no choice
+      // but to buffer and check after — the alternative is rejecting
+      // every headerless request, which would break legitimate clients.
+      rawBody = await r.arrayBuffer();
+      if (rawBody.byteLength > MAX_BODY_BYTES) return tooLarge413();
+    }
+  } catch {
+    return c.text("Failed to read request body", 400);
+  }
   let payload: CommentPayload;
-  try { payload = await c.req.json(); }
+  try { payload = JSON.parse(new TextDecoder().decode(rawBody)) as CommentPayload; }
   catch { return c.text("Bad JSON", 400); }
   if (!payload.comment || !payload.route) {
     return c.text("Missing route or comment", 400);
@@ -273,7 +325,11 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
       // events stick around for BUFFER_GC_MS — covers the slow-reload
       // case where the user reloads AFTER the run completed but before
       // they could see the result.
-      const terminal: "done" | "error" = abortController.signal.aborted ? "error" : "done";
+      // When the client disconnected (grace timer fired), the abort was
+      // triggered by us, not by a genuine failure. Classify as "done" so
+      // the ring-buffer GC retains termination events for replay.
+      const terminal: "done" | "error" =
+        abortController.signal.aborted && !clientAborted ? "error" : "done";
       markRunFinished(requestStreamId, terminal);
       unregisterStreamEmitter(requestStreamId);
       try { await heartbeat; } catch { /* ignore */ }

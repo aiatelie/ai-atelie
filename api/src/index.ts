@@ -77,31 +77,22 @@ app.route("/", commentEditRoutes);
 app.route("/", artifactsRoutes);
 app.route("/", projectsRoutes);
 
+// Centralised error handler — ensures every 500 carries a request-id and
+// a structured payload so the SPA can surface meaningful diagnostics. Without
+// this, Hono falls back to a bare text response that loses the correlation id.
+app.onError((err, c) => {
+  const requestId = c.get("requestId" as never) as string | undefined;
+  console.error(`[api] ${requestId ?? "-"} unhandled error:`, err instanceof Error ? err.message : String(err));
+  return c.json(
+    { error: err instanceof Error ? err.message : String(err), requestId },
+    { status: 500 } as any,
+  );
+});
+
 // One-time startup work — clean stale diagnostic screenshots.
 purgeOldScreenshots().catch((err) => {
   console.warn("[boot] purgeOldScreenshots failed (non-fatal):", err?.message ?? err);
 });
-
-/* Explicitly call Bun.serve so we control the server lifecycle. The
- * `export default { fetch }` auto-serve pattern interacts badly with
- * `bun --watch` (the runtime wrapper double-spawns on reload, causing
- * EADDRINUSE on every file save). Running serve ourselves means the
- * port is released cleanly via server.stop(true) on SIGTERM/SIGINT
- * before --watch spawns the next process. */
-const server = Bun.serve({
-  port: ENV.API_PORT,
-  fetch: app.fetch,
-  // Generous timeout so SSE streams (multi-minute kimi turns) aren't
-  // killed by Bun's default. The per-request hard cap is enforced
-  // inside commentEdit (RUN_MAX_DURATION_MS).
-  idleTimeout: 255, // seconds; 255 is Bun's max
-});
-
-console.log(`[api] listening on http://localhost:${server.port}`);
-console.log(`[api] PROJECTS_ROOT=${ENV.PROJECTS_ROOT}`);
-console.log(`[api] SHARED_ROOT=${ENV.SHARED_ROOT}`);
-console.log(`[api] SKILLS_DIR=${ENV.SKILLS_DIR}`);
-console.log(`[api] MCP_DIR=${ENV.MCP_DIR}`);
 
 /* ─── Lifecycle ─────────────────────────────────────────────────
  *
@@ -125,13 +116,38 @@ function shutdown(reason: string, exit: boolean) {
   abortAllRuns(reason);
   // Children listen for SIGTERM via their per-spawn onAbort handlers,
   // which the abortAllRuns above triggered. Give them a moment to flush;
-  // then SIGTERM directly anything still running.
+  // then SIGTERM directly anything still running. No .unref() — we MUST
+  // wait so child processes are killed before the process exits.
   setTimeout(() => {
     killAllChildren();
     if (exit) process.exit(0);
-  }, 500).unref?.();
+  }, 500);
 }
 
+// Register signal handlers BEFORE Bun.serve so we never have a
+// window where a SIGTERM/SIGINT kills the process without cleanup,
+// orphaning agent subprocesses.
 for (const sig of ["SIGTERM", "SIGINT"] as const) {
   process.on(sig, () => shutdown(sig, /*exit*/ true));
 }
+
+/* Explicitly call Bun.serve so we control the server lifecycle. The
+ * `export default { fetch }` auto-serve pattern interacts badly with
+ * `bun --watch` (the runtime wrapper double-spawns on reload, causing
+ * EADDRINUSE on every file save). Running serve ourselves means the
+ * port is released cleanly via server.stop(true) on SIGTERM/SIGINT
+ * before --watch spawns the next process. */
+const server = Bun.serve({
+  port: ENV.API_PORT,
+  fetch: app.fetch,
+  // Generous timeout so SSE streams (multi-minute kimi turns) aren't
+  // killed by Bun's default. The per-request hard cap is enforced
+  // inside commentEdit (RUN_MAX_DURATION_MS).
+  idleTimeout: 255, // seconds; 255 is Bun's max
+});
+
+console.log(`[api] listening on http://localhost:${server.port}`);
+console.log(`[api] PROJECTS_ROOT=${ENV.PROJECTS_ROOT}`);
+console.log(`[api] SHARED_ROOT=${ENV.SHARED_ROOT}`);
+console.log(`[api] SKILLS_DIR=${ENV.SKILLS_DIR}`);
+console.log(`[api] MCP_DIR=${ENV.MCP_DIR}`);

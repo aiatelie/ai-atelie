@@ -44,7 +44,7 @@
 
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { ENV, screenshotDirFor } from "../../env.ts";
+import { screenshotDirFor } from "../../env.ts";
 import { preparePromptForPayload, UUID_RE } from "../../services/promptBuilder.ts";
 import { registerChild, unregisterChild } from "../../services/runRegistry.ts";
 import type { AgentAdapter, AgentProbe } from "../types.ts";

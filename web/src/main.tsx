@@ -5,6 +5,24 @@ import "./index.css";
 // Side-effect import: applies the persisted theme attr on <html> before
 // React mounts, so the first paint matches the user's choice.
 import "./lib/theme";
+
+// Dev-only: silence the benign "ResizeObserver loop completed with
+// undelivered notifications" warning that browsers emit when a resize
+// callback triggers another layout. Vite's HMR overlay promotes it to
+// "Unhandled error" and floods the console, hiding real failures.
+// Capture phase + stopImmediatePropagation runs before Vite's bubble-
+// phase listener; preventDefault keeps it out of the browser console.
+// Substring match leaves every other error untouched, so the overlay
+// still surfaces real bugs. Tree-shaken from prod by import.meta.env.DEV.
+if (import.meta.env.DEV) {
+  window.addEventListener("error", (e) => {
+    if (e.message && e.message.includes("ResizeObserver loop")) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  }, true);
+}
+
 import Editor from "./routes/Editor";
 import Projects from "./routes/Projects";
 import { hydrateProjectFromServer } from "./lib/projects";
