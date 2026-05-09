@@ -46,6 +46,14 @@ export type ProjectManifest = {
    *  Optional and additive: existing manifests without this field are
    *  treated as the default selection. */
   design?: ProjectDesignSelection;
+  /** Fork/remix provenance. Set when this project was forked from another.
+   *  All three fields are optional so existing manifests stay valid. */
+  originProjectId?: string;
+  /** The source project's name at fork time — stored in case the source is
+   *  later renamed or deleted. */
+  originProjectName?: string;
+  /** Unix-ms timestamp of when the fork was created. */
+  forkedAt?: number;
 };
 
 export type ProjectSummary = {
@@ -54,6 +62,9 @@ export type ProjectSummary = {
   createdAt: number;
   updatedAt: number;
   pages: ProjectManifestPage[];
+  originProjectId?: string;
+  originProjectName?: string;
+  forkedAt?: number;
 };
 
 export type SandboxFileKind = "page" | "component" | "asset" | "config";

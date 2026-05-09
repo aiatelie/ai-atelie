@@ -21,6 +21,7 @@ import { Skeleton } from "../components/feedback";
 import {
   createProject,
   deleteProject,
+  forkProject,
   setActiveProject,
   updateProject,
   useProjects,
@@ -62,6 +63,13 @@ export default function Projects() {
     // bigger composer, starter chips) and the same intake prompt fires
     // automatically.
     navigate("/editor?fresh=1");
+  };
+
+  /** Fork a project and navigate directly into the forked editor. */
+  const handleFork = async (sourceId: string) => {
+    const p = await forkProject(sourceId);
+    setActiveProject(p.id);
+    navigate("/editor");
   };
 
   return (
@@ -118,6 +126,7 @@ export default function Projects() {
                     onOpen={() => openProject(p.id)}
                     onDelete={() => setDeleting(p)}
                     onRename={(next) => updateProject(p.id, { name: next })}
+                    onFork={() => handleFork(p.id)}
                   />
                 ))}
               </div>
@@ -187,18 +196,20 @@ function EmptyState() {
 }
 
 function ProjectCard({
-  project, onOpen, onDelete, onRename,
+  project, onOpen, onDelete, onRename, onFork,
 }: {
   project: Project;
   onOpen: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
+  onFork: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(project.name);
 
   const tabsLabel = `${project.openTabs.length} tab${project.openTabs.length === 1 ? "" : "s"}`;
   const lastUpdated = formatTime(project.updatedAt);
+  const isRemix = !!project.originProjectId;
 
   if (editing) {
     return (
@@ -226,6 +237,14 @@ function ProjectCard({
   return (
     <div className={s.card} onClick={onOpen}>
       <div className={s.cardName}>{project.name}</div>
+      {isRemix && (
+        <div className={s.cardRemixMeta}>
+          <span className={s.cardRemixBadge}>Remix</span>
+          {project.originProjectName && (
+            <span className={s.cardRemixFrom}>from {project.originProjectName}</span>
+          )}
+        </div>
+      )}
       <div className={s.tabsList}>
         {project.openTabs.slice(0, 5).map((t) => (
           <span key={t.id} className={s.tabPill}>{t.label}</span>
@@ -240,6 +259,16 @@ function ProjectCard({
         <span>{lastUpdated}</span>
       </div>
       <div className={s.cardActions}>
+        <button
+          className={s.cardActBtn}
+          data-testid="project-fork"
+          onClick={(e) => { e.stopPropagation(); onFork(); }}
+          title="Fork project"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zM12.5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zM8 10.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zM4.25 4v.065A3.501 3.501 0 0 0 7.25 7.43V9.07a3.501 3.501 0 0 0-2.25 3.18V12.5a.75.75 0 0 0 1.5 0v-.25a2 2 0 0 1 4 0v.25a.75.75 0 0 0 1.5 0v-.25a3.501 3.501 0 0 0-2.25-3.18V7.43A3.501 3.501 0 0 0 11.75 4.065V4a.75.75 0 0 0-1.5 0v.065a2 2 0 0 1-1.5 1.868V4.5a.75.75 0 0 0-1.5 0v1.433A2 2 0 0 1 5.75 4.065V4a.75.75 0 0 0-1.5 0z"/>
+          </svg>
+        </button>
         <button
           className={s.cardActBtn}
           onClick={(e) => { e.stopPropagation(); setEditing(true); }}

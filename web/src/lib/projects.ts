@@ -45,6 +45,10 @@ export type Project = {
   openTabs: ProjectTab[];
   /** Active tab id (within openTabs). */
   activeTabId?: string;
+  /** Fork provenance — set when this project was forked from another. */
+  originProjectId?: string;
+  originProjectName?: string;
+  forkedAt?: number;
 };
 
 type Store = {
@@ -58,6 +62,9 @@ type ServerProject = {
   createdAt: number;
   updatedAt: number;
   pages: Array<{ file: string; label: string; title?: string }>;
+  originProjectId?: string;
+  originProjectName?: string;
+  forkedAt?: number;
 };
 
 const KEY = "projects.v1";
@@ -232,6 +239,11 @@ function mergeServerWithLocal(server: ServerProject[]): Store {
 
   const merged: Project[] = server.map((sp) => {
     const lp = localById.get(sp.id);
+    const forkFields = {
+      ...(sp.originProjectId != null && { originProjectId: sp.originProjectId }),
+      ...(sp.originProjectName != null && { originProjectName: sp.originProjectName }),
+      ...(sp.forkedAt != null && { forkedAt: sp.forkedAt }),
+    };
     if (lp) {
       return {
         id: sp.id,
@@ -240,6 +252,7 @@ function mergeServerWithLocal(server: ServerProject[]): Store {
         updatedAt: sp.updatedAt,
         openTabs: lp.openTabs,
         activeTabId: lp.activeTabId,
+        ...forkFields,
       };
     }
     const tabs = tabsFromManifestPages(sp.pages);
@@ -250,6 +263,7 @@ function mergeServerWithLocal(server: ServerProject[]): Store {
       updatedAt: sp.updatedAt,
       openTabs: tabs,
       activeTabId: tabs[0]?.id,
+      ...forkFields,
     };
   });
 
@@ -431,6 +445,58 @@ export async function createProject(name: string, activeSkills?: string[]): Prom
   cache = { projects: [...s.projects, p], activeProjectId: p.id };
   write(cache);
   trackEvent("project_create", { name }, p.id);
+  return p;
+}
+
+/** Fork a project into a new one. POSTs to /api/projects/:id/fork, then
+ *  adds the result to the local cache (same race-safe pattern as createProject).
+ *  Returns the newly-created Project so the caller can navigate to it. */
+export async function forkProject(sourceId: string, name?: string): Promise<Project> {
+  const body: { name?: string } = {};
+  if (name) body.name = name;
+  const r = await fetch(`/api/projects/${encodeURIComponent(sourceId)}/fork`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error((j as { error?: string }).error ?? `Server returned ${r.status}`);
+  }
+  const { id, manifest } = (await r.json()) as {
+    id: string;
+    manifest: {
+      name: string;
+      pages: Array<{ file: string; label: string }>;
+      originProjectId?: string;
+      originProjectName?: string;
+      forkedAt?: number;
+    };
+  };
+  const tabs: ProjectTab[] = manifest.pages.map((pg) => ({
+    id: uuid(),
+    label: pg.label,
+    route: pg.file,
+    display: "frame",
+  }));
+  const now = Date.now();
+  const p: Project = {
+    id,
+    name: manifest.name,
+    createdAt: now,
+    updatedAt: now,
+    openTabs: tabs,
+    activeTabId: tabs[0]?.id,
+    ...(manifest.originProjectId != null && { originProjectId: manifest.originProjectId }),
+    ...(manifest.originProjectName != null && { originProjectName: manifest.originProjectName }),
+    ...(manifest.forkedAt != null && { forkedAt: manifest.forkedAt }),
+  };
+  // Discard any inflight stale GET before we mutate cache.
+  invalidateInflightFetch();
+  const s = bootCache();
+  cache = { projects: [...s.projects, p], activeProjectId: p.id };
+  write(cache);
+  trackEvent("project_fork", { sourceId }, p.id);
   return p;
 }
 
