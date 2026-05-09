@@ -306,10 +306,12 @@ function formatTime(ts: number): string {
 }
 
 /** Grid of curated prompt examples. Each card shows a live HTML preview
- *  rendered inside a sandboxed iframe (`sandbox="allow-scripts"` so any
- *  inline event handlers in the snippet behave, but cookies / parent-
- *  window access stay locked off), the prompt text in italic quote
- *  style, and a brand-coloured pill that fires `onUse(example)`. */
+ *  rendered inside a sandboxed iframe. The sandbox is intentionally
+ *  locked down to `sandbox=""` (no scripts, no same-origin) because the
+ *  current `previewHtml` snippets are pure static HTML/CSS. If examples
+ *  ever need JS (e.g. animated previews), widen the sandbox explicitly
+ *  with an allowlist (e.g. `sandbox="allow-scripts"`) and add a comment
+ *  explaining why — never leave the door open by default. */
 function ExamplesGrid({
   examples,
   onUse,
@@ -318,11 +320,19 @@ function ExamplesGrid({
   onUse: (e: Example) => void | Promise<void>;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [errorId, setErrorId] = useState<string | null>(null);
   const handle = async (ex: Example) => {
     if (busyId) return;
     setBusyId(ex.id);
+    setErrorId(null);
     try {
       await onUse(ex);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      // Surface the failure inline so the user isn't left with a silently
+      // reset button and no feedback (compare handleCreate in the same file).
+      alert(`Could not create project: ${msg}`);
+      setErrorId(ex.id);
     } finally {
       setBusyId(null);
     }
@@ -340,7 +350,10 @@ function ExamplesGrid({
               className={s.examplePreviewIframe}
               title={`${ex.title} preview`}
               tabIndex={-1}
-              sandbox="allow-scripts"
+              // No scripts needed — pure static HTML/CSS previews. See the
+              // ExamplesGrid comment above before widening this allowlist.
+              sandbox=""
+              loading="lazy"
               srcDoc={`<!doctype html><html><head><meta charset="utf-8"/><style>html,body{margin:0;height:100%;overflow:hidden}</style></head><body>${ex.previewHtml}</body></html>`}
             />
           </div>
@@ -354,7 +367,7 @@ function ExamplesGrid({
               disabled={busyId !== null}
               aria-label={`Use the "${ex.title}" prompt`}
             >
-              {busyId === ex.id ? "Creating…" : "Use this prompt"}
+              {busyId === ex.id ? "Creating…" : errorId === ex.id ? "Try again" : "Use this prompt"}
             </button>
           </div>
         </article>

@@ -29,6 +29,7 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import s from "../components/editor/editor.module.css";
 import type { SelectedInfo } from "../components/editor/Inspector";
 import { CommentBubble, type CommentTarget, type Attachment } from "../components/editor/CommentBubble";
+import { loadModelId } from "../components/editor/ModelPicker";
 import { CommentPins } from "../components/editor/CommentPins";
 import { LeftPanel } from "../components/editor/LeftPanel";
 import { FileBrowserView, PageIcon, ComponentIcon, AssetIcon } from "../components/editor/FileBrowserView";
@@ -1553,7 +1554,9 @@ export default function Editor() {
     // to queueOrSend's preamble check (both setters run in the same
     // batch above, but reading state in the same render is racy).
     const id = setTimeout(() => {
-      queueOrSend(pendingAutoPrompt, [], "");
+      // Use the user's persisted model choice (or the global default) so
+      // the auto-fired turn goes through the same model as a typed message.
+      queueOrSend(pendingAutoPrompt, [], loadModelId());
       setPendingAutoPrompt(null);
     }, 0);
     return () => clearTimeout(id);
