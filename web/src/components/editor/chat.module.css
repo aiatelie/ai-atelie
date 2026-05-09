@@ -570,6 +570,37 @@
   color: var(--brand-warm-strong, var(--brand));
   background: var(--brand-warm-soft);
 }
+
+/* Live status feed — accumulates tool entries as the model works.
+ *  Stays visible alongside streaming text so the user sees a complete
+ *  log of every action, not just the last one. Each entry gets a
+ *  sparkler dot and the verb+target label. */
+.liveStatusFeed {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--ink-06);
+}
+.liveStatusFeedEntry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-55);
+  font-family: var(--font-mono);
+  padding: 2px 0;
+}
+.liveStatusDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.liveStatusFeedEntry:last-child .liveStatusDot { opacity: 0.35; }
 .text > p:first-child { margin-top: 0; }
 .text > p:last-child { margin-bottom: 0; }
 .dim { color: var(--ink-40); font-style: italic; }

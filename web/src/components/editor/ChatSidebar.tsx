@@ -1510,21 +1510,25 @@ function Bubble({
          *  bubble, the prose was a tiny line at the bottom) and the UI
          *  felt like a build log instead of a conversation.
          *
-         *  When pending AND no text has streamed yet, we show a live
-         *  status line ("Reading X…") so the user always sees forward
-         *  motion — without it the bubble shows just dots + tool chips
-         *  and feels frozen. */}
+         *  The live status feed (tool actions) stays visible alongside
+         *  streaming text so the user always sees forward motion — not
+         *  just the last tool name, but every action since the turn
+         *  began. When tools are active and we're pending, the feed
+         *  renders above the prose as a mini activity log. */}
         {m.error ? (
           <div className={s.errText}>⚠ {m.error}</div>
         ) : (
           <div className={s.text}>
+            {m.tools.length > 0 && m.pending && (
+              <LiveStatus tools={m.tools} since={m.ts} />
+            )}
             {m.content ? (
               <AssistantContent text={m.content} />
-            ) : m.pending ? (
-              <LiveStatus tools={m.tools} since={m.ts} />
-            ) : (
+            ) : m.tools.length === 0 && m.pending ? (
+              <LiveStatus tools={[]} since={m.ts} />
+            ) : !m.content && !m.pending ? (
               <span className={s.dim}>(no response)</span>
-            )}
+            ) : null}
             {m.pending && m.content && <span className={s.caret} />}
           </div>
         )}
@@ -1733,31 +1737,39 @@ function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean })
 }
 
 /** Live status while the assistant is pending and no text has streamed
- *  yet. Mirrors the latest tool's label ("Reading RouteMap.jsx") above
- *  the streaming dots, so the user always knows what the model is
- *  doing right now even when it hasn't yet sent prose. As soon as text
- *  starts streaming, this gets replaced by the actual content (handled
- *  by the parent's m.content check). */
+ *  yet. When tools are active, renders every tool call as a separate
+ *  feed entry so the user sees a complete log of what the model is doing
+ *  — not just the single most recent action. The feed stays visible
+ *  alongside streaming text (the parent handles the render decision). */
 function LiveStatus({ tools, since }: { tools: ToolCall[]; since?: number }) {
-  const last = tools.length > 0 ? tools[tools.length - 1] : null;
-  // Derive verb from the tool's semantic kind so this preview stays
-  // aligned with the chip color below it (single source of truth in
-  // toolKind.ts). The tool's label still drives the file/target text.
-  let verb = "Working";
-  let target = "";
-  if (last) {
-    verb = KIND_VERB[kindOf(last.name)];
-    const label = last.label || "";
-    const m = label.match(/^[^·]+·\s*(.+)$/);
-    target = m ? m[1].trim() : "";
+  if (tools.length === 0) {
+    return (
+      <div className={s.liveStatus}>
+        <StreamingDots />
+        <span className={s.liveStatusLabel}>Thinking…</span>
+        {since !== undefined && <ElapsedSince since={since} />}
+      </div>
+    );
   }
   return (
-    <div className={s.liveStatus}>
-      <StreamingDots />
-      <span className={s.liveStatusLabel}>
-        {target ? `${verb} ${target}…` : "Thinking…"}
-      </span>
-      {since !== undefined && <ElapsedSince since={since} />}
+    <div className={s.liveStatusFeed}>
+      {tools.map((tool, i) => {
+        const verb = KIND_VERB[kindOf(tool.name)];
+        const label = tool.label || "";
+        const m = label.match(/^[^·]+·\s*(.+)$/);
+        const target = m ? m[1].trim() : "";
+        return (
+          <div key={i} className={s.liveStatusFeedEntry}>
+            <span className={s.liveStatusDot} />
+            <span>
+              {target ? `${verb} ${target}` : tool.label || tool.name}
+            </span>
+          </div>
+        );
+      })}
+      {since !== undefined && (
+        <ElapsedSince since={since} />
+      )}
     </div>
   );
 }
