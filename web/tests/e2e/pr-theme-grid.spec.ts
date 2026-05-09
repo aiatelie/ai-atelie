@@ -94,7 +94,7 @@ test.describe("PR theme + design — visual evidence", () => {
   for (const designId of ["violet", "vinyl", "phosphor", "hornet"] as const) {
     test(`projects route reskins under ${designId} design`, async ({ page }) => {
       await page.goto(`${BASE_URL}/projects`, { waitUntil: "domcontentloaded" });
-      await expect(page.locator("input[placeholder*='YouTube banner']")).toBeVisible();
+      await expect(page.getByTestId("create-project-name")).toBeVisible();
       await page.evaluate((id) => {
         localStorage.setItem("editor.design", id);
         document.documentElement.setAttribute("data-theme", id);
@@ -109,7 +109,7 @@ test.describe("PR theme + design — visual evidence", () => {
 
   test("baseline — no design, theme=light", async ({ page }) => {
     await page.goto(`${BASE_URL}/projects`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator("input[placeholder*='YouTube banner']")).toBeVisible();
+    await expect(page.getByTestId("create-project-name")).toBeVisible();
     await page.evaluate(() => {
       localStorage.removeItem("editor.design");
       document.documentElement.removeAttribute("data-theme");

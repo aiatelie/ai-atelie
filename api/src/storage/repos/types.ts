@@ -32,6 +32,29 @@ export type ProjectDesignSelection = {
   design_md?: string;
 };
 
+/** Project type and the answers to the type-specific questions on the
+ *  new-project form. Optional and additive: existing manifests without
+ *  this field are treated as `kind: "other"`.
+ *
+ *  The agent reads this on first turn (via the intake preamble) so the
+ *  initial conversation lands grounded in what the user said they were
+ *  making. None of these values are load-bearing for the canvas/runtime
+ *  — they steer the AI, not the file scaffold. */
+export type ProjectTypeContext = {
+  /** Discriminant from the new-project form's tab choice. */
+  kind: "prototype" | "slide_deck" | "template" | "other";
+  /** Prototype tab: which fidelity the user picked. */
+  prototypeFidelity?: "wireframe" | "high_fidelity";
+  /** Slide-deck tab: speaker-notes vs. less-text-on-slides preference. */
+  slideStyle?: "speaker_notes" | "less_text";
+  /** From-template tab: the chosen template id (empty when no templates exist). */
+  templateId?: string;
+  /** Free-form design system identifier. "none" when the user picked the
+   *  default placeholder; otherwise a string the agent treats as a
+   *  reference to attach later. */
+  designSystem?: string;
+};
+
 export type ProjectManifest = {
   schemaVersion: 1;
   id: string;
@@ -46,6 +69,9 @@ export type ProjectManifest = {
    *  Optional and additive: existing manifests without this field are
    *  treated as the default selection. */
   design?: ProjectDesignSelection;
+  /** Type the user picked on the new-project form, plus any tab-specific
+   *  follow-up answers. Optional — older manifests omit it. */
+  projectType?: ProjectTypeContext;
 };
 
 export type ProjectSummary = {

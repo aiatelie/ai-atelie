@@ -8,7 +8,7 @@
 
 import { basename } from "node:path";
 import type { StorageDriver } from "../driver.ts";
-import type { ProjectManifest, ProjectSummary } from "./types.ts";
+import type { ProjectManifest, ProjectSummary, ProjectTypeContext } from "./types.ts";
 
 const ID_RE = /^[A-Za-z0-9_-]+$/;
 
@@ -36,6 +36,12 @@ export type CreateProjectInput = {
    *  design-aesthetic-presets, design-critique, design-md-author) —
    *  matches what NewProjectForm shows pre-checked. */
   activeSkills?: string[];
+  /** Project type + tab-specific answers from the new-project form.
+   *  Persisted on the manifest so the agent's intake preamble can
+   *  reference what the user said they were making. Optional — direct
+   *  API callers (CLI, tests) can omit it and get a manifest without
+   *  the `projectType` field. */
+  projectType?: ProjectTypeContext;
 };
 
 const DEFAULT_ACTIVE_SKILLS = [
@@ -126,6 +132,7 @@ export class ProjectRepo {
       components,
       entry: "index.html",
       design: { active_skills },
+      ...(input.projectType ? { projectType: input.projectType } : {}),
     };
     await this.driver.createProject(input.id);
     const files = this.driver.project(input.id).files;

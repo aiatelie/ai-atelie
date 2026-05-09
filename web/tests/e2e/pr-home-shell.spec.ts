@@ -27,14 +27,14 @@ test.describe("PR home shell — visual evidence", () => {
 
   test("home renders in default theme", async ({ page }) => {
     await page.goto("/projects", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("input[placeholder*='YouTube banner']")).toBeVisible();
+    await expect(page.getByTestId("create-project-name")).toBeVisible();
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${SHOT_DIR}/01-default.png`, fullPage: true });
   });
 
   test("home renders in retro theme", async ({ page }) => {
     await page.goto("/projects", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("input[placeholder*='YouTube banner']")).toBeVisible();
+    await expect(page.getByTestId("create-project-name")).toBeVisible();
     await page.evaluate(() => {
       document.documentElement.dataset.theme = "retro";
     });
@@ -44,7 +44,7 @@ test.describe("PR home shell — visual evidence", () => {
 
   test("home renders in dark theme", async ({ page }) => {
     await page.goto("/projects", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("input[placeholder*='YouTube banner']")).toBeVisible();
+    await expect(page.getByTestId("create-project-name")).toBeVisible();
     await page.evaluate(() => {
       document.documentElement.dataset.theme = "dark";
     });
@@ -64,8 +64,8 @@ test.describe("PR home shell — visual evidence", () => {
     );
 
     await page.goto("/projects", { waitUntil: "domcontentloaded" });
-    await page.locator("input[placeholder*='YouTube banner']").fill("Evidence Run");
-    await page.getByRole("button", { name: /^create$/i }).click();
+    await page.getByTestId("create-project-name").fill("Evidence Run");
+    await page.getByTestId("create-project-submit").click();
 
     const alert = page.getByRole("alert");
     await expect(alert).toBeVisible({ timeout: 5_000 });

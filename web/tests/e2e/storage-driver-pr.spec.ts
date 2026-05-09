@@ -56,10 +56,10 @@ test.describe("storage-driver-and-project-list PR evidence", () => {
       await page.goto("/", { waitUntil: "domcontentloaded" });
       await page.getByRole("button", { name: /new project/i }).first().click();
 
-      const nameInput = page.locator("input[placeholder*='YouTube banner']");
+      const nameInput = page.getByTestId("create-project-name");
       await expect(nameInput).toBeVisible();
       await nameInput.fill("storage-driver evidence");
-      await page.getByRole("button", { name: /^create$/i }).click();
+      await page.getByTestId("create-project-submit").click();
 
       await page.waitForURL(/\/editor.*p=p_/, { timeout: 15_000 });
       const url = page.url();

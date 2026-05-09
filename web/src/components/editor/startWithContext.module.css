@@ -1,0 +1,118 @@
+/* StartWithContextCard.tsx — empty-thread hint card.
+ *
+ * Sits above the composer when the active thread has no messages yet.
+ * Vertical card: title + subtitle, then a 2×2 grid of pill buttons each
+ * carrying a tinted circular icon. Tones are pulled from the existing
+ * theme tokens — no new colors are introduced. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 12px 8px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-lg);
+  background: var(--surface-warm, var(--surface));
+  box-shadow: var(--shadow-card);
+}
+
+.title {
+  font: var(--weight-semi) var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  letter-spacing: -0.005em;
+}
+
+.subtitle {
+  font: var(--weight-regular) var(--text-xs) var(--font-system);
+  color: var(--ink-65);
+  line-height: 1.45;
+}
+
+.pillGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 7px;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  border-radius: 999px;
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  color: var(--ink-92);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s, transform 0.08s;
+  min-height: 36px;
+  width: 100%;
+  max-width: 220px;
+  /* Min-width here is the spec's "~200px"; auto-fit will shrink the
+   * grid down to a single column on narrow panes without breaking the
+   * pill's internal layout. */
+  min-width: 0;
+}
+.pill:hover {
+  border-color: var(--ink-20);
+  background: var(--ink-04);
+}
+.pill:active {
+  transform: translateY(0.5px);
+}
+.pill:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.pillIcon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Tone tints. Each pulls from the existing palette — no new tokens. */
+.pill[data-tone="orange"] .pillIcon {
+  /* Brand rust at low alpha — matches the rest of the warm chrome. */
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
+  color: var(--brand-strong, var(--brand));
+}
+.pill[data-tone="green"] .pillIcon {
+  background: color-mix(in srgb, var(--success, #2f9d6c) 18%, transparent);
+  color: var(--success, #2f9d6c);
+}
+.pill[data-tone="blue"] .pillIcon {
+  background: color-mix(in srgb, var(--info, #3b6ea5) 18%, transparent);
+  color: var(--info, #3b6ea5);
+}
+.pill[data-tone="purple"] .pillIcon {
+  background: color-mix(in srgb, var(--accent-purple, #8a5cb8) 22%, transparent);
+  color: var(--accent-purple, #8a5cb8);
+}
+
+.pillLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-04);
+  color: var(--ink-65);
+  font: var(--weight-regular) var(--text-xs) var(--font-system);
+  line-height: 1.45;
+}
