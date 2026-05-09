@@ -22,7 +22,7 @@ import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
-import { kindOf, KIND_VERB, type ToolKind } from "../../lib/toolKind";
+import { kindOf, verbOf, type ToolKind } from "../../lib/toolKind";
 import { smartLabel } from "../../lib/smartLabel";
 
 /* KindIcon — 12px inline SVG icons for tool-call chips. Lucide-style
@@ -1658,49 +1658,115 @@ function basename(path: string): string {
  *    appearing one-by-one to know the model is making forward progress.
  *  • Once the turn finishes:
  *      - 1–2 calls → small inline pills beneath the prose
- *      - 3+ calls  → collapsed "N steps · file, file +rest" summary
+ *      - 3+ calls  → collapsed verb-grouped summary: "Writing ×3" with
+ *        individual file names nested inside each group card.
  *
  *  This is what makes the bubble feel like a conversation: the AI's
  *  prose is the headline, "what I did" is a subtle footer the user can
  *  drill into if they're curious — but during the work itself, every
  *  tool call is visible feedback that something is happening. */
+/** Find the previous occurrence of a tool with the same name before index `i`. */
+function prevToolOf(tools: ToolCall[], i: number): ToolCall | null {
+  const name = tools[i].name.toLowerCase();
+  for (let j = i - 1; j >= 0; j--) {
+    if (tools[j].name.toLowerCase() === name) return tools[j];
+  }
+  return null;
+}
+
 function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean }) {
   const [open, setOpen] = useState(false);
   if (tools.length === 0) return null;
   // Pending OR few tools: always expanded.
-  const expanded = pending || tools.length <= 2 || open;
   if (pending || tools.length <= 2) {
     return (
       <div className={s.tools} data-compact={tools.length <= 2 ? "true" : "false"}>
-        {tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+        {tools.map((t, i) => <ToolChip key={i} tool={t} prevTool={prevToolOf(tools, i)} />)}
       </div>
     );
   }
-  // Done + 3+ tools: collapsible summary footer.
-  const fileSet = new Set<string>();
-  for (const t of tools) {
-    const m = (t.label || "").match(/·\s+(.+)/);
-    if (m && m[1]) fileSet.add(m[1].trim());
+  // Done + 3+ tools: collapsible verb-grouped summary footer.
+  // Group tools by their semantic verb so "Writing ×3" reads more clearly
+  // than "N steps" which gives no signal about what kind of work was done.
+  // Keep the global index so prevToolOf can look back across the full list.
+  const groups = new Map<string, { tool: ToolCall; globalIdx: number }[]>();
+  for (let i = 0; i < tools.length; i++) {
+    const t = tools[i];
+    const v = verbOf(t.name);
+    const existing = groups.get(v);
+    if (existing) existing.push({ tool: t, globalIdx: i });
+    else groups.set(v, [{ tool: t, globalIdx: i }]);
   }
-  const files = Array.from(fileSet);
-  const summary = files.length > 0
-    ? `${tools.length} steps · ${files.slice(0, 2).join(", ")}${files.length > 2 ? ` +${files.length - 2}` : ""}`
-    : `${tools.length} steps`;
+  // Build a compact summary: "Writing ×3, Reading ×2" (up to 2 verb groups).
+  const groupEntries = Array.from(groups.entries());
+  const summaryParts = groupEntries.slice(0, 2).map(([verb, entries]) =>
+    entries.length > 1 ? `${verb} ×${entries.length}` : verb
+  );
+  if (groupEntries.length > 2) summaryParts.push(`+${groupEntries.length - 2} more`);
+  const summary = summaryParts.join(", ");
+
   return (
     <div className={s.toolFooter}>
       <button
         type="button"
         className={s.toolFooterToggle}
         onClick={() => setOpen((o) => !o)}
-        aria-expanded={expanded}
-        title={expanded ? "Collapse steps" : "Show all steps"}
+        aria-expanded={open}
+        title={open ? "Collapse steps" : "Show all steps"}
       >
-        <span>{expanded ? "Hide steps" : summary}</span>
-        <span className={s.toolFooterChev} aria-hidden="true">{expanded ? "▴" : "▾"}</span>
+        <span>{open ? "Hide steps" : summary}</span>
+        <span className={s.toolFooterChev} aria-hidden="true">{open ? "▴" : "▾"}</span>
       </button>
-      {expanded && (
-        <div className={s.tools} data-compact="false">
-          {tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+      {open && (
+        <div className={s.toolVerbGroups}>
+          {groupEntries.map(([verb, entries]) => (
+            <VerbGroup key={verb} verb={verb} entries={entries} allTools={tools} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A single verb group card inside the expanded tool footer.
+ *  Header: "Writing ×3" (or just "Writing" for 1 call).
+ *  Body: each tool rendered as its normal ToolChip, indented. */
+function VerbGroup({
+  verb,
+  entries,
+  allTools,
+}: {
+  verb: string;
+  entries: { tool: ToolCall; globalIdx: number }[];
+  allTools: ToolCall[];
+}) {
+  const [open, setOpen] = useState(true);
+  const label = entries.length > 1 ? `${verb} ×${entries.length}` : verb;
+  // Extract file names for the collapsed preview line.
+  const fileNames = entries
+    .map(({ tool: t }) => { const m = (t.label || "").match(/·\s+(.+)$/); return m?.[1]?.trim() ?? ""; })
+    .filter(Boolean);
+  return (
+    <div className={s.verbGroup}>
+      <button
+        type="button"
+        className={s.verbGroupHeader}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className={s.verbGroupLabel}>{label}</span>
+        {!open && fileNames.length > 0 && (
+          <span className={s.verbGroupFiles}>
+            {fileNames.slice(0, 3).join(", ")}{fileNames.length > 3 ? ` +${fileNames.length - 3}` : ""}
+          </span>
+        )}
+        <span className={s.toolFooterChev} aria-hidden="true">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className={s.verbGroupBody}>
+          {entries.map(({ tool: t, globalIdx }) => (
+            <ToolChip key={globalIdx} tool={t} prevTool={prevToolOf(allTools, globalIdx)} />
+          ))}
         </div>
       )}
     </div>
@@ -1715,22 +1781,24 @@ function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean })
  *  by the parent's m.content check). */
 function LiveStatus({ tools, since }: { tools: ToolCall[]; since?: number }) {
   const last = tools.length > 0 ? tools[tools.length - 1] : null;
-  // Derive verb from the tool's semantic kind so this preview stays
-  // aligned with the chip color below it (single source of truth in
-  // toolKind.ts). The tool's label still drives the file/target text.
+  // Use per-tool semantic verb (verbOf) so the status reflects exactly
+  // what the agent is doing: "Writing styles.css…" vs generic "Editing".
   let verb = "Working";
   let target = "";
   if (last) {
-    verb = KIND_VERB[kindOf(last.name)];
-    const label = last.label || "";
-    const m = label.match(/^[^·]+·\s*(.+)$/);
-    target = m ? m[1].trim() : "";
+    verb = verbOf(last.name);
+    // TodoWrite status is self-contained — no file target needed.
+    if (last.name.toLowerCase() !== "todowrite") {
+      const label = last.label || "";
+      const m = label.match(/^[^·]+·\s*(.+)$/);
+      target = m ? m[1].trim() : "";
+    }
   }
   return (
     <div className={s.liveStatus}>
       <StreamingDots />
       <span className={s.liveStatusLabel}>
-        {target ? `${verb} ${target}…` : "Thinking…"}
+        {target ? `${verb} ${target}…` : verb !== "Working" ? `${verb}…` : "Thinking…"}
       </span>
       {since !== undefined && <ElapsedSince since={since} />}
     </div>
@@ -1762,11 +1830,16 @@ function ElapsedSince({ since }: { since: number }) {
 
 /** Expandable tool-call chip: collapsed it looks like the old pill
  *  ("Read · index.html"); clicked, it opens an accordion panel showing
- *  the tool's input — file paths, diffs, commands, image previews. */
-function ToolChip({ tool }: { tool: ToolCall }) {
+ *  the tool's input — file paths, diffs, commands, image previews.
+ *  `prevTool` is the previous call of the same tool type in this turn —
+ *  used by TodoWrite delta rendering to diff against the last snapshot. */
+function ToolChip({ tool, prevTool }: { tool: ToolCall; prevTool?: ToolCall | null }) {
   const [open, setOpen] = useState(false);
   const hasDetails = !!tool.input && Object.keys(tool.input).length > 0;
   const kind = kindOf(tool.name);
+  // For TodoWrite, show a friendlier chip label than the raw "TodoWrite" name.
+  const isTodoWrite = tool.name.toLowerCase() === "todowrite";
+  const chipLabel = isTodoWrite ? "Updated todos" : tool.label;
   return (
     <div className={`${s.toolChipWrap} ${open ? s.toolChipOpen : ""}`}>
       <button
@@ -1780,12 +1853,12 @@ function ToolChip({ tool }: { tool: ToolCall }) {
         title={hasDetails ? (open ? "Hide details" : "Show details") : undefined}
       >
         <KindIcon kind={kind} />
-        <span className={s.toolChipLabel}>{tool.label}</span>
+        <span className={s.toolChipLabel}>{chipLabel}</span>
         {hasDetails && <span className={s.toolChipChev} aria-hidden="true">▾</span>}
       </button>
       {open && hasDetails && (
         <div className={s.toolDetail}>
-          <ToolDetail tool={tool} />
+          <ToolDetail tool={tool} prevTool={prevTool} />
           {typeof tool.result === "string" && tool.result.length > 0 && (
             <ToolResultBlock result={tool.result} isError={tool.isError} />
           )}
@@ -1814,10 +1887,92 @@ function ToolResultBlock({ result, isError }: { result: string; isError?: boolea
   );
 }
 
-function ToolDetail({ tool }: { tool: ToolCall }) {
+/** Shape of a single todo item as Claude writes it. */
+type TodoItem = {
+  id?: string;
+  content: string;
+  status?: string;
+  priority?: string;
+};
+
+/** Normalise a raw todos value into a typed array (or null on failure). */
+function parseTodos(raw: unknown): TodoItem[] | null {
+  if (!Array.isArray(raw)) return null;
+  const items: TodoItem[] = [];
+  for (const item of raw) {
+    if (item && typeof item === "object" && typeof (item as Record<string, unknown>).content === "string") {
+      items.push(item as TodoItem);
+    }
+  }
+  return items.length > 0 ? items : null;
+}
+
+/** Diff two todo lists and render with +/− prefix for changed items.
+ *  Items are matched by `id` when available, otherwise by `content`.
+ *  Unchanged items render without a prefix. Added items show "+",
+ *  removed items show "−". */
+function TodoDelta({ prev, next }: { prev: TodoItem[] | null; next: TodoItem[] }) {
+  type DiffRow = { prefix: "+" | "−" | " "; item: TodoItem };
+  const rows: DiffRow[] = [];
+
+  if (!prev) {
+    // No previous snapshot — show all items as-is (no diff possible).
+    for (const item of next) rows.push({ prefix: " ", item });
+  } else {
+    // Build a lookup of the previous state by id (or content as fallback).
+    const prevById = new Map<string, TodoItem>();
+    for (const p of prev) prevById.set(p.id ?? p.content, p);
+    const nextById = new Map<string, TodoItem>();
+    for (const n of next) nextById.set(n.id ?? n.content, n);
+
+    // Items in prev but not next → removed.
+    for (const [key, p] of prevById) {
+      if (!nextById.has(key)) rows.push({ prefix: "−", item: p });
+    }
+    // Items in next — unchanged or added.
+    for (const n of next) {
+      const key = n.id ?? n.content;
+      rows.push({ prefix: prevById.has(key) ? " " : "+", item: n });
+    }
+  }
+
+  return (
+    <div className={s.todoDelta}>
+      {rows.map((row, i) => (
+        <div
+          key={i}
+          className={`${s.todoDeltaRow} ${row.prefix === "+" ? s.todoDeltaAdded : row.prefix === "−" ? s.todoDeltaRemoved : ""}`}
+        >
+          <span className={s.todoDeltaPrefix} aria-hidden="true">{row.prefix === " " ? " " : row.prefix}</span>
+          <span className={s.todoDeltaContent}>{row.item.content}</span>
+          {row.item.status && row.item.status !== "pending" && (
+            <span className={s.todoDeltaStatus}>{row.item.status}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ToolDetail({ tool, prevTool }: { tool: ToolCall; prevTool?: ToolCall | null }) {
   const input = tool.input ?? {};
   const filePath = pickFilePath(input);
   const name = tool.name;
+
+  // TodoWrite — render a diff against the previous TodoWrite snapshot
+  // instead of the raw JSON dump. Card title "Updated todos" replaces
+  // the generic "Edit · <file>" label for a much cleaner presentation.
+  if (name === "TodoWrite" || name.toLowerCase() === "todowrite") {
+    const nextTodos = parseTodos(input.todos);
+    const prevTodos = prevTool ? parseTodos(prevTool.input?.todos) : null;
+    if (nextTodos) {
+      return (
+        <TodoDelta prev={prevTodos} next={nextTodos} />
+      );
+    }
+    // Fallback if todos isn't the expected shape.
+    return <CodeBlock label="Input" code={JSON.stringify(input, null, 2)} />;
+  }
 
   // Read — show the file path; if it's an image, render an inline preview.
   if (name === "Read" && filePath) {
