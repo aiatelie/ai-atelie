@@ -70,7 +70,7 @@ const server = new Server(
 const TOOL = {
   name: "ask_user",
   description:
-    "Ask the user a structured question and wait for a response. Use this when you need clarification BEFORE building anything — pick from discrete options, get a number/range, ask for free text, or request a file. Returns { action: 'accept'|'decline'|'cancel', content?: { answer: ... } }. Always prefer this over plain prose questions when the answer fits a structured shape.",
+    "Ask the user a structured question and wait for a response. Use this when you need clarification BEFORE building anything — pick from discrete options, get a number/range, ask for free text, or request a file. Returns { action: 'accept'|'decline'|'cancel', content?: { answer: ... } }. Always prefer this over plain prose questions when the answer fits a structured shape. NOTE: for `kind: 'enum'` with `multi: true`, the server automatically appends two extra options — 'Decide for me' and 'Explore a few options' — to the choices list (skipped if already present). Your prompt may rely on these; the user can select one of them instead of a concrete option to delegate the decision back to you.",
   inputSchema: {
     type: "object",
     properties: {

@@ -1277,6 +1277,13 @@
   border-color: var(--brand-strong);
 }
 .elicitOption input { accent-color: var(--brand); }
+/* Thin rule separating concrete options from the escape-hatch row
+ * ("Decide for me" / "Explore a few options") in multi-select forms. */
+.elicitEscapeDivider {
+  height: 1px;
+  background: var(--ink-10);
+  margin: 2px 0;
+}
 .elicitInput, .elicitTextarea {
   width: 100%;
   border: 1px solid var(--ink-15);

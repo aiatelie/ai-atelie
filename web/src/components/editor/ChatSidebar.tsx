@@ -128,6 +128,12 @@ export type ChatMessage =
        *  onboarding intake prompt — Claude reads it but the user
        *  shouldn't see a wall of system instructions in their chat. */
       hidden?: boolean;
+      /** Synthetic bubbles (e.g. the answer-echo injected after an elicitation
+       *  form is submitted) are UI-only: the SDK already received the answer
+       *  through the elicit response and must not receive it again. Suppress
+       *  edit/delete affordances so the user cannot accidentally resend this
+       *  text as a new SDK turn. */
+      synthetic?: boolean;
       ts: number;
     }
   | {
@@ -1431,7 +1437,11 @@ function Bubble({
                 ↺ Restore
               </button>
             )}
-            {onEditMessage && (
+            {/* Synthetic bubbles (e.g. elicitation answer-echo) are UI-only — the
+                SDK already received the answer through the elicit response. Suppress
+                edit/delete so the user cannot accidentally fire the echo text back
+                into the SDK as a new turn. */}
+            {!m.synthetic && onEditMessage && (
               <button
                 className={s.deleteMsgBtn}
                 onClick={() => onEditMessage(threadId, index, m.content)}
@@ -1442,15 +1452,17 @@ function Bubble({
                 </svg>
               </button>
             )}
-            <button
-              className={s.deleteMsgBtn}
-              onClick={() => onDeleteMessage(threadId, index)}
-              title="Delete this message and everything after it"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-            </button>
+            {!m.synthetic && (
+              <button
+                className={s.deleteMsgBtn}
+                onClick={() => onDeleteMessage(threadId, index)}
+                title="Delete this message and everything after it"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            )}
           </div>
           <div className={s.bubbleMetaRight}>
             <time dateTime={new Date(m.ts).toISOString()} title={fullDateTime(m.ts)}>

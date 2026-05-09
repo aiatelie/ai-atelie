@@ -443,6 +443,13 @@ export default function Editor() {
   // sidebar can auto-switch to that thread — otherwise the form floats
   // above an "empty" body when the user is on a different thread.
   const [pendingElicit, setPendingElicit] = useState<{ request: ElicitRequest; threadId: string } | null>(null);
+  // When the user submits an elicitation form, pendingElicit clears
+  // synchronously but the matching tool_result SSE event may arrive a few
+  // hundred ms later. During that window the elicitBuilding predicate would
+  // briefly re-evaluate to true and show the "Generating questions…" pill.
+  // We track the tool-use id that was just submitted so elicitBuilding can
+  // suppress the pill until the tool_result lands (or the turn ends).
+  const [lastSubmittedElicitId, setLastSubmittedElicitId] = useState<string | null>(null);
   // One-slot composer queue. When the user types into a disabled
   // composer (assistant still streaming or an elicit form is open) and
   // hits Enter, the message lands here instead of dropping. A useEffect
@@ -794,6 +801,9 @@ export default function Editor() {
       if (e.type === "turnId") { updateAssistant((m) => ({ ...m, turnId: e.turnId })); return; }
       if (e.type === "elicit") {
         setPendingElicit({ request: e.request, threadId });
+        // A new question arrived — the previously-submitted id is no longer
+        // relevant; clear the flicker-guard so the pill can show if needed.
+        setLastSubmittedElicitId(null);
         // Force-switch the active thread to whichever one the model is
         // currently asking from. Stale switching shouldn't strand a form
         // on a thread the user can't see.
@@ -804,6 +814,7 @@ export default function Editor() {
       if (e.type === "error") {
         flushText();
         setPendingElicit(null);
+        setLastSubmittedElicitId(null);
         updateAssistant((m) => ({ ...m, error: e.message, pending: false }));
         notifyTurnComplete({
           status: "failure",
@@ -816,6 +827,7 @@ export default function Editor() {
       if (e.type === "done") {
         flushText();
         setPendingElicit(null);
+        setLastSubmittedElicitId(null);
         updateAssistant((m) => {
           if (!m.content && !m.error && m.tools.length > 0) {
             const files = uniqueFiles(m.tools);
@@ -1191,7 +1203,12 @@ export default function Editor() {
   // True while the model has called ask_user (the tool chip is visible)
   // but the form schema hasn't arrived from the SSE yet. We show a
   // "Generating questions…" pill in the sidebar so the user knows to wait.
-  const elicitBuilding = lastIsPending && !pendingElicit && (() => {
+  //
+  // Flicker guard: when the user submits, pendingElicit clears synchronously
+  // but the matching tool_result SSE may arrive ~200ms later. During that
+  // window the predicate below would briefly re-evaluate to true. We suppress
+  // it while lastSubmittedElicitId is set (i.e. between submit and turn-end).
+  const elicitBuilding = lastIsPending && !pendingElicit && !lastSubmittedElicitId && (() => {
     const last = activeThread?.messages[activeThread.messages.length - 1];
     if (!last || last.role !== "assistant") return false;
     return last.tools.some(
@@ -2321,10 +2338,18 @@ export default function Editor() {
           pendingElicit={pendingElicit?.request ?? null}
           elicitBuilding={elicitBuilding}
           onElicitResolved={(echoText) => {
-            // Inject a synthetic "You" message so the user can scroll
-            // back and see exactly what they told the agent.
+            // UI-only echo: inject a synthetic "You" bubble so the user can
+            // scroll back and see exactly what they told the agent. The SDK
+            // already received the answer through the elicit response — we
+            // must NOT re-send this text as a new SDK turn. The `synthetic`
+            // flag on the message suppresses edit/delete affordances in the
+            // bubble renderer.
             if (pendingElicit) {
               const echo = echoText ?? "Skipped all questions — proceed with your best judgment.";
+              // Stamp the submitted elicit id so elicitBuilding suppresses the
+              // "Generating questions…" pill during the ~200ms window between
+              // this synchronous clear and the matching tool_result SSE landing.
+              setLastSubmittedElicitId(pendingElicit.request.id);
               setThreads((prev) => prev.map((t) => {
                 if (t.id !== pendingElicit.threadId) return t;
                 const echoMsg: ChatMessage = {
@@ -2332,6 +2357,7 @@ export default function Editor() {
                   content: echo,
                   ts: Date.now(),
                   hidden: false,
+                  synthetic: true,
                 };
                 return { ...t, messages: [...t.messages, echoMsg] };
               }));

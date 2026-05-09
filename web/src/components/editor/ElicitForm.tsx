@@ -250,16 +250,49 @@ function RadioGroup({
   );
 }
 
+/** Escape-hatch labels injected by ask-user-server.mjs into every multi-select.
+ *  Selecting one of these clears all concrete options (and vice versa) so the
+ *  model never receives an incoherent answer like ["Gritty raw textural", "Decide for me"]. */
+const ESCAPE_HATCHES = new Set(["Decide for me", "Explore a few options"]);
+
 function CheckboxGroup({
   options, value, onChange,
 }: { options: string[]; value: string[]; onChange: (v: string[]) => void }) {
   const toggle = (opt: string) => {
-    if (value.includes(opt)) onChange(value.filter((v) => v !== opt));
-    else onChange([...value, opt]);
+    const isHatch = ESCAPE_HATCHES.has(opt);
+    if (value.includes(opt)) {
+      // Deselect it.
+      onChange(value.filter((v) => v !== opt));
+    } else if (isHatch) {
+      // Selecting an escape hatch → clear every concrete option and every
+      // other hatch so exactly one hatch is selected.
+      onChange([opt]);
+    } else {
+      // Selecting a concrete option → deselect all escape hatches.
+      onChange([...value.filter((v) => !ESCAPE_HATCHES.has(v)), opt]);
+    }
   };
+
+  // Separate concrete options from escape hatches for visual grouping.
+  const concreteOpts = options.filter((o) => !ESCAPE_HATCHES.has(o));
+  const hatchOpts    = options.filter((o) =>  ESCAPE_HATCHES.has(o));
+
   return (
     <div className={s.elicitOptions}>
-      {options.map((opt) => (
+      {concreteOpts.map((opt) => (
+        <label key={opt} className={`${s.elicitOption} ${value.includes(opt) ? s.elicitOptionOn : ""}`}>
+          <input
+            type="checkbox"
+            checked={value.includes(opt)}
+            onChange={() => toggle(opt)}
+          />
+          <span>{opt}</span>
+        </label>
+      ))}
+      {hatchOpts.length > 0 && concreteOpts.length > 0 && (
+        <div className={s.elicitEscapeDivider} />
+      )}
+      {hatchOpts.map((opt) => (
         <label key={opt} className={`${s.elicitOption} ${value.includes(opt) ? s.elicitOptionOn : ""}`}>
           <input
             type="checkbox"
