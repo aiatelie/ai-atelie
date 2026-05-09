@@ -141,8 +141,17 @@ export type SharedScope = {
   kv: JsonKv;
 };
 
+/** Design systems are user-authored brand definitions, reusable across
+ *  projects. Stored as one JSON file per DS in a dedicated directory
+ *  next to projects/ (web/design_systems/<id>.json). The KV interface
+ *  fits naturally — each DS is a versioned JSON blob keyed by id. */
+export type DesignSystemsScope = {
+  kv: JsonKv;
+};
+
 export interface StorageDriver {
   shared(): SharedScope;
+  designSystems(): DesignSystemsScope;
   project(id: string): ProjectScope;
   /** Project list. Driver decides how — fs scan, SELECT, etc.
    *  Returns ids only; repos read manifests via `project(id).files`. */

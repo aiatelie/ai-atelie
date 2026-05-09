@@ -6,6 +6,7 @@
 
 import { getStorage } from "../index.ts";
 import type { StorageDriver } from "../driver.ts";
+import { DesignSystemRepo } from "./designSystems.ts";
 import { ProjectFilesRepo } from "./files.ts";
 import { ProjectMetaRepo } from "./meta.ts";
 import { ProjectRepo } from "./projects.ts";
@@ -16,6 +17,7 @@ export type Repositories = {
   projectMeta: ProjectMetaRepo;
   projectFiles: ProjectFilesRepo;
   shared: SharedRepo;
+  designSystems: DesignSystemRepo;
 };
 
 let _repos: Repositories | null = null;
@@ -26,6 +28,7 @@ function build(driver: StorageDriver): Repositories {
     projectMeta: new ProjectMetaRepo(driver),
     projectFiles: new ProjectFilesRepo(driver),
     shared: new SharedRepo(driver),
+    designSystems: new DesignSystemRepo(driver),
   };
 }
 
@@ -44,7 +47,10 @@ export { ProjectRepo } from "./projects.ts";
 export { ProjectMetaRepo } from "./meta.ts";
 export { ProjectFilesRepo } from "./files.ts";
 export { SharedRepo } from "./shared.ts";
+export { DesignSystemRepo } from "./designSystems.ts";
 export type {
+  DesignSystem,
+  DesignSystemSummary,
   ProjectManifest,
   ProjectManifestComponent,
   ProjectManifestPage,

@@ -19,6 +19,7 @@ export function getStorage(): StorageDriver {
     _driver = createFsDriver({
       projectsRoot: ENV.PROJECTS_ROOT,
       sharedRoot: ENV.SHARED_ROOT,
+      designSystemsRoot: ENV.DESIGN_SYSTEMS_ROOT,
     });
   }
   return _driver;

@@ -15,6 +15,7 @@ import type {
   BlobReadTextResult,
   BlobStat,
   BlobStore,
+  DesignSystemsScope,
   ETag,
   JsonKv,
   KvChange,
@@ -280,6 +281,7 @@ function createMemoryAppendLog(): AppendLog & { __destroy(): void } {
 export function createMemoryDriver(): StorageDriver {
   const projects = new Map<string, ProjectScope & { __destroy(): void }>();
   let shared: SharedScope | null = null;
+  let designSystems: DesignSystemsScope | null = null;
 
   function buildProjectScope(): ProjectScope & { __destroy(): void } {
     const meta = createMemoryJsonKv();
@@ -297,6 +299,11 @@ export function createMemoryDriver(): StorageDriver {
     shared(): SharedScope {
       if (!shared) shared = { kv: createMemoryJsonKv() };
       return shared;
+    },
+
+    designSystems(): DesignSystemsScope {
+      if (!designSystems) designSystems = { kv: createMemoryJsonKv() };
+      return designSystems;
     },
 
     project(id: string): ProjectScope {

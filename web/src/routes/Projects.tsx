@@ -17,6 +17,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import s from "../components/projects/projects.module.css";
 import { NewProjectForm } from "../components/projects/NewProjectForm";
 import { ConfirmDialog } from "../components/projects/ConfirmDialog";
+import { DesignSystemsPanel } from "../components/projects/DesignSystemsPanel";
 import { Skeleton } from "../components/feedback";
 import {
   createProject,
@@ -26,12 +27,19 @@ import {
   useProjects,
   type Project,
 } from "../lib/projects";
+import { useDesignSystems } from "../lib/designSystems";
+
+type HomeTab = "projects" | "design-systems";
 
 export default function Projects() {
   const { all, loading } = useProjects();
+  const { all: designSystems } = useDesignSystems();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [deleting, setDeleting] = useState<Project | null>(null);
+  // Tab state — purely UI, never persisted. Refresh always starts on
+  // Projects so users don't get stranded on a tab they were sampling.
+  const [tab, setTab] = useState<HomeTab>("projects");
 
   // `?journey-mode=1` filters the home grid to the demo project + any
   // project whose name starts with "Journey · ". The journey suite
@@ -53,9 +61,13 @@ export default function Projects() {
    *  thrown error bubble up so it can render the inline alert. The
    *  form also threads through the user's aesthetic-skill picks at
    *  creation time so the manifest persists their initial intent. */
-  const handleCreate = async (name: string, activeSkills: string[]) => {
+  const handleCreate = async (
+    name: string,
+    activeSkills: string[],
+    designSystemId?: string,
+  ) => {
     const trimmed = name.trim() || "Untitled project";
-    const p = await createProject(trimmed, activeSkills);
+    const p = await createProject(trimmed, activeSkills, designSystemId);
     setActiveProject(p.id);
     // Land directly in the editor. When the project has no real files
     // yet, the editor renders an empty-project chat layout (no canvas,
@@ -90,8 +102,9 @@ export default function Projects() {
             <button
               type="button"
               className={s.tab}
-              data-active="true"
-              aria-current="page"
+              data-active={tab === "projects" ? "true" : "false"}
+              aria-current={tab === "projects" ? "page" : undefined}
+              onClick={() => setTab("projects")}
             >
               Projects
               {!loading && (
@@ -100,10 +113,25 @@ export default function Projects() {
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              className={s.tab}
+              data-active={tab === "design-systems" ? "true" : "false"}
+              aria-current={tab === "design-systems" ? "page" : undefined}
+              onClick={() => setTab("design-systems")}
+              data-testid="home-tab-design-systems"
+            >
+              Design systems
+              <span className={s.tabCount} aria-label={`${designSystems.length} design systems`}>
+                {designSystems.length}
+              </span>
+            </button>
           </nav>
 
           <div className={s.mainBody}>
-            {visible.length === 0 ? (
+            {tab === "design-systems" ? (
+              <DesignSystemsPanel />
+            ) : visible.length === 0 ? (
               loading ? (
                 <LoadingSkeleton />
               ) : (

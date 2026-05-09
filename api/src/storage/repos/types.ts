@@ -46,6 +46,39 @@ export type ProjectManifest = {
    *  Optional and additive: existing manifests without this field are
    *  treated as the default selection. */
   design?: ProjectDesignSelection;
+  /** Bound design system id (user-authored brand definition). When set,
+   *  the agent receives the DS contents as a high-priority preamble on
+   *  every turn. Reusable across projects — DSes are stored under
+   *  SHARED_ROOT/design_systems/, not in the project itself. */
+  designSystemId?: string;
+};
+
+/** A user-authored Design System — the brand definition Claude follows
+ *  on every design turn. Reusable across projects.
+ *
+ *  Stored as one JSON blob per DS in SHARED_ROOT/design_systems/<id>.json.
+ *  The published flag is informational today; future revs may use it to
+ *  gate exposure to imported templates / co-workers.
+ */
+export type DesignSystem = {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  /** User-written brand definition — colors, typography, voice, component
+   *  rules. Free-form Markdown. Pasted verbatim into the agent's system
+   *  prompt when the DS is bound to a project. */
+  description: string;
+  published: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type DesignSystemSummary = {
+  id: string;
+  name: string;
+  published: boolean;
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type ProjectSummary = {
