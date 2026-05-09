@@ -374,14 +374,82 @@
   padding: 22px 28px 32px;
 }
 
+/* Tab row — wraps the tab strip and the search/sort toolbar so they
+ * sit on the same horizontal line separated by flex space-between. */
+.tabrow {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ink-08);
+  min-height: 52px;
+  padding: 0 28px;
+  gap: 12px;
+}
+
 /* Tab strip — single tab today, designed so future tabs slot in. */
 .tabstrip {
   display: flex;
   align-items: stretch;
   gap: 2px;
-  padding: 0 28px;
-  min-height: 52px;
-  border-bottom: 1px solid var(--ink-08);
+}
+
+/* Search + sort toolbar — sits to the right of the tab strip. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font: var(--text-sm) var(--font-system);
+  color: var(--ink-92);
+  outline: none;
+  width: 256px;
+  min-height: 30px;
+}
+.searchInput::placeholder { color: var(--ink-50); }
+.searchInput:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-color: var(--ink-15);
+}
+/* Native clear button on type="search" — keep it subtle. */
+.searchInput::-webkit-search-cancel-button { cursor: pointer; }
+
+.sortSelect {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 6px 28px 6px 10px;
+  font: var(--text-sm) var(--font-system);
+  color: var(--ink-92);
+  outline: none;
+  cursor: pointer;
+  min-height: 30px;
+  /* Chevron via background SVG so appearance:none keeps borders. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.sortSelect:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-color: var(--ink-15);
+}
+
+/* Empty filtered state — inline message, not the full hero. */
+.noResults {
+  font-size: var(--text-md);
+  color: var(--ink-65);
+  margin: 0;
+  padding: 4px 0;
 }
 .tab {
   appearance: none;
