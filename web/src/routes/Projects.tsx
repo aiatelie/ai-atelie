@@ -28,11 +28,30 @@ import {
   type Project,
 } from "../lib/projects";
 
+type SortKey = "recently-used" | "recently-created" | "name";
+
+const SORT_KEY = "projects.sortPref";
+
+function readSortPref(): SortKey {
+  if (typeof window === "undefined") return "recently-used";
+  try {
+    const v = localStorage.getItem(SORT_KEY);
+    if (v === "recently-used" || v === "recently-created" || v === "name") return v;
+  } catch { /* ignore */ }
+  return "recently-used";
+}
+
+function writeSortPref(v: SortKey): void {
+  try { localStorage.setItem(SORT_KEY, v); } catch { /* ignore */ }
+}
+
 export default function Projects() {
   const { all, loading } = useProjects();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>(readSortPref);
 
   // `?journey-mode=1` filters the home grid to the demo project + any
   // project whose name starts with "Journey · ". The journey suite
@@ -41,9 +60,25 @@ export default function Projects() {
   // users never see the param so behavior is unchanged for them.
   const journeyMode = params.get("journey-mode") === "1";
   const visible = useMemo(() => {
-    if (!journeyMode) return all;
-    return all.filter((p) => p.id === "demo" || p.name.startsWith("Journey · "));
-  }, [all, journeyMode]);
+    let list = journeyMode
+      ? all.filter((p) => p.id === "demo" || p.name.startsWith("Journey · "))
+      : all;
+
+    // Search filter — case-insensitive substring on name.
+    const q = query.trim().toLowerCase();
+    if (q) list = list.filter((p) => p.name.toLowerCase().includes(q));
+
+    // Sort.
+    const sorted = [...list];
+    if (sort === "recently-used") {
+      sorted.sort((a, b) => b.updatedAt - a.updatedAt);
+    } else if (sort === "recently-created") {
+      sorted.sort((a, b) => b.createdAt - a.createdAt);
+    } else {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    }
+    return sorted;
+  }, [all, journeyMode, query, sort]);
 
   const openProject = (id: string) => {
     setActiveProject(id);
@@ -94,29 +129,57 @@ export default function Projects() {
         </aside>
 
         <main className={s.main}>
-          <nav className={s.tabstrip} aria-label="Home sections">
-            <button
-              type="button"
-              className={s.tab}
-              data-active="true"
-              aria-current="page"
-            >
-              Projects
-              {!loading && (
-                <span className={s.tabCount} aria-label={`${visible.length} projects`}>
-                  {visible.length}
-                </span>
-              )}
-            </button>
-          </nav>
+          <div className={s.tabrow}>
+            <nav className={s.tabstrip} aria-label="Home sections">
+              <button
+                type="button"
+                className={s.tab}
+                data-active="true"
+                aria-current="page"
+              >
+                Projects
+                {!loading && (
+                  <span className={s.tabCount} aria-label={`${visible.length} projects`}>
+                    {visible.length}
+                  </span>
+                )}
+              </button>
+            </nav>
+            <div className={s.toolbar}>
+              <input
+                type="search"
+                className={s.searchInput}
+                placeholder="Search projects…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                data-testid="project-search"
+                aria-label="Search projects"
+              />
+              <select
+                className={s.sortSelect}
+                value={sort}
+                onChange={(e) => {
+                  const v = e.target.value as SortKey;
+                  setSort(v);
+                  writeSortPref(v);
+                }}
+                data-testid="project-sort"
+                aria-label="Sort projects"
+              >
+                <option value="recently-used">Recently used</option>
+                <option value="recently-created">Recently created</option>
+                <option value="name">Name</option>
+              </select>
+            </div>
+          </div>
 
           <div className={s.mainBody}>
-            {visible.length === 0 ? (
-              loading ? (
-                <LoadingSkeleton />
-              ) : (
-                <EmptyState />
-              )
+            {loading && visible.length === 0 ? (
+              <LoadingSkeleton />
+            ) : visible.length === 0 && query.trim() ? (
+              <NoSearchResults query={query.trim()} />
+            ) : visible.length === 0 ? (
+              <EmptyState />
             ) : (
               <div className={s.grid}>
                 {visible.map((p) => (
@@ -192,6 +255,14 @@ function EmptyState() {
         Name your first one on the left to get started.
       </div>
     </div>
+  );
+}
+
+function NoSearchResults({ query }: { query: string }) {
+  return (
+    <p className={s.noResults}>
+      No projects match &ldquo;{query}&rdquo;. Try a different search.
+    </p>
   );
 }
 
