@@ -8,6 +8,7 @@
  */
 
 import { runKimi } from "../../services/kimi.ts";
+import { kimiComplete } from "./complete.ts";
 import { ENV } from "../../env.ts";
 import type { AgentAdapter } from "../types.ts";
 
@@ -23,8 +24,12 @@ export const kimiAdapter: AgentAdapter = {
     bashAllowedInSandbox: false,
     silentTimeoutMs: KIMI_SILENT_TIMEOUT_MS,
     supportsPrewarmPool: ENV.KIMI_POOL_ENABLED,
+    supportsCompletion: true,
   },
   async run({ payload, send, abortSignal, baseUrl, streamId }) {
     return runKimi(payload, send, abortSignal, baseUrl, streamId);
+  },
+  async complete(args) {
+    return kimiComplete(args);
   },
 };

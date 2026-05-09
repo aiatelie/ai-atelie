@@ -8,6 +8,7 @@
  */
 
 import { runClaude } from "../../services/claude.ts";
+import { claudeComplete } from "./complete.ts";
 import type { AgentAdapter } from "../types.ts";
 
 export const claudeAdapter: AgentAdapter = {
@@ -19,8 +20,12 @@ export const claudeAdapter: AgentAdapter = {
     resume: true,
     bashAllowedInSandbox: false,
     supportsPrewarmPool: false,
+    supportsCompletion: true,
   },
   async run({ payload, send, abortSignal, baseUrl, streamId }) {
     return runClaude(payload, send, abortSignal, baseUrl, streamId);
+  },
+  async complete(args) {
+    return claudeComplete(args);
   },
 };

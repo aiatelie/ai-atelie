@@ -1,6 +1,6 @@
 /* tweakBridge.ts — host side of the `make-tweakable` contract
  * + iframe self-description for canvas-aware UI choices
- * + window.claude.complete() proxy.
+ * + window.ai.complete() proxy.
  *
  * Listens for postMessage events from the project iframe:
  *   { type: '__edit_mode_available' }    → page can be tweaked; enable toggle
@@ -9,10 +9,13 @@
  *   { type: '__page_is_canvas' }         → page is a workshop (DesignCanvas):
  *                                          owns its own viewport, suppress the
  *                                          editor's device-frame mode.
- *   { type: '__claude_complete', id, payload } → artifact called
- *                                          window.claude.complete(); proxy to
- *                                          /api/artifacts/claude-complete and
- *                                          post __claude_complete_response back.
+ *   { type: '__ai_complete', id, payload }  → artifact called
+ *                                          window.ai.complete(); proxy to
+ *                                          /api/artifacts/complete (with the
+ *                                          active modelId) and post
+ *                                          __ai_complete_response back.
+ *                                          `__claude_complete` accepted as a
+ *                                          legacy alias.
  *
  * Sends to the iframe in response to the toolbar toggle:
  *   { type: '__activate_edit_mode' }     → show the in-page Tweaks panel
@@ -37,6 +40,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { loadModelId } from "../components/editor/ModelPicker";
 
 export type TweakBridge = {
   /** True when the current iframe page declared __edit_mode_available. */
@@ -147,39 +151,57 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
         }
         return;
       }
-      if (data.type === "__claude_complete") {
-        // Artifact called window.claude.complete(). Proxy to the API and
-        // post the response back to the originating iframe (use e.source
-        // so we route to the right window even if multiple iframes are
-        // mounted — iframeRef may not be the one that fired this).
+      if (data.type === "__ai_complete" || data.type === "__claude_complete") {
+        // Artifact called window.ai.complete() (or the legacy
+        // window.claude.complete()). Proxy to /api/artifacts/complete
+        // with the user's currently-selected model so the server
+        // dispatches through the right adapter (claude / kimi /
+        // opencode / whatever opencode is fanning out to). Post the
+        // response back to the originating iframe via e.source so we
+        // route to the right window even if multiple iframes are
+        // mounted — iframeRef may not be the one that fired this.
         // Origin is already validated at the top of this handler.
+        //
+        // Reply with both response types so artifacts authored against
+        // the legacy `__claude_complete_response` listener still resolve.
 
         const id = typeof data.id === "string" ? data.id : null;
         const source = e.source as Window | null;
         if (!id || !source) return;
         const reply = (msg: { result?: string; error?: string }) => {
+          const payload = { id, ...msg };
           try {
             source.postMessage(
-              { type: "__claude_complete_response", id, ...msg },
+              { type: "__ai_complete_response", ...payload },
+              window.location.origin,
+            );
+            // Legacy alias for back-compat with artifacts that only
+            // listen for __claude_complete_response.
+            source.postMessage(
+              { type: "__claude_complete_response", ...payload },
               window.location.origin,
             );
           } catch {
             /* iframe may have unmounted; nothing to do */
           }
         };
-        const body =
-          typeof data.payload === "string"
-            ? { prompt: data.payload }
-            : (data.payload as Record<string, unknown> | null) ?? {};
+        const payload = data.payload;
+        const body: Record<string, unknown> =
+          typeof payload === "string"
+            ? { prompt: payload }
+            : (payload as Record<string, unknown> | null) ?? {};
+        // Always tag the request with the active model so the server
+        // can pickAdapter() exactly the same way the agent path does.
+        // localStorage read; falls back to the global default when
+        // unset (handled by pickAdapter on the server).
+        body.modelId = loadModelId();
 
-        // AbortController so we cancel the in-flight fetch if the 30s
-        // iframe-side timeout fires before the server responds.
         const controller = new AbortController();
-        const TIMEOUT_MS = 28_000; // slightly under the 30s iframe timeout
+        const TIMEOUT_MS = 28_000;
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
         try {
-          const res = await fetch("/api/artifacts/claude-complete", {
+          const res = await fetch("/api/artifacts/complete", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),

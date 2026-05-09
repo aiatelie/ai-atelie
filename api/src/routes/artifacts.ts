@@ -1,11 +1,21 @@
-/* artifacts.ts — proxy endpoint for `window.claude.complete()` calls
- * made from inside preview iframes (artifacts).
+/* artifacts.ts — proxy endpoint for `window.ai.complete()` calls made
+ * from inside preview iframes (artifacts).
  *
  * Preview iframes are sandboxed (`sandbox="allow-scripts"` without
- * `allow-same-origin`), so artifacts can't directly call the Anthropic
- * API. Instead they postMessage `{ type: "__claude_complete", id, payload }`
- * up to the parent window; the parent forwards the body to this endpoint
- * and posts the result back.
+ * `allow-same-origin`), so artifacts can't talk to any LLM directly.
+ * Instead they postMessage `{ type: "__ai_complete", id, payload }`
+ * up to the parent window; the parent (web/src/lib/tweakBridge.ts)
+ * forwards the body to this endpoint and posts the result back.
+ *
+ * The route is provider-neutral: it picks an adapter from the agent
+ * registry based on the request's `modelId` (same dispatch the agent
+ * path uses) and calls `adapter.complete()`. There is NO direct
+ * Anthropic API call here. Authentication, model selection, and even
+ * which provider answers the call all live with the adapter — exactly
+ * the same way agent turns work. A user running an OpenCode-on-Ollama
+ * project gets artifact completions served by Ollama; a Kimi user
+ * gets Kimi; a Claude Code user gets the subscription OAuth they're
+ * already paying for. No `ANTHROPIC_API_KEY` required.
  *
  * Rate limiting: simple rolling counter per (IP+UA) key, capped at
  * MAX_PER_MIN (10) over a 60s window. Returns 429 when exceeded so
@@ -13,19 +23,23 @@
  *
  * Persistence: rate-limit state is written to RATE_LIMIT_FILE on disk
  * (debounced) so bun --watch reloads don't silently reset the counters.
- * The daily token cap is persisted in the same file.
+ * The daily token cap is persisted in the same file. Token totals are
+ * adapter-agnostic — adapters return tokens when their CLI surfaces
+ * usage, otherwise we count one request against the cap as a fallback.
  *
  * Security:
- *   • The Anthropic API key never leaves the server.
- *   • max_tokens is capped at HARD_MAX (1024) regardless of caller input.
- *   • Model is fixed to claude-haiku-4-5-20251001 — fast + cheap.
  *   • Body shape is validated; messages array is bounded.
  *   • Request MUST originate from the same origin as the app
  *     (checked via Origin / Referer header). Requests from other origins
  *     are rejected with 403 before any processing.
  *   • CORS for this specific route is set to same-origin (no wildcard).
- *   • Daily token spend cap (DAILY_TOKEN_CAP) limits total Anthropic
- *     token usage per (IP+UA) key across restarts.
+ *   • Daily token spend cap (DAILY_TOKEN_CAP) limits total spend per
+ *     (IP+UA) key across restarts.
+ *
+ * Back-compat: the old `/api/artifacts/claude-complete` path is still
+ * routed for one release cycle so artifacts the agent authored against
+ * the previous bridge keep working. New code should use
+ * `/api/artifacts/complete`.
  *
  * Body cap: 256KB — accommodates multi-turn messages[] arrays while
  * still bounding abuse.
@@ -36,8 +50,8 @@ import { cors } from "hono/cors";
 import { resolve as resolvePath, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdir } from "node:fs/promises";
+import { pickAdapter } from "../agents/registry.ts";
 
-const MODEL = "claude-haiku-4-5-20251001";
 const HARD_MAX_TOKENS = 1024;
 const MAX_PER_MIN = 10;
 const WINDOW_MS = 60 * 1000;
@@ -177,27 +191,6 @@ function normalizeBody(body: unknown):
   return { ok: false, error: "body must include `prompt` (string) or `messages` (array)" };
 }
 
-function extractText(apiResponse: unknown): string {
-  // Anthropic Messages API response shape:
-  //   { content: [{ type: "text", text: "..." }, ...], ... }
-  const r = apiResponse as { content?: unknown };
-  if (!r || !Array.isArray(r.content)) return "";
-  const parts: string[] = [];
-  for (const block of r.content) {
-    if (block && typeof block === "object") {
-      const b = block as { type?: unknown; text?: unknown };
-      if (b.type === "text" && typeof b.text === "string") parts.push(b.text);
-    }
-  }
-  return parts.join("");
-}
-
-function extractUsageTokens(apiResponse: unknown): number {
-  const r = apiResponse as { usage?: { input_tokens?: number; output_tokens?: number } };
-  if (!r?.usage) return 0;
-  return (r.usage.input_tokens ?? 0) + (r.usage.output_tokens ?? 0);
-}
-
 // ─── Origin enforcement ───────────────────────────────────────────────────
 
 /**
@@ -239,16 +232,13 @@ function isSameOrigin(req: Request, expectedHost: string): boolean {
 
 export const artifactsRoutes = new Hono();
 
-// Restrict CORS for this route to same-origin only (no wildcard).
-// In production CORS_ORIGIN must be the exact editor origin.
-// This overrides the global "*" CORS for this specific path.
-artifactsRoutes.use("/api/artifacts/claude-complete", cors({
+// Restrict CORS for these routes to same-origin only (no wildcard).
+// In production CORS_ORIGIN must be the exact editor origin. This
+// overrides the global "*" CORS for these specific paths.
+const completeCors = cors({
   origin: (origin) => {
-    // Allow same-origin requests (no Origin header) and any configured host.
     const expected = process.env.CORS_ORIGIN;
     if (!expected || expected === "*") {
-      // Fall back to same-origin-only: only reflect the Origin if it looks
-      // like localhost / 127.0.0.1 to avoid blasting this open in prod.
       if (!origin) return null;
       if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return origin;
       return null;
@@ -258,34 +248,30 @@ artifactsRoutes.use("/api/artifacts/claude-complete", cors({
   credentials: true,
   allowMethods: ["POST"],
   allowHeaders: ["content-type"],
-}));
+});
 
-artifactsRoutes.post("/api/artifacts/claude-complete", async (c) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return c.json({ error: "ANTHROPIC_API_KEY not configured on the server" }, 500);
-  }
+artifactsRoutes.use("/api/artifacts/complete", completeCors);
+// Back-compat: the old route name keeps working until the bridge alias
+// is removed. Same handler, same shape.
+artifactsRoutes.use("/api/artifacts/claude-complete", completeCors);
 
+async function handleComplete(c: import("hono").Context): Promise<Response> {
   // ── Origin / same-origin enforcement ──────────────────────────────────
-  // Derive expected host from the request so this works for any port binding
-  // without hard-coding (localhost:5174 in dev, real domain in prod).
   const reqHost = c.req.header("host") ?? "localhost";
   const proto = c.req.header("x-forwarded-proto") ?? "http";
   const expectedHost = `${proto}://${reqHost}`;
 
   if (!isSameOrigin(c.req.raw, expectedHost)) {
     console.warn(
-      `[artifacts.claude-complete] rejected cross-origin request: origin=${c.req.header("origin") ?? "(none)"} referer=${c.req.header("referer") ?? "(none)"}`,
+      `[artifacts.complete] rejected cross-origin request: origin=${c.req.header("origin") ?? "(none)"} referer=${c.req.header("referer") ?? "(none)"}`,
     );
     return c.json({ error: "forbidden: cross-origin requests are not allowed" }, 403);
   }
 
   // ── Rate-limit by IP + User-Agent ─────────────────────────────────────
-  // Combining IP + UA makes NAT-collision much less likely and prevents the
-  // attacker from simply spoofing X-Forwarded-For (different UA profile).
   const xff = c.req.header("x-forwarded-for") ?? "";
   const ip = xff.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
-  const ua = (c.req.header("user-agent") ?? "").slice(0, 64); // cap length
+  const ua = (c.req.header("user-agent") ?? "").slice(0, 64);
   const key = `ip:${ip}|ua:${ua}`;
 
   const limit = rateLimit(key);
@@ -298,9 +284,6 @@ artifactsRoutes.post("/api/artifacts/claude-complete", async (c) => {
   }
 
   // ── Body cap + parse ───────────────────────────────────────────────────
-  // Read raw text first so we can size-cap before JSON-parsing arbitrarily
-  // large bodies. 256KB accommodates multi-turn messages[] while bounding
-  // abuse.
   let raw: string;
   try { raw = await c.req.text(); }
   catch { return c.json({ error: "could not read body" }, 400); }
@@ -314,44 +297,54 @@ artifactsRoutes.post("/api/artifacts/claude-complete", async (c) => {
   const norm = normalizeBody(parsed);
   if (!norm.ok) return c.json({ error: norm.error }, 400);
 
-  // ── Upstream call ──────────────────────────────────────────────────────
-  try {
-    const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: HARD_MAX_TOKENS,
-        messages: norm.messages,
-      }),
-    });
-    if (!upstream.ok) {
-      const errText = await upstream.text().catch(() => "");
-      // Don't leak raw provider error bodies to the artifact — surface a
-      // short message and the status. The full body is logged for ops.
-      console.warn(`[artifacts.claude-complete] upstream ${upstream.status}: ${errText.slice(0, 500)}`);
-      return c.json(
-        { error: `upstream error ${upstream.status}` },
-        upstream.status >= 500 ? 502 : 400,
-      );
-    }
-    const data = (await upstream.json()) as unknown;
-    const text = extractText(data);
+  // Pull modelId from the body if the host passed it; otherwise let
+  // pickAdapter() apply its default (claude). This is exactly the
+  // dispatch the agent path uses, so artifact completions follow the
+  // same provider as whoever authored the artifact in the first place.
+  const modelId = typeof (parsed as { modelId?: unknown })?.modelId === "string"
+    ? (parsed as { modelId: string }).modelId
+    : undefined;
+  const adapter = pickAdapter(modelId);
 
-    // Record token usage for daily cap tracking.
-    const tokens = extractUsageTokens(data);
-    if (tokens > 0) recordTokens(key, tokens);
-
-    return c.json({ text });
-  } catch (err) {
-    console.error("[artifacts.claude-complete] fetch failed:", err);
+  if (!adapter.complete || !adapter.capabilities.supportsCompletion) {
     return c.json(
-      { error: err instanceof Error ? err.message : "upstream fetch failed" },
-      502,
+      {
+        error:
+          `provider "${adapter.id}" doesn't support window.ai.complete() yet — ` +
+          `pick a different model in the chat composer to enable it.`,
+      },
+      501,
     );
   }
-});
+
+  // ── Adapter dispatch ───────────────────────────────────────────────────
+  // 30s server-side cap, slightly under the iframe's 30s timeout so the
+  // adapter has time to surface a clean error before the bridge gives up.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 28_000);
+  try {
+    const result = await adapter.complete({
+      messages: norm.messages,
+      abortSignal: controller.signal,
+      maxTokens: HARD_MAX_TOKENS,
+      modelId,
+    });
+    clearTimeout(timer);
+    if (typeof result.tokens === "number" && result.tokens > 0) {
+      recordTokens(key, result.tokens);
+    }
+    return c.json({ text: result.text, provider: adapter.id });
+  } catch (err) {
+    clearTimeout(timer);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[artifacts.complete] adapter=${adapter.id} failed: ${msg}`);
+    if (msg === "aborted" || controller.signal.aborted) {
+      return c.json({ error: "request timed out" }, 504);
+    }
+    return c.json({ error: `${adapter.id}: ${msg}` }, 502);
+  }
+}
+
+artifactsRoutes.post("/api/artifacts/complete", handleComplete);
+// Back-compat alias.
+artifactsRoutes.post("/api/artifacts/claude-complete", handleComplete);

@@ -376,9 +376,14 @@ export const opencodeAdapter: AgentAdapter = {
     bashAllowedInSandbox: false,
     silentTimeoutMs: OPENCODE_SILENT_LIMIT_MS,
     supportsPrewarmPool: false,
+    supportsCompletion: true,
   },
   async run({ payload, send, abortSignal, baseUrl, streamId }) {
     return runOpenCode(payload, send, abortSignal, baseUrl, streamId);
+  },
+  async complete(args) {
+    const { opencodeComplete } = await import("./complete.ts");
+    return opencodeComplete(args);
   },
   probe: probeOpenCode,
 };

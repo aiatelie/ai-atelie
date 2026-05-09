@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>window.claude.complete() demo</title>
+<title>window.ai.complete() demo</title>
 <style>
   :root {
     --cream: #f1ede2;
@@ -61,12 +61,13 @@
 <body>
 <div class="wrap">
   <div>
-    <h1>Trivia, graded by Claude</h1>
+    <h1>Trivia, graded by AI</h1>
     <p class="sub">
       This artifact calls
-      <code>window.claude.complete()</code>
+      <code>window.ai.complete()</code>
       to grade your answer. The artifact has no API key — the host app
-      proxies the request to the Anthropic API (Haiku 4.5).
+      proxies the request through whichever model is selected in the
+      chat (Claude Code / Kimi / OpenCode → any provider).
     </p>
   </div>
 
@@ -79,7 +80,7 @@
   </div>
 
   <p class="sub">
-    Try a wrong answer too — Claude should explain why it's wrong.
+    Try a wrong answer too — the model should explain why it's wrong.
   </p>
 </div>
 <script>
@@ -96,17 +97,17 @@
   async function grade() {
     const answer = $a.value.trim();
     if (!answer) { $a.focus(); return; }
-    if (!window.claude || typeof window.claude.complete !== "function") {
+    if (!window.ai || typeof window.ai.complete !== "function") {
       $v.hidden = false; $v.classList.add("error");
-      $v.textContent = "window.claude.complete() is not available — open this artifact through the AI Atelie editor preview.";
+      $v.textContent = "window.ai.complete() is not available — open this artifact through the AI Atelie editor preview.";
       return;
     }
     $btn.disabled = true;
     $v.hidden = true; $v.classList.remove("error");
-    $m.textContent = "Asking Claude…";
+    $m.textContent = "Thinking…";
     const t0 = Date.now();
     try {
-      const verdict = await window.claude.complete(
+      const verdict = await window.ai.complete(
         "You are a trivia grader. Question: " + JSON.stringify(QUESTION) +
         " The user answered: " + JSON.stringify(answer) +
         " Reply in 1-2 short sentences. Start with a clear ✓ or ✗, then a brief reason."
