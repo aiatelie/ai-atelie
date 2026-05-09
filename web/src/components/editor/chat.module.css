@@ -431,6 +431,22 @@
   font-size: 13px;
   line-height: 1.5;
 }
+/* Synthetic user messages (answer-echo, elicitation responses) —
+ *  visually distinct so the user can tell form echoes from messages
+ *  they actually typed. Lighter background, no tail, smaller. */
+.bubbleUserSynthetic {
+  background: var(--ink-08);
+  color: var(--ink-72);
+  border: 1px solid var(--ink-12);
+  border-radius: 10px;
+  padding: 8px 12px;
+  max-width: 88%;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.bubbleUserSynthetic .refRow { padding-bottom: 4px; }
+.bubbleUserSynthetic .refTag { color: var(--ink-50); }
+.bubbleUserSynthetic .refSnippet { color: var(--ink-55); }
 .bubbleAssistant {
   background: var(--surface);
   color: var(--ink-92);
@@ -508,6 +524,22 @@
   justify-content: flex-end;
   margin-top: 8px;
 }
+/* Empty state (no visible children) — collapse margin so synthetic
+ *  echo bubbles don't get a phantom 8px gap above the timestamp. */
+.bubbleActionsRight:empty {
+  display: none;
+}
+
+/* Subtle label above synthetic answer-echo bubbles so the user can
+ *  distinguish form responses ("Answered") from messages they typed. */
+.syntheticLabel {
+  font-size: 10.5px;
+  color: var(--ink-40);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
 .restoreBtn {
   appearance: none;
   border: 1px solid var(--on-ink-18);
@@ -578,7 +610,7 @@
 .liveStatusFeed {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 4px;
   margin-bottom: 10px;
   padding: 6px 0;
   border-bottom: 1px solid var(--ink-06);
@@ -590,7 +622,7 @@
   font-size: 12px;
   color: var(--ink-55);
   font-family: var(--font-mono);
-  padding: 2px 0;
+  padding: 3px 0;
 }
 .liveStatusDot {
   width: 4px;

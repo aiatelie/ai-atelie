@@ -1373,7 +1373,8 @@ function Bubble({
     const desc = m.descriptor;
     return (
       <div className={`${s.row} ${s.rowUser}`}>
-        <div className={s.bubbleUser}>
+        {m.synthetic && <div className={s.syntheticLabel}>Answered</div>}
+        <div className={m.synthetic ? s.bubbleUserSynthetic : s.bubbleUser}>
           {(m.thumbnail || m.selector) && (
             <div className={s.refRow}>
               {m.thumbnail && (
@@ -1431,39 +1432,41 @@ function Bubble({
             </div>
           )}
           <div className={s.text}>{m.content}</div>
-          <div className={s.bubbleActionsRight}>
-            {m.domHtml && onRestore && (
-              <button className={s.restoreBtn} onClick={() => onRestore(m)} title="Restore the iframe to how it looked at this comment">
-                ↺ Restore
-              </button>
-            )}
-            {/* Synthetic bubbles (e.g. elicitation answer-echo) are UI-only — the
-                SDK already received the answer through the elicit response. Suppress
-                edit/delete so the user cannot accidentally fire the echo text back
-                into the SDK as a new turn. */}
-            {!m.synthetic && onEditMessage && (
-              <button
-                className={s.deleteMsgBtn}
-                onClick={() => onEditMessage(threadId, index, m.content)}
-                title="Edit and resend (truncates the thread from here)"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 4 L20 10 L8 22 H2 V16 Z" />
-                </svg>
-              </button>
-            )}
-            {!m.synthetic && (
-              <button
-                className={s.deleteMsgBtn}
-                onClick={() => onDeleteMessage(threadId, index)}
-                title="Delete this message and everything after it"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            )}
-          </div>
+          {(m.domHtml || !m.synthetic) && (
+            <div className={s.bubbleActionsRight}>
+              {m.domHtml && onRestore && (
+                <button className={s.restoreBtn} onClick={() => onRestore(m)} title="Restore the iframe to how it looked at this comment">
+                  ↺ Restore
+                </button>
+              )}
+              {/* Synthetic bubbles (e.g. elicitation answer-echo) are UI-only — the
+                  SDK already received the answer through the elicit response. Suppress
+                  edit/delete so the user cannot accidentally fire the echo text back
+                  into the SDK as a new turn. */}
+              {!m.synthetic && onEditMessage && (
+                <button
+                  className={s.deleteMsgBtn}
+                  onClick={() => onEditMessage(threadId, index, m.content)}
+                  title="Edit and resend (truncates the thread from here)"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 4 L20 10 L8 22 H2 V16 Z" />
+                  </svg>
+                </button>
+              )}
+              {!m.synthetic && (
+                <button
+                  className={s.deleteMsgBtn}
+                  onClick={() => onDeleteMessage(threadId, index)}
+                  title="Delete this message and everything after it"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
           <div className={s.bubbleMetaRight}>
             <time dateTime={new Date(m.ts).toISOString()} title={fullDateTime(m.ts)}>
               {relativeTime(m.ts)}
