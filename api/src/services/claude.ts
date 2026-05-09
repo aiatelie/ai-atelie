@@ -200,6 +200,13 @@ export async function runClaude(
       }
       return; // success
     } catch (err) {
+      // Drain the FIFO queue on error so orphaned tool_use ids from
+      // this run can't bleed into a future run's onElicitation pairing.
+      // The queue is scoped to this while-iteration's `query()` call, so
+      // clearing it here is safe and prevents desync if error recovery
+      // or a retry loop is ever introduced.
+      pendingAskUserToolUseIds.length = 0;
+
       if (abortController.signal.aborted) {
         return;
       }

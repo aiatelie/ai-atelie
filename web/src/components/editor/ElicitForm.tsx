@@ -41,6 +41,7 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import DOMPurify from "dompurify";
 import s from "./chat.module.css";
 import type { ElicitRequest } from "../../lib/chatStream";
 import { parsePartialQuestions, type StreamingQuestion } from "../../lib/streamingJson";
@@ -530,20 +531,26 @@ function EnumMulti({
   );
 }
 
-/** Strip the obvious XSS vectors out of an inline-SVG option string.
+/** Sanitize an inline SVG option string from agent-supplied content.
  *  The model is trusted in normal use, but tool_results can echo
  *  user-uploaded content into a future ask_user call — so even a
  *  trusted agent could end up rendering attacker-controlled SVG.
- *  Drops `<script>` blocks and inline event handlers; leaves the
- *  drawing intact otherwise. */
+ *
+ *  Uses DOMPurify with svg+svgFilters profiles to keep valid SVG
+ *  drawing primitives while stripping the documented XSS vectors:
+ *   - <script> and on* event handlers (including `/onload=` slash-separator form)
+ *   - <foreignObject> (arbitrary HTML injection inside SVG)
+ *   - <use href="data:…"> (embedded SVG-as-data-URI with script)
+ *   - <style> @import / expression() (CSS injection)
+ *   - javascript: URLs */
 function sanitizeSvg(raw: string): string {
-  return raw
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script\s*>/gi, "")
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
-    .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
-    .replace(/\s(?:href|xlink:href)\s*=\s*"javascript:[^"]*"/gi, "")
-    .replace(/\s(?:href|xlink:href)\s*=\s*'javascript:[^']*'/gi, "");
+  return DOMPurify.sanitize(raw, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    // <foreignObject> lets arbitrary HTML in; <use> with data: URIs can
+    // embed a script-carrying SVG. Strip both outright.
+    FORBID_TAGS: ["foreignObject", "use"],
+    FORBID_ATTR: ["style"],
+  });
 }
 
 /** Visual-options grid — each option is an inline SVG (~80×56). The

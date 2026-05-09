@@ -141,6 +141,23 @@ function matchTopLevelString(partial: string, key: string): string | undefined {
         // the title; the parent re-runs us on every delta so we can
         // afford to wait for cleaner data.
         if (Number.isNaN(code)) return undefined;
+        // Handle surrogate pairs: a high surrogate (U+D800–U+DBFF) must
+        // be followed by a low surrogate (U+DC00–U+DFFF) encoded as
+        // `\uDCxx`. Decode both halves together via String.fromCodePoint
+        // so astral-plane chars like 😀 (U+1F600, encoded as
+        // 😀) render correctly instead of as two replacement
+        // boxes. If the low surrogate hasn't arrived yet, bail and wait
+        // for the next delta.
+        if (code >= 0xD800 && code <= 0xDBFF) {
+          // High surrogate — need the low surrogate that follows.
+          if (i + 11 >= partial.length) return undefined; // not yet streamed
+          if (partial[i + 6] !== "\\" || partial[i + 7] !== "u") return undefined;
+          const low = parseInt(partial.slice(i + 8, i + 12), 16);
+          if (Number.isNaN(low) || low < 0xDC00 || low > 0xDFFF) return undefined;
+          const codePoint = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
+          out += String.fromCodePoint(codePoint);
+          i += 12; continue;
+        }
         out += String.fromCharCode(code);
         i += 6; continue;
       }
