@@ -19,6 +19,8 @@ import { ELAPSED_TICK_MS, SLOW_RUN_THRESHOLD_MS, formatElapsed } from "./elapsed
 import { dayLabel, fullDateTime, relativeTime, shouldShowDaySeparator } from "./time";
 import { ElicitForm } from "./ElicitForm";
 import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
+import { SkillChips } from "./SkillChips";
+import { buildSkillsPreamble, loadActiveSkills, saveActiveSkills } from "../../data/skills";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
@@ -202,7 +204,7 @@ export function ChatTab({
     text: string,
     attachments: Attachment[],
     modelId: string,
-    opts?: { includeCanvas?: boolean },
+    opts?: { includeCanvas?: boolean; skillsPreamble?: string },
   ) => void;
   onRestore?: (m: Extract<ChatMessage, { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
@@ -417,12 +419,16 @@ function Composer({
   hasQueued?: boolean;
   /** Optional 4th arg `opts.includeCanvas` lets the composer tell the route
    *  whether to capture a fresh iframe screenshot for this turn. Routes
-   *  that don't pass `showCanvasToggle` ignore it (Onboard has no iframe). */
+   *  that don't pass `showCanvasToggle` ignore it (Onboard has no iframe).
+   *  `opts.skillsPreamble` is the resolved hidden-context block built from
+   *  the persistent <SkillChips> the user has toggled on — the route
+   *  should prepend it to the outgoing API `comment` so Claude reads
+   *  posture + user text, while the bubble shows only the typed text. */
   onSend: (
     text: string,
     attachments: Attachment[],
     modelId: string,
-    opts?: { includeCanvas?: boolean },
+    opts?: { includeCanvas?: boolean; skillsPreamble?: string },
   ) => void;
   /** When provided AND `disabled` is true, the send button becomes a Stop
    *  button that calls this. Lets the user abort an in-flight reply. */
@@ -459,6 +465,23 @@ function Composer({
     try { return localStorage.getItem(draftKey) ?? ""; } catch { return ""; }
   });
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Persistent composer skills: each toggleable chip in the strip above
+  // the textarea injects its prompt payload as a hidden preamble on
+  // every send while it's active. Stored per-project in localStorage so
+  // toggling "wireframe" in one project doesn't bleed into another, and
+  // re-hydrated on project switch via the projectId-keyed effect below.
+  const [activeSkillIds, setActiveSkillIds] = useState<string[]>(() => loadActiveSkills(projectId));
+  useEffect(() => {
+    // Rehydrate when the user switches projects. Done as an effect (not
+    // inside the lazy initializer) so a project-switch mid-session
+    // doesn't leave stale chips lit. A blank fallback ([]) is safer
+    // than carrying the previous project's set forward.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveSkillIds(loadActiveSkills(projectId));
+  }, [projectId]);
+  useEffect(() => {
+    saveActiveSkills(projectId, activeSkillIds);
+  }, [projectId, activeSkillIds]);
   // Per-turn toggle: should we attach a fresh iframe screenshot to this
   // send? Default on (mirrors prior behaviour). Resets to on after every
   // submit so a one-off skip doesn't silently disable the snapshot for the
@@ -587,13 +610,22 @@ function Composer({
     // useEffect drain). Dropping the message here would silently lose
     // the user's input and risk a concurrent SDK turn squeaking through
     // a micro-window where `disabled` flips false between chunks.
-    onSend(t, attachments, modelId, showCanvasToggle ? { includeCanvas } : undefined);
+    const skillsPreamble = buildSkillsPreamble(activeSkillIds);
+    const sendOpts: { includeCanvas?: boolean; skillsPreamble?: string } = {};
+    if (showCanvasToggle) sendOpts.includeCanvas = includeCanvas;
+    if (skillsPreamble) sendOpts.skillsPreamble = skillsPreamble;
+    const opts = Object.keys(sendOpts).length > 0 ? sendOpts : undefined;
+    onSend(t, attachments, modelId, opts);
     setText("");
     setAttachments([]);
     // Reset the canvas toggle so the next turn re-includes the snapshot
     // by default. Sticky-off would silently strip context the user
     // probably forgot they disabled.
     setIncludeCanvas(true);
+    // Active skill chips intentionally DO NOT reset on send — they're
+    // sticky for the project lifetime and must apply to every turn
+    // until the user toggles them off. That's the whole point of the
+    // chip strip vs. one-shot starter prompts.
   };
 
   // Slash command popover. Opens when the composer text starts with "/" and
@@ -608,7 +640,12 @@ function Composer({
 
   const runSlash = (cmd: SlashCommand) => {
     if (cmd.kind === "prompt") {
-      onSend(cmd.prompt, [], modelId);
+      // Slash-prompts ride the same skill-chip preamble as a normal
+      // submit. A user with "wireframe" toggled on who runs /critique
+      // should still get the wireframe posture applied — otherwise the
+      // chip silently no-ops for that turn, which is a footgun.
+      const skillsPreamble = buildSkillsPreamble(activeSkillIds);
+      onSend(cmd.prompt, [], modelId, skillsPreamble ? { skillsPreamble } : undefined);
       setText("");
       setAttachments([]);
       return;
@@ -708,6 +745,7 @@ function Composer({
         }
       }}
     >
+      <SkillChips activeIds={activeSkillIds} onToggle={setActiveSkillIds} />
       {showSlash && (
         <div className={s.slashMenu} role="listbox">
           {slashMatches.map((c, i) => (

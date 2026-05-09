@@ -1,0 +1,85 @@
+/* skillChips.module.css — pill toggles for the composer.
+ *
+ * Visual posture matches the existing `.contextPill` family in
+ * chat.module.css (rounded pills, ink-04 background, ink-08 border)
+ * so the chip row sits naturally above the composer's context row.
+ * Active state lights up with the chip's accent color (passed via
+ * the --chip-accent custom property) — border + small dot — kept
+ * subtle so 5 active chips at once don't drown out the textarea.
+ *
+ * The row uses flex-wrap so the pills reflow gracefully at narrow
+ * sidebar widths instead of clipping or scrolling.
+ */
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  /* No outer padding — sits inside the composer form which provides its
+     own 10px / 12px frame. Margin-bottom 0 because the parent flex-column
+     gap (8px) handles the visual rhythm to whatever follows. */
+  margin: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 7px;
+  font: var(--weight-medium) 11px var(--font-system, system-ui);
+  color: var(--ink-64);
+  background: var(--ink-04);
+  border: 1px solid var(--ink-08);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  /* Don't transition border-color / background — the toggle should
+     feel instant. Only the tooltip-arming hover gets a subtle fade. */
+  transition: color 0.12s ease;
+  user-select: none;
+  /* Anchor the accent var so a chip without an inline color still
+     renders cleanly (defensive — every entry in SKILLS sets one). */
+  --chip-accent: var(--brand, #7C3AED);
+}
+
+.chip:hover {
+  color: var(--ink-92);
+  border-color: var(--ink-15);
+}
+
+.chipActive {
+  color: var(--ink-92);
+  background: var(--surface-warm, var(--ink-04));
+  border-color: var(--chip-accent);
+  /* Faint inset glow so an active chip pops without using a saturated
+     background. The accent stays at low opacity so 5 actives don't
+     look like five different alerts. */
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--chip-accent) 18%, transparent);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ink-15);
+  flex-shrink: 0;
+  /* Active chips swap the dot to the accent color — single source of
+     truth for "this is on" since color-blind viewers can't rely on
+     border tone alone at this size. */
+  transition: background 0.12s ease;
+}
+
+.chipActive .dot {
+  background: var(--chip-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--chip-accent) 22%, transparent);
+}
+
+.label {
+  line-height: 1;
+}
+
+/* Keyboard focus ring — matches the rest of the composer chrome. */
+.chip:focus-visible {
+  outline: 2px solid var(--chip-accent);
+  outline-offset: 1px;
+}

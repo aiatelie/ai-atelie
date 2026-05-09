@@ -1203,7 +1203,7 @@ export default function Editor() {
     text: string,
     attachments: Attachment[],
     modelId: string,
-    sendOpts?: { includeCanvas?: boolean },
+    sendOpts?: { includeCanvas?: boolean; skillsPreamble?: string },
   ) => {
     // Snapshot the same target the live `onSend` would have used, so
     // the queued message lands on the element the user was looking at
@@ -1229,6 +1229,17 @@ export default function Editor() {
     if (pendingIntakeFor === activeProject.id) {
       preamble = buildIntakePreamble();
       setPendingIntakeFor(null);
+    }
+    // Composer skill chips ride as a hidden preamble too. When both an
+    // intake brief AND skill posture exist on the same turn (the
+    // user toggled a chip before sending their first message), stack
+    // them so Claude reads intake → skills → user text. Both are
+    // designer-context, both belong to the model not the bubble, so
+    // joining with a blank line keeps them readable.
+    if (sendOpts?.skillsPreamble) {
+      preamble = preamble
+        ? `${preamble}\n\n${sendOpts.skillsPreamble}`
+        : sendOpts.skillsPreamble;
     }
     if (isBlocked && activeThread) {
       // Replace any prior queued entry — only one slot. Tie the entry
