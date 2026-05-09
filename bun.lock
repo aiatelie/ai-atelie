@@ -14,12 +14,12 @@
       "name": "ai-atelie-api",
       "version": "0.1.0",
       "dependencies": {
-        "@anthropic-ai/claude-agent-sdk": "latest",
-        "hono": "latest",
+        "@anthropic-ai/claude-agent-sdk": "^0.2.132",
+        "hono": "^4.12.18",
       },
       "devDependencies": {
-        "@types/node": "latest",
-        "typescript": "latest",
+        "@types/node": "^25.6.0",
+        "typescript": "^6.0.3",
       },
     },
     "mcp": {

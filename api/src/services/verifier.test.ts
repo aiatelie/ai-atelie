@@ -21,8 +21,17 @@ describe("verifier.hasFindings", () => {
   it("treats common false-positives as pass", () => {
     expect(hasFindings("looks good")).toBe(false);
     expect(hasFindings("Looks Good")).toBe(false);
+    expect(hasFindings("Looks good.")).toBe(false);         // trailing period
+    expect(hasFindings("All looks good!")).toBe(false);    // prefix + punctuation
+    expect(hasFindings("Everything looks good.")).toBe(false);
     expect(hasFindings("no issues found")).toBe(false);
+    expect(hasFindings("No issues found.")).toBe(false);   // capitalized + period
+    expect(hasFindings("No issues.")).toBe(false);         // "no issues" substring
     expect(hasFindings("all good")).toBe(false);
+    expect(hasFindings("The files all look syntactically valid.")).toBe(false);
+    expect(hasFindings("Everything is fine.")).toBe(false);
+    expect(hasFindings("No errors.")).toBe(false);
+    expect(hasFindings("No problems found.")).toBe(false);
   });
 
   it("treats empty / whitespace as pass", () => {

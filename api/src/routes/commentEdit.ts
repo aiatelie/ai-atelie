@@ -232,17 +232,22 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
     try {
       await runAgent(payload, send, abortController.signal, baseUrl, requestStreamId);
       agentDone = true;
-      // Background QA: fire-and-forget verifier subagent. Cheap haiku
-      // call diff's the snapshot we recorded pre-turn, reads the
-      // modified files, asks for a one-shot syntax/imports/empty-files
-      // sanity check, and only injects a `[Verifier] ⚠ …` text event
-      // into the chat thread when it finds something real. Silent on
-      // pass. Does NOT run when the turn was aborted or timed out —
-      // half-written state isn't a useful QA target.
+      // Background QA: awaited verifier subagent. Cheap haiku call diffs
+      // the snapshot we recorded pre-turn, reads the modified + added
+      // files, asks for a one-shot syntax/imports/empty-files sanity
+      // check, and only injects a `[Verifier] ⚠ …` text event into the
+      // chat thread when it finds something real. Silent on pass.
+      //
+      // We await the result (with an internal 8s timeout inside
+      // runVerifier) BEFORE sending `status: done` so findings land in
+      // the live tab rather than the post-close ring buffer.
+      //
+      // Does NOT run when the turn was aborted or timed out — half-written
+      // state isn't a useful QA target.
       if (!abortController.signal.aborted) {
         const snap = await getSnapshot(turnId);
         if (snap) {
-          runVerifier({
+          await runVerifier({
             snapshot: snap,
             projectId: payload.projectId ?? null,
             send,

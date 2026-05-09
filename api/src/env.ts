@@ -70,6 +70,19 @@ export const ENV = {
    *  cross-origin testing; tighten to a specific origin in prod. */
   CORS_ORIGIN: process.env.CORS_ORIGIN ?? "*",
 
+  /** Background verifier subagent (api/src/services/verifier.ts).
+   *
+   *  Requires ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) — a direct
+   *  Anthropic API call distinct from the main `claude` CLI OAuth path.
+   *  When the variable is absent the verifier silently no-ops and logs
+   *  a console.warn. Most local devs running via subscription auth will
+   *  not have this set; the verifier is best-effort QA, not a gate.
+   */
+  // NOTE: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are read directly
+  // by verifier.ts at call time (not exported here) because claude.ts
+  // actively strips them for the SDK subprocess. They are intentionally
+  // NOT listed in ENV to avoid leaking them through the ENV object.
+
   /** Kimi prewarm pool: when enabled, route turns through a long-lived
    *  `kimi --print --input-format stream-json` worker per (rootDir,
    *  sessionId) instead of spawning fresh per-turn. Subsequent turns of

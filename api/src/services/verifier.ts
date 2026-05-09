@@ -12,14 +12,19 @@
  * agent turn) can see and fix the issues.
  *
  * Constraints:
- *   • non-blocking — runVerifier() is called without await; an error in
- *     the verifier never crashes the main turn.
+ *   • awaited with timeout — runVerifier() returns a Promise that resolves
+ *     when QA finishes OR after VERIFIER_TIMEOUT_MS (8 s), whichever comes
+ *     first. commentEdit awaits this before sending `status: done` so
+ *     findings reach the live tab, not just the post-close ring buffer.
+ *     Internal errors never propagate — verifier failure is silent.
  *   • cheap — claude-haiku-4-5-20251001, max_tokens 1024.
  *   • bounded — we cap the number of files (8) and per-file bytes (12 KB)
  *     fed to the model, so a giant refactor doesn't balloon the QA call.
+ *   • sees new files — diffSnapshot now returns { modified, added, deleted }
+ *     so brand-new files the agent creates are included in the QA payload.
  *   • auth — requires ANTHROPIC_API_KEY (the main `claude` CLI uses
  *     subscription OAuth and strips this env var; the verifier is a
- *     separate direct-API call). When the key is missing we no-op.
+ *     separate direct-API call). When the key is missing we warn and no-op.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -78,7 +83,12 @@ async function readModified(projectId: string | null, path: string): Promise<str
   }
 }
 
-/** True if the verifier's text indicates real findings (not "OK" / "looks good"). */
+/** True if the verifier's text indicates real findings (not "OK" / "looks good").
+ *
+ * Normalizes before matching: lowercase, trim, strip trailing punctuation.
+ * This prevents trivial false-positives like "Looks good." (trailing period)
+ * or "All looks good!" (exclamation) from being flagged as findings.
+ */
 function hasFindings(text: string): boolean {
   const t = text.trim();
   if (t.length === 0) return false;
@@ -86,12 +96,31 @@ function hasFindings(text: string): boolean {
   if (t === "OK") return false;
   // Defensive: accept "OK." / "OK\n…" but treat "OK, but…" as findings.
   if (/^OK[.\s]*$/i.test(t)) return false;
-  // Common false-positives we explicitly reject.
-  const lc = t.toLowerCase();
-  if (lc === "looks good" || lc === "no issues found" || lc === "all good") return false;
-  // Real flag char from the system prompt.
+  // Real flag char from the system prompt — any ⚠ line is a finding.
   if (t.includes("⚠")) return true;
-  // Otherwise: if it's non-empty and not OK, treat as findings.
+  // Normalize: lowercase, trim, strip trailing punctuation for fuzzy matching.
+  const norm = t.toLowerCase().replace(/[.!?,;:]+$/g, "").trim();
+  // Common pass phrases — substring check so "all looks good" and
+  // "everything looks good" both match "looks good".
+  const PASS_PHRASES = [
+    "looks good",
+    "no issues found",
+    "no issues",
+    "all good",
+    "everything is fine",
+    "everything looks fine",
+    "everything looks good",
+    "all looks good",
+    "syntactically valid",
+    "no errors",
+    "no problems",
+  ];
+  for (const phrase of PASS_PHRASES) {
+    if (norm === phrase || norm.startsWith(phrase + " ") || norm.endsWith(" " + phrase)) {
+      return false;
+    }
+  }
+  // Otherwise: non-empty and not a recognized pass → treat as findings.
   return true;
 }
 
@@ -115,45 +144,72 @@ function buildVerifierUserMessage(files: Array<{ path: string; contents: string 
   return parts.join("\n");
 }
 
-/** Fire-and-forget. Catches all errors internally. Returns immediately;
- *  the QA call runs in the background. */
-export function runVerifier(args: VerifierArgs): void {
+/** Maximum time (ms) we wait for the verifier haiku call before giving up.
+ *  Keeps the SSE stream from hanging indefinitely on a wedged API call. */
+const VERIFIER_TIMEOUT_MS = 8_000;
+
+/** Run the verifier and return a Promise that resolves when QA finishes
+ *  (or times out). The caller should await this before closing the SSE
+ *  stream so findings reach the live tab.
+ *
+ *  Catches all errors internally — a verifier crash never propagates. */
+export function runVerifier(args: VerifierArgs): Promise<void> {
   // Don't even start the QA call if the parent was aborted — the user
   // either pressed Stop or we timed out, and edits are mid-flight.
-  if (args.abortSignal?.aborted) return;
+  if (args.abortSignal?.aborted) return Promise.resolve();
   // Auth: we make a direct Anthropic API call (NOT the claude-agent-sdk
-  // OAuth path), so we need an API key. When missing, silently skip —
-  // the verifier is best-effort QA, not a hard requirement.
+  // OAuth path), so we need an API key. When missing, warn once and skip.
   const apiKey = process.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN;
-  if (!apiKey) return;
-  // Detach: never block the caller, never propagate errors.
-  void verifyAsync(args, apiKey).catch((err) => {
+  if (!apiKey) {
+    console.warn(
+      "[verifier] disabled — ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) is not set. " +
+      "Set the env var to enable background QA after each agent turn.",
+    );
+    return Promise.resolve();
+  }
+  // Race the QA call against a timeout so a wedged haiku call can't hold
+  // the SSE stream open indefinitely.
+  const qaPromise = verifyAsync(args, apiKey).catch((err) => {
     console.warn(
       `[verifier] background QA crashed: ${err instanceof Error ? err.message : String(err)}`,
     );
   });
+  const timeoutPromise = new Promise<void>((resolve) =>
+    setTimeout(resolve, VERIFIER_TIMEOUT_MS),
+  );
+  return Promise.race([qaPromise, timeoutPromise]);
 }
 
 async function verifyAsync(args: VerifierArgs, apiKey: string): Promise<void> {
   const { snapshot, projectId, send, abortSignal } = args;
 
-  // 1) Diff snapshot → list of files the agent modified during this turn.
-  let modified: string[];
+  // 1) Diff snapshot → lists of files the agent modified or created this turn.
+  //    `modified` = existed pre-turn and changed.
+  //    `added`    = brand-new files (these were invisible to the old diffSnapshot).
+  //    We skip `deleted` — there's nothing to check on a removed file.
+  let changedPaths: string[];
   try {
     const result = await diffSnapshot(snapshot);
-    modified = result.modified;
+    // Deduplicate in case a path appears in both lists (shouldn't happen,
+    // but defensive). Modified first so pre-existing files get priority
+    // in the MAX_FILES cap.
+    const seen = new Set<string>();
+    changedPaths = [];
+    for (const p of [...result.modified, ...result.added]) {
+      if (!seen.has(p)) { seen.add(p); changedPaths.push(p); }
+    }
   } catch (err) {
     console.warn(
       `[verifier] diff failed: ${err instanceof Error ? err.message : String(err)}`,
     );
     return;
   }
-  if (modified.length === 0) return; // No artifacts → nothing to verify.
+  if (changedPaths.length === 0) return; // No artifacts → nothing to verify.
 
   if (abortSignal?.aborted) return;
 
-  // 2) Read current contents of the modified files (cap at MAX_FILES).
-  const capped = modified.slice(0, MAX_FILES);
+  // 2) Read current contents of the changed files (cap at MAX_FILES).
+  const capped = changedPaths.slice(0, MAX_FILES);
   const files: Array<{ path: string; contents: string }> = [];
   for (const path of capped) {
     const contents = await readModified(projectId, path);

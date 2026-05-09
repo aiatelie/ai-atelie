@@ -156,29 +156,69 @@ export async function applySnapshot(snap: SnapshotEntry): Promise<{ reverted: nu
   return { reverted };
 }
 
-/** Files that have been modified vs the snapshot. Used by the
- *  comment-edit timeout/abort branch to tell the user what landed. */
-export async function diffSnapshot(snap: SnapshotEntry): Promise<{ modified: string[] }> {
+/** Files that have been modified or added vs the snapshot.
+ *
+ * Returns three disjoint sets:
+ *   - `modified`: paths that existed pre-turn and whose contents changed.
+ *   - `added`:    paths that did not exist pre-turn (brand-new files).
+ *   - `deleted`:  paths that existed pre-turn but are now gone / unreadable.
+ *
+ * The verifier consumes all three; the timeout/abort message branch only
+ * uses `modified` (same as before — backward-compatible for that caller).
+ */
+export async function diffSnapshot(
+  snap: SnapshotEntry,
+): Promise<{ modified: string[]; added: string[]; deleted: string[] }> {
   const modified: string[] = [];
+  const added: string[] = [];
+  const deleted: string[] = [];
+
   if (snap.projectId) {
     const files = getRepos().projectFiles;
+
+    // 1) Walk pre-turn paths: bucket into modified / deleted.
+    const snapPaths = new Set(snap.files.map((f) => f.path));
     for (const { path, contents } of snap.files) {
       const cur = await files.readText(snap.projectId, path);
-      if (cur.ok && cur.text === contents) continue;
-      modified.push(path);
+      if (!cur.ok) {
+        deleted.push(path);
+      } else if (cur.text !== contents) {
+        modified.push(path);
+      }
+    }
+
+    // 2) Walk current disk: any path not in the pre-turn snapshot is "added".
+    const list = await files.list(snap.projectId);
+    for (const f of list.files) {
+      if (!snapPaths.has(f.path)) {
+        added.push(f.path);
+      }
     }
   } else {
     const root = resolvePath(ENV.LEGACY_EDITOR_ROOT, "src");
+
+    // 1) Walk pre-turn paths.
+    const snapPaths = new Set(snap.files.map((f) => f.path));
     for (const { path, contents } of snap.files) {
       const abs = resolvePath(root, path);
       try {
         const cur = await readFile(abs, "utf8");
-        if (cur === contents) continue;
-        modified.push(path);
-      } catch { /* skip */ }
+        if (cur !== contents) modified.push(path);
+      } catch {
+        deleted.push(path);
+      }
+    }
+
+    // 2) Walk current disk for added files.
+    for await (const abs of walk(root, { allExt: true })) {
+      const rel = relPath(root, abs);
+      if (!snapPaths.has(rel)) {
+        added.push(rel);
+      }
     }
   }
-  return { modified };
+
+  return { modified, added, deleted };
 }
 
 /* ─── LRU prune ────────────────────────────────────────────────────── */
