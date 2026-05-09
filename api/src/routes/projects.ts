@@ -57,6 +57,74 @@ export type { ProjectManifest };
 
 /* ─── Reload-script injection (HTML responses get this appended) ─── */
 
+/* The window.ai.complete() bridge — injected into every artifact HTML
+ * so a sandboxed iframe (which can't reach the parent's fetch) can call
+ * an LLM at runtime. Provider-neutral: the host routes the call through
+ * whatever the project's chat is configured to use (Claude Code, Kimi,
+ * OpenCode → any provider OpenCode supports). Artifact code never names
+ * a specific vendor.
+ *
+ * See AGENTS.md → "Runtime AI in artifacts" for the end-to-end story.
+ *
+ *   1. The artifact calls `await window.ai.complete("hello")`.
+ *   2. The bridge generates a unique request id and posts
+ *      `{ type: "__ai_complete", id, payload }` to window.parent.
+ *   3. The host (web/src/lib/tweakBridge.ts) forwards to
+ *      /api/artifacts/complete with the active modelId, and posts back
+ *      `{ type: "__ai_complete_response", id, result | error }`.
+ *   4. The bridge resolves / rejects the original Promise.
+ *
+ * `window.claude.complete()` is exposed as an alias so any artifacts
+ * already authored against the legacy name keep working. The legacy
+ * postMessage type `__claude_complete` is still understood by the host.
+ *
+ * 30s timeout rejects pending calls so a frozen parent can't leak
+ * Promises. Self-contained, idempotent, tiny enough to inline.
+ */
+const AI_COMPLETE_BRIDGE = `
+<script>(function(){
+  try {
+    if (window.ai && typeof window.ai.complete === "function") return;
+    var pending = Object.create(null);
+    window.addEventListener("message", function(e){
+      var d = e.data;
+      if (!d) return;
+      // Accept both the canonical and the legacy response type so a
+      // host running the older bridge still talks to a newer artifact.
+      if (d.type !== "__ai_complete_response" && d.type !== "__claude_complete_response") return;
+      var p = pending[d.id];
+      if (!p) return;
+      delete pending[d.id];
+      if (d.error) p.reject(new Error(d.error));
+      else p.resolve(d.result);
+    });
+    function complete(promptOrOptions){
+      return new Promise(function(resolve, reject){
+        var id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        pending[id] = { resolve: resolve, reject: reject };
+        try {
+          window.parent.postMessage({ type: "__ai_complete", id: id, payload: promptOrOptions }, "*");
+        } catch (err) {
+          delete pending[id];
+          reject(err);
+          return;
+        }
+        setTimeout(function(){
+          if (pending[id]) {
+            delete pending[id];
+            reject(new Error("window.ai.complete() timed out after 30s"));
+          }
+        }, 30000);
+      });
+    }
+    window.ai = { complete: complete };
+    // Legacy alias — kept so artifacts authored against the old name
+    // keep working. Drop in a future release once nothing references it.
+    window.claude = { complete: complete };
+  } catch(e) { /* injection failure shouldn't break the artifact */ }
+})();</script>
+`;
+
 function injectReloadClient(html: string, id: string): string {
   const snippet = `
 <script>(function(){try{
@@ -78,8 +146,12 @@ function injectReloadClient(html: string, id: string): string {
   };
 }catch(e){}})();</script>
 `;
-  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, snippet + "</body>");
-  return html + snippet;
+  // Inject both bridges before </body> when present, otherwise append.
+  // Order: the ai bridge first so window.ai.complete is defined before
+  // any inline script in the artifact has a chance to call it.
+  const combined = AI_COMPLETE_BRIDGE + snippet;
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, combined + "</body>");
+  return html + combined;
 }
 
 /* ─── Synthetic component preview ─── */

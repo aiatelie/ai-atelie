@@ -42,6 +42,38 @@ export type AgentCapabilities = {
   /** True if the adapter has an opt-in long-lived prewarmed worker
    *  pool that drops first-byte latency. */
   supportsPrewarmPool: boolean;
+  /** True if the adapter implements `complete()` for one-shot text
+   *  completions used by `window.ai.complete()` from artifacts. When
+   *  false, /api/artifacts/complete returns 501 for projects routed
+   *  to this adapter. */
+  supportsCompletion: boolean;
+};
+
+export type AgentCompleteArgs = {
+  /** Conversation history. The last message must be role:"user". For a
+   *  single prompt, pass `[{ role: "user", content: prompt }]`. */
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  /** Cancels the in-flight CLI / SDK call. The route layer plumbs the
+   *  client's iframe-side timeout through this signal. */
+  abortSignal?: AbortSignal;
+  /** Hard cap on output tokens. Adapters should pass this through to
+   *  the underlying CLI/SDK; the route enforces a top-level cap too. */
+  maxTokens?: number;
+  /** Optional explicit model id (e.g. "anthropic/claude-haiku-4-5",
+   *  "kimi-code/kimi-for-coding"). When omitted, each adapter picks
+   *  its own fast/cheap default for one-shot completions. */
+  modelId?: string;
+};
+
+export type AgentCompleteResult = {
+  /** Plain text body of the assistant's reply. Empty string if the
+   *  provider returned no text content (e.g. tool-only response — but
+   *  adapters should configure a tool-less invocation to avoid this). */
+  text: string;
+  /** Total tokens used (input + output) when the provider reports them.
+   *  Used by the route's daily-cap accounting. Undefined when the
+   *  provider doesn't surface usage in non-interactive mode. */
+  tokens?: number;
 };
 
 export type AgentProbe = {
@@ -78,6 +110,11 @@ export interface AgentAdapter {
    *  unrecoverable errors after emitting a normalized "error" event
    *  on `send`. */
   run(args: AgentRunArgs): Promise<void>;
+  /** One-shot text completion for `window.ai.complete()` calls from
+   *  inside artifacts. Tool-less, MCP-less, no session resume — just
+   *  prompt → text. Adapters that don't implement this leave it
+   *  undefined and set `capabilities.supportsCompletion:false`. */
+  complete?(args: AgentCompleteArgs): Promise<AgentCompleteResult>;
   /** Optional install/auth/models probe. Called from GET /api/agents
    *  with results memoized in the registry layer (see
    *  agents/detection.ts). When omitted, the registry assumes

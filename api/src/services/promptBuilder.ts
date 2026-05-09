@@ -332,6 +332,7 @@ async function buildSandboxPrompt(
     `  • Static assets (images, fonts) live in subfolders and are referenced relatively.`,
     `  • If you add a new page, append it to \`manifest.json\` under \`pages\`.`,
     `  • If you add a new component, append it to \`manifest.json\` under \`components\` with \`{file, name}\`.`,
+    `  • **\`window.ai.complete(promptOrOptions)\`** is available inside every artifact — call it to make a one-shot AI text completion and \`await\` a string back. Provider-neutral: the host routes the call through whichever model is selected in the chat (Claude Code / Kimi / OpenCode → any provider OpenCode supports). Pass a prompt string, or \`{ messages: [{role,content}] }\`. Use it for AI-powered interactions: graded quizzes, dynamic feedback, content generation. Rate-limited to ~10 calls/min, ~30s timeout. Don't put an API key in the artifact — the host proxies the call. (\`window.claude.complete\` is a legacy alias and still works.)`,
     ``,
     `Edit only files inside this project directory. Make the smallest edit that fulfils the comment.`,
   );

@@ -26,6 +26,7 @@ import { capabilitiesRoute } from "./routes/capabilitiesRoute.ts";
 import { agentsRoute } from "./routes/agents.ts";
 import { internalRoutes } from "./routes/internal.ts";
 import { skillsCatalogRoute } from "./routes/skillsCatalog.ts";
+import { artifactsRoutes } from "./routes/artifacts.ts";
 
 const app = new Hono();
 
@@ -36,6 +37,11 @@ app.use("*", observabilityMiddleware);
 
 // CORS: in dev the Vite proxy keeps requests same-origin so this is mostly
 // a safety net. In prod, set CORS_ORIGIN to the editor's exact origin.
+//
+// NOTE: /api/artifacts/claude-complete applies its own stricter CORS
+// (same-origin only) via a route-level middleware in artifacts.ts. The
+// wildcard here does NOT apply to that route because Hono applies the
+// most-specific matching middleware first.
 app.use("*", cors({ origin: ENV.CORS_ORIGIN, credentials: true }));
 
 // Lightweight request log — parity with the [comment-edit] / [runKimi]
@@ -68,6 +74,7 @@ app.route("/", elicitRoutes);
 app.route("/", sharedRoutes);
 app.route("/", exportsRoutes);
 app.route("/", commentEditRoutes);
+app.route("/", artifactsRoutes);
 app.route("/", projectsRoutes);
 
 // Centralised error handler — ensures every 500 carries a request-id and

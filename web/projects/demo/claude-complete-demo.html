@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>window.ai.complete() demo</title>
+<style>
+  :root {
+    --cream: #f1ede2;
+    --ink: #29261b;
+    --ink-soft: #6b665a;
+    --rust: #d97757;
+    --rust-soft: #efd6c8;
+    --line: rgba(41, 38, 27, 0.12);
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--cream); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 560px; margin: 0 auto; padding: 48px 24px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+  h1 { font-size: 28px; margin: 0; letter-spacing: -0.5px; }
+  .sub { color: var(--ink-soft); margin: 0; font-size: 14px; line-height: 1.5; }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .question { font-size: 16px; font-weight: 600; margin: 0; }
+  input[type="text"] {
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 14px; font-family: inherit;
+    background: #fafaf6;
+  }
+  input[type="text"]:focus { outline: 2px solid var(--rust); outline-offset: -1px; }
+  button {
+    background: var(--rust); color: #fff; border: 0; border-radius: 8px;
+    padding: 10px 16px; font-size: 14px; font-weight: 600;
+    cursor: pointer; align-self: flex-start; font-family: inherit;
+  }
+  button:disabled { opacity: 0.6; cursor: wait; }
+  .verdict {
+    margin: 0; padding: 12px 14px; border-radius: 8px;
+    font-size: 14px; line-height: 1.5; white-space: pre-wrap;
+    border: 1px solid var(--line);
+    background: var(--rust-soft);
+  }
+  .verdict.error {
+    background: #fde8e8; border-color: #f5c2c2; color: #8a2a2a;
+  }
+  .meta { font-size: 12px; color: var(--ink-soft); }
+  code {
+    background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Trivia, graded by AI</h1>
+    <p class="sub">
+      This artifact calls
+      <code>window.ai.complete()</code>
+      to grade your answer. The artifact has no API key — the host app
+      proxies the request through whichever model is selected in the
+      chat (Claude Code / Kimi / OpenCode → any provider).
+    </p>
+  </div>
+
+  <div class="card">
+    <p class="question" id="question">What is the capital of France?</p>
+    <input id="answer" type="text" placeholder="Type your answer…" autocomplete="off" />
+    <button id="grade">Grade my answer</button>
+    <p class="verdict" id="verdict" hidden></p>
+    <p class="meta" id="meta"></p>
+  </div>
+
+  <p class="sub">
+    Try a wrong answer too — the model should explain why it's wrong.
+  </p>
+</div>
+<script>
+(function(){
+  const QUESTION = "What is the capital of France?";
+  const $q = document.getElementById("question");
+  const $a = document.getElementById("answer");
+  const $btn = document.getElementById("grade");
+  const $v = document.getElementById("verdict");
+  const $m = document.getElementById("meta");
+
+  $q.textContent = QUESTION;
+
+  async function grade() {
+    const answer = $a.value.trim();
+    if (!answer) { $a.focus(); return; }
+    if (!window.ai || typeof window.ai.complete !== "function") {
+      $v.hidden = false; $v.classList.add("error");
+      $v.textContent = "window.ai.complete() is not available — open this artifact through the AI Atelie editor preview.";
+      return;
+    }
+    $btn.disabled = true;
+    $v.hidden = true; $v.classList.remove("error");
+    $m.textContent = "Thinking…";
+    const t0 = Date.now();
+    try {
+      const verdict = await window.ai.complete(
+        "You are a trivia grader. Question: " + JSON.stringify(QUESTION) +
+        " The user answered: " + JSON.stringify(answer) +
+        " Reply in 1-2 short sentences. Start with a clear ✓ or ✗, then a brief reason."
+      );
+      $v.textContent = verdict || "(empty response)";
+      $v.hidden = false;
+      $m.textContent = "Graded in " + (Date.now() - t0) + "ms";
+    } catch (err) {
+      $v.classList.add("error");
+      $v.textContent = "Error: " + (err && err.message ? err.message : String(err));
+      $v.hidden = false;
+      $m.textContent = "";
+    } finally {
+      $btn.disabled = false;
+    }
+  }
+
+  $btn.addEventListener("click", grade);
+  $a.addEventListener("keydown", function(e){ if (e.key === "Enter") grade(); });
+})();
+</script>
+</body>
+</html>

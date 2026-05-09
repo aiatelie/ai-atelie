@@ -108,3 +108,6 @@ playwright-tools/*
 .turbo/
 .parcel-cache/
 web/tests/e2e/.task-staging/
+
+# Runtime persistence (rate-limit + daily-cap state for /api/artifacts/complete).
+/data/
