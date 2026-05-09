@@ -31,25 +31,33 @@ function flattenMessages(messages: AgentCompleteArgs["messages"]): string {
     .join("\n\n");
 }
 
-/** OpenCode's --format json emits NDJSON events of the form
- *  `{ type, sessionID, properties: { ... } }`. Assistant text rides
- *  inside `properties.part.text` for `message.part.updated` events
- *  whose part.type === "text". This mirrors what
- *  agents/opencode/streamParser.ts already extracts for the agent
- *  path; we re-implement the minimal slice here to avoid pulling
- *  the full streamParser (with its session-id capture and tool
- *  shaping) into the completion path. */
-function extractAssistantText(line: unknown): string {
-  if (!line || typeof line !== "object") return "";
-  const obj = line as {
-    type?: string;
-    properties?: { part?: { type?: string; text?: string } };
-  };
-  if (obj.type === "message.part.updated" && obj.properties?.part) {
-    const p = obj.properties.part;
-    if (p.type === "text" && typeof p.text === "string") return p.text;
+/** OpenCode's --format json emits NDJSON. Real shape (verified
+ *  against opencode 1.14 output):
+ *
+ *    {"type":"step_start", part: { type:"step-start", ... }}
+ *    {"type":"text", part: { type:"text", text:"Hi there!" }}
+ *    {"type":"step_finish", part: { type:"step-finish",
+ *        tokens: { total, input, output, ... } }}
+ *
+ *  Assistant text rides on `type === "text"` events at `part.text`.
+ *  Token usage rides on `step_finish` at `part.tokens.total`. */
+type OpenCodeLine = {
+  type?: string;
+  part?: { type?: string; text?: string; tokens?: { total?: number } };
+};
+
+function extractAssistantText(line: OpenCodeLine): string {
+  if (line.type === "text" && line.part?.type === "text" && typeof line.part.text === "string") {
+    return line.part.text;
   }
   return "";
+}
+
+function extractTokens(line: OpenCodeLine): number {
+  if (line.type === "step_finish" && typeof line.part?.tokens?.total === "number") {
+    return line.part.tokens.total;
+  }
+  return 0;
 }
 
 export async function opencodeComplete(
@@ -71,12 +79,12 @@ export async function opencodeComplete(
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    // OpenCode emits the assistant's text in incremental updates; the
-    // final value is the full text. We track the latest seen text and
-    // resolve with that on close. (Building text by appending deltas
-    // would double-count since each update re-emits the cumulative
-    // string, not a delta — verified against streamParser.ts shape.)
-    let latestText = "";
+    // OpenCode emits one or more `type:"text"` events as the model
+    // streams; each carries its own chunk. We append every chunk so
+    // multi-part replies come through whole. Token usage is harvested
+    // from the final `step_finish` event.
+    let text = "";
+    let totalTokens = 0;
     let stderrBuf = "";
     let stdoutBuf = "";
     let aborted = false;
@@ -108,8 +116,9 @@ export async function opencodeComplete(
         stdoutBuf = stdoutBuf.slice(idx + 1);
         if (!line) continue;
         try {
-          const t = extractAssistantText(JSON.parse(line));
-          if (t) latestText = t;
+          const parsed = JSON.parse(line) as OpenCodeLine;
+          text += extractAssistantText(parsed);
+          totalTokens += extractTokens(parsed);
         } catch {
           // Non-JSON — opencode sometimes prints status. Ignore.
         }
@@ -128,7 +137,7 @@ export async function opencodeComplete(
       abortSignal?.removeEventListener("abort", onAbort);
       if (aborted) return;
       if (code === 0) {
-        resolve({ text: latestText });
+        resolve({ text, tokens: totalTokens > 0 ? totalTokens : undefined });
         return;
       }
       const stderrTail = stderrBuf.slice(-500).trim();

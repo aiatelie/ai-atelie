@@ -31,25 +31,28 @@ function flattenMessages(messages: AgentCompleteArgs["messages"]): string {
 }
 
 /** Walk a kimi stream-json line and return any assistant text it
- *  contains. The shape varies by message type — kimiLineToAgentEvents
- *  in services/agentEvents.ts handles the full spectrum, but for
- *  completions we only care about plain assistant text blocks. */
+ *  contains. Real shape (verified against kimi 1.39 --print output):
+ *
+ *    { "role": "assistant",
+ *      "content": [
+ *        { "type": "think", "think": "...", "encrypted": null },
+ *        { "type": "text", "text": "Hello there, friend!" }
+ *      ] }
+ *
+ *  We pull text blocks only — `think` blocks are the model's chain-of-
+ *  thought and not part of the answer the artifact wants. */
 function extractAssistantText(line: unknown): string {
   if (!line || typeof line !== "object") return "";
   const obj = line as {
-    type?: string;
-    message?: { content?: unknown };
-    delta?: { text?: unknown };
+    role?: string;
+    content?: unknown;
   };
-  if (obj.type === "assistant" && obj.message && Array.isArray(obj.message.content)) {
+  if (obj.role === "assistant" && Array.isArray(obj.content)) {
     let out = "";
-    for (const block of obj.message.content as Array<{ type?: string; text?: string }>) {
+    for (const block of obj.content as Array<{ type?: string; text?: string }>) {
       if (block?.type === "text" && typeof block.text === "string") out += block.text;
     }
     return out;
-  }
-  if (obj.type === "text_delta" && typeof obj.delta?.text === "string") {
-    return obj.delta.text;
   }
   return "";
 }
