@@ -24,3 +24,9 @@ agent:
     # make your own decision", and never touches our bridge — defeating
     # the whole point. Excluding it makes the MCP tool the only option.
     - "kimi_cli.tools.ask_user:AskUserQuestion"
+    # Exclude ReadMediaFile — the default model doesn't support image
+    # input and the tool errors with "Cannot read clipboard" when it
+    # tries to ingest the page screenshot. The screenshot is still
+    # available as a file reference in the prompt for models that
+    # can read images.
+    - "kimi_cli.tools.file.read_media:ReadMediaFile"

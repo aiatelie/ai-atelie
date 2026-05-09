@@ -1504,31 +1504,21 @@ function Bubble({
         {m.thinking && (
           <ThinkingBlock text={m.thinking} pending={!!m.pending} />
         )}
-        {/* Visual hierarchy: the model's prose is the *headline*. Tool
-         *  chips and any rendered artifacts sit below as subordinate
-         *  detail. Earlier this was inverted (chips dominated the
-         *  bubble, the prose was a tiny line at the bottom) and the UI
-         *  felt like a build log instead of a conversation.
-         *
-         *  The live status feed (tool actions) stays visible alongside
-         *  streaming text so the user always sees forward motion — not
-         *  just the last tool name, but every action since the turn
-         *  began. When tools are active and we're pending, the feed
-         *  renders above the prose as a mini activity log. */}
+        {/* The live status feed shows tool progress before text arrives.
+         *  Once the model starts writing prose, the feed collapses into
+         *  a compact summary so the bubble reads as conversation, not a
+         *  build log. The tool footer below retains full chip details. */}
         {m.error ? (
           <div className={s.errText}>⚠ {m.error}</div>
         ) : (
           <div className={s.text}>
-            {m.tools.length > 0 && m.pending && (
-              <LiveStatus tools={m.tools} since={m.ts} />
-            )}
             {m.content ? (
               <AssistantContent text={m.content} />
-            ) : m.tools.length === 0 && m.pending ? (
-              <LiveStatus tools={[]} since={m.ts} />
-            ) : !m.content && !m.pending ? (
+            ) : m.pending ? (
+              <LiveStatus tools={m.tools} since={m.ts} />
+            ) : (
               <span className={s.dim}>(no response)</span>
-            ) : null}
+            )}
             {m.pending && m.content && <span className={s.caret} />}
           </div>
         )}

@@ -87,14 +87,16 @@ Three rules — break them and the chat looks frozen:
      you proposed variants, name them ("the gradient version is softer
      for the opener; the bold one reads at 1080p thumb size").
 
-If something looks ambiguous, use the \`ask_user\` tool — a structured
-form is better than guessing. For motion: duration, easing,
+If something looks ambiguous, use the \`mcp__ask-user__ask_user\` tool — a structured
+form is better than guessing. **This tool works in all modes, including non-interactive.**
+You will receive the user's response as a tool result. For motion: duration, easing,
 loop-vs-one-shot, transparent-vs-bg are common branches worth surfacing.
 
 ## What NOT to do
   • Don't run shell commands.
   • Don't ask conversational questions in prose ("What color do you
-    want?"); use the \`ask_user\` tool.
+    want?"); always use the \`mcp__ask-user__ask_user\` tool instead — it
+    works in non-interactive mode and returns the answer as a tool result.
   • Don't reply with one curt sentence summarizing files touched. The
     UI already shows the file chips.
   • Don't pad with disclaimers ("I hope this helps", "Let me know if…").
@@ -326,7 +328,7 @@ async function buildSandboxPrompt(
     ``,
     `## How to ask the user questions`,
     ``,
-    `When you need clarifying input from the user, ALWAYS use the \`mcp__ask-user__ask_user\` tool.`,
+    `When you need clarifying input from the user, ALWAYS use the \`mcp__ask-user__ask_user\` tool (this works in all modes, including non-interactive — it renders a native form in the sidebar and returns the answer).`,
     `Choose the right kind for the answer shape: \`enum\` for pick-one/checkbox choices,`,
     `\`text\` for freeform, \`number\` for numeric ranges, \`file\` for uploads.`,
     `Never ask questions in plain prose — the tool renders a native form in the sidebar`,
