@@ -21,9 +21,29 @@ export const designSystemsRoutes = new Hono();
 
 // Local helper — keep error responses uniform across handlers without
 // each one repeating `c.json({ error }, status)`.
-type StatusCode = 400 | 404 | 500;
+type StatusCode = 400 | 404 | 413 | 500;
 function bad(c: Context, reason: string, status: StatusCode = 400) {
   return c.json({ error: reason }, status);
+}
+
+/**
+ * Surface repo errors from clampName / clampDescription as HTTP 413 so the
+ * client can display a meaningful "your content is too large" message instead
+ * of a generic 500.  The thrown error carries `code: "PAYLOAD_TOO_LARGE"` and
+ * `limit` / `actual` for structured client-side display.
+ */
+function handleRepoError(c: Context, err: unknown) {
+  if (
+    err instanceof Error &&
+    (err as Error & { code?: string }).code === "PAYLOAD_TOO_LARGE"
+  ) {
+    const e = err as Error & { limit: number; actual: number };
+    return c.json(
+      { error: err.message, limit: e.limit, actual: e.actual },
+      413 as 413,
+    );
+  }
+  return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
 }
 
 designSystemsRoutes.get("/api/design-systems", async (c) => {
@@ -58,7 +78,7 @@ designSystemsRoutes.post("/api/design-systems", async (c) => {
     broadcastShared("design-systems");
     return c.json(ds);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    return handleRepoError(c, err);
   }
 });
 
@@ -95,7 +115,7 @@ designSystemsRoutes.put("/api/design-systems/:id", async (c) => {
     broadcastShared("design-systems");
     return c.json(ds);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    return handleRepoError(c, err);
   }
 });
 
@@ -115,10 +135,19 @@ designSystemsRoutes.delete("/api/design-systems/:id", async (c) => {
 designSystemsRoutes.post("/api/design-systems/:id/publish", async (c) => {
   const id = c.req.param("id");
   if (!DesignSystemRepo.isValidId(id)) return bad(c, "invalid id");
-  let body: { published?: unknown };
-  try { body = await c.req.json(); }
-  catch {
-    // No body — treat as a toggle. Fetch current and flip.
+
+  // Determine intent from the request body:
+  //   • No body (Content-Length: 0 or absent) → toggle current value.
+  //   • Valid JSON { published: boolean }     → set explicit value.
+  //   • Valid JSON but wrong shape            → 400.
+  //   • Malformed JSON (body present, not parseable) → 400.
+  const rawText = await c.req.text();
+  const hasBody = rawText.trim().length > 0;
+
+  if (!hasBody) {
+    // Toggle path: read current value and flip it under the per-DS mutex
+    // (the mutex lives in setPublished → update, so concurrent toggles
+    // serialize correctly — see DsMutex in the repo).
     const cur = await getRepos().designSystems.get(id);
     if (!cur) return bad(c, "Not found", 404);
     const ds = await getRepos().designSystems.setPublished(id, !cur.published);
@@ -126,17 +155,26 @@ designSystemsRoutes.post("/api/design-systems/:id/publish", async (c) => {
     broadcastShared("design-systems");
     return c.json(ds);
   }
-  if (typeof body.published !== "boolean") {
-    // Body provided but not a boolean — treat as toggle.
-    const cur = await getRepos().designSystems.get(id);
-    if (!cur) return bad(c, "Not found", 404);
-    const ds = await getRepos().designSystems.setPublished(id, !cur.published);
-    if (!ds) return bad(c, "Not found", 404);
-    broadcastShared("design-systems");
-    return c.json(ds);
-  }
+
+  // Body is present — it must be valid JSON.
+  let body: unknown;
   try {
-    const ds = await getRepos().designSystems.setPublished(id, body.published);
+    body = JSON.parse(rawText);
+  } catch {
+    return bad(c, "Malformed JSON body — send an empty body to toggle, or { \"published\": true|false } to set explicitly");
+  }
+
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    typeof (body as Record<string, unknown>).published !== "boolean"
+  ) {
+    return bad(c, "Body must be { \"published\": true } or { \"published\": false }, or omit the body entirely to toggle");
+  }
+
+  const published = (body as { published: boolean }).published;
+  try {
+    const ds = await getRepos().designSystems.setPublished(id, published);
     if (!ds) return bad(c, "Not found", 404);
     broadcastShared("design-systems");
     return c.json(ds);

@@ -17,6 +17,33 @@ const ID_RE = /^[A-Za-z0-9_-]+$/;
 const NAME_MAX = 120;
 const DESCRIPTION_MAX = 64 * 1024; // 64KB — generous; longer specs should live in a project DESIGN.md.
 
+// ---------------------------------------------------------------------------
+// Per-DS async mutex — prevents the read-then-write toggle race in setPublished
+// when two requests hit the same DS concurrently.  The map is keyed by DS id;
+// entries are automatically dropped once a DS is deleted (or simply GC'd on
+// restart since state is in-memory only).
+// ---------------------------------------------------------------------------
+class DsMutex {
+  private readonly locks = new Map<string, Promise<void>>();
+
+  /** Run `fn` under the per-id mutex.  Callers queue behind each other. */
+  async run<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.locks.get(id) ?? Promise.resolve();
+    let resolve!: () => void;
+    const next = new Promise<void>((r) => { resolve = r; });
+    this.locks.set(id, next);
+    try {
+      await prev;
+      return await fn();
+    } finally {
+      resolve();
+      // Only drop the entry if it still points at our slot (avoids removing
+      // a newer waiter's slot if another caller queued after us).
+      if (this.locks.get(id) === next) this.locks.delete(id);
+    }
+  }
+}
+
 export type CreateDesignSystemInput = {
   /** Optional explicit id; auto-generated when omitted. */
   id?: string;
@@ -38,15 +65,30 @@ function clampName(name: unknown): string {
   if (typeof name !== "string") throw new Error("name must be a string");
   const trimmed = name.trim();
   if (trimmed.length === 0) throw new Error("name cannot be empty");
-  if (trimmed.length > NAME_MAX) return trimmed.slice(0, NAME_MAX);
+  if (trimmed.length > NAME_MAX) {
+    throw Object.assign(
+      new Error(`name exceeds the ${NAME_MAX}-character limit (got ${trimmed.length})`),
+      { code: "PAYLOAD_TOO_LARGE", limit: NAME_MAX, actual: trimmed.length },
+    );
+  }
   return trimmed;
 }
 
 function clampDescription(description: unknown): string {
   if (typeof description !== "string") throw new Error("description must be a string");
-  if (description.length > DESCRIPTION_MAX) return description.slice(0, DESCRIPTION_MAX);
+  if (description.length > DESCRIPTION_MAX) {
+    throw Object.assign(
+      new Error(
+        `description exceeds the ${DESCRIPTION_MAX}-byte limit (got ${description.length})`,
+      ),
+      { code: "PAYLOAD_TOO_LARGE", limit: DESCRIPTION_MAX, actual: description.length },
+    );
+  }
   return description;
 }
+
+// Module-level singleton — one per server process; fine for the FS driver.
+const _mutex = new DsMutex();
 
 export class DesignSystemRepo {
   constructor(private readonly driver: StorageDriver) {}
@@ -135,7 +177,10 @@ export class DesignSystemRepo {
   }
 
   async setPublished(id: string, published: boolean): Promise<DesignSystem | null> {
-    return this.update(id, { published });
+    // Run under the per-DS mutex so concurrent toggle requests serialize
+    // instead of both reading the same `cur.published` and landing on the
+    // same final value.
+    return _mutex.run(id, () => this.update(id, { published }));
   }
 
   async delete(id: string): Promise<boolean> {

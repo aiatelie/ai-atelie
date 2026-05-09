@@ -44,6 +44,26 @@ async function call(
   return { status: res.status, text, json };
 }
 
+/** Like call() but sends a raw string body (for testing malformed JSON). */
+async function rawCall(
+  routes: typeof designSystemsRoutes,
+  method: string,
+  path: string,
+  rawBody: string,
+) {
+  const res = await routes.fetch(
+    new Request(`http://x${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: rawBody,
+    }),
+  );
+  const text = await res.text();
+  let json: unknown = null;
+  try { json = JSON.parse(text); } catch { /* not JSON */ }
+  return { status: res.status, text, json };
+}
+
 describe("design-systems routes", () => {
   it("list starts empty", async () => {
     const r = await call(designSystemsRoutes, "GET", "/api/design-systems");
@@ -107,6 +127,72 @@ describe("design-systems routes", () => {
       name: "x",
     });
     expect(noDesc.status).toBe(400);
+  });
+
+  it("returns 413 when name or description exceeds size limits", async () => {
+    // Name over 120 chars → 413.
+    const longName = await call(designSystemsRoutes, "POST", "/api/design-systems", {
+      name: "a".repeat(121),
+      description: "fine",
+    });
+    expect(longName.status).toBe(413);
+    expect((longName.json as { limit: number }).limit).toBe(120);
+
+    // Description over 64 KB → 413.
+    const longDesc = await call(designSystemsRoutes, "POST", "/api/design-systems", {
+      name: "ok",
+      description: "x".repeat(64 * 1024 + 1),
+    });
+    expect(longDesc.status).toBe(413);
+    expect((longDesc.json as { limit: number }).limit).toBe(64 * 1024);
+
+    // PUT also rejects oversized description.
+    const base = await call(designSystemsRoutes, "POST", "/api/design-systems", {
+      name: "ok",
+      description: "initial",
+    });
+    expect(base.status).toBe(200);
+    const { id } = base.json as { id: string };
+    const putLong = await call(designSystemsRoutes, "PUT", `/api/design-systems/${id}`, {
+      description: "x".repeat(64 * 1024 + 1),
+    });
+    expect(putLong.status).toBe(413);
+  });
+
+  it("/publish returns 400 on malformed JSON body", async () => {
+    const created = await call(designSystemsRoutes, "POST", "/api/design-systems", {
+      name: "Test DS",
+      description: "desc",
+    });
+    expect(created.status).toBe(200);
+    const { id } = created.json as { id: string };
+
+    // Malformed JSON body → 400 (not a silent toggle).
+    const malformed = await rawCall(
+      designSystemsRoutes,
+      "POST",
+      `/api/design-systems/${id}/publish`,
+      "{not valid json",
+    );
+    expect(malformed.status).toBe(400);
+
+    // Wrong shape (published is a string, not boolean) → 400.
+    const wrongShape = await call(
+      designSystemsRoutes,
+      "POST",
+      `/api/design-systems/${id}/publish`,
+      { published: "yes" },
+    );
+    expect(wrongShape.status).toBe(400);
+
+    // Empty body → toggle (existing behavior preserved).
+    const toggle = await rawCall(
+      designSystemsRoutes,
+      "POST",
+      `/api/design-systems/${id}/publish`,
+      "",
+    );
+    expect(toggle.status).toBe(200);
   });
 
   it("project create accepts and validates design_system_id", async () => {
