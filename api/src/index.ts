@@ -37,6 +37,11 @@ app.use("*", observabilityMiddleware);
 
 // CORS: in dev the Vite proxy keeps requests same-origin so this is mostly
 // a safety net. In prod, set CORS_ORIGIN to the editor's exact origin.
+//
+// NOTE: /api/artifacts/claude-complete applies its own stricter CORS
+// (same-origin only) via a route-level middleware in artifacts.ts. The
+// wildcard here does NOT apply to that route because Hono applies the
+// most-specific matching middleware first.
 app.use("*", cors({ origin: ENV.CORS_ORIGIN, credentials: true }));
 
 // Lightweight request log — parity with the [comment-edit] / [runKimi]

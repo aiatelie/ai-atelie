@@ -152,6 +152,17 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
         // post the response back to the originating iframe (use e.source
         // so we route to the right window even if multiple iframes are
         // mounted — iframeRef may not be the one that fired this).
+
+        // Security: only forward messages from the same origin (i.e. our
+        // own preview iframes). A foreign page that somehow gets hold of
+        // our window reference cannot trigger API calls.
+        if (e.origin !== window.location.origin) {
+          console.warn(
+            `[tweakBridge] __claude_complete rejected: origin mismatch (got ${e.origin}, expected ${window.location.origin})`,
+          );
+          return;
+        }
+
         const id = typeof data.id === "string" ? data.id : null;
         const source = e.source as Window | null;
         if (!id || !source) return;
@@ -159,7 +170,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
           try {
             source.postMessage(
               { type: "__claude_complete_response", id, ...msg },
-              "*",
+              window.location.origin,
             );
           } catch {
             /* iframe may have unmounted; nothing to do */
@@ -169,12 +180,21 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
           typeof data.payload === "string"
             ? { prompt: data.payload }
             : (data.payload as Record<string, unknown> | null) ?? {};
+
+        // AbortController so we cancel the in-flight fetch if the 30s
+        // iframe-side timeout fires before the server responds.
+        const controller = new AbortController();
+        const TIMEOUT_MS = 28_000; // slightly under the 30s iframe timeout
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
         try {
           const res = await fetch("/api/artifacts/claude-complete", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
+            signal: controller.signal,
           });
+          clearTimeout(timer);
           const json = (await res.json().catch(() => ({}))) as {
             text?: string;
             error?: string;
@@ -185,7 +205,12 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
             reply({ result: typeof json.text === "string" ? json.text : "" });
           }
         } catch (err) {
-          reply({ error: err instanceof Error ? err.message : "fetch failed" });
+          clearTimeout(timer);
+          if (err instanceof Error && err.name === "AbortError") {
+            reply({ error: "request timed out" });
+          } else {
+            reply({ error: err instanceof Error ? err.message : "fetch failed" });
+          }
         }
         return;
       }
