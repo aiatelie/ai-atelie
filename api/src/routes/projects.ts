@@ -27,6 +27,47 @@ import { getRepos, type ProjectManifest } from "../storage/repos/index.ts";
 
 const ID_RE = /^[A-Za-z0-9_-]+$/;
 
+// Per-project mutex for the /tweak endpoint. Slider drags fire many
+// concurrent read-modify-write requests; without serialization the
+// last-write-wins storage driver lets stale values clobber the latest.
+// We keep one in-flight Promise per project so requests queue up.
+const tweakLocks = new Map<string, Promise<void>>();
+
+function withTweakLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = tweakLocks.get(projectId) ?? Promise.resolve();
+  let resolveLock!: () => void;
+  const next = new Promise<void>((r) => { resolveLock = r; });
+  tweakLocks.set(projectId, next);
+  // Chain: wait for the previous holder, run fn, then release.
+  return prev.then(fn).finally(resolveLock) as Promise<T>;
+}
+
+// Extract the JSON between EDITMODE markers using a literal byte scan
+// rather than a pure regex, so the sequence star-slash inside JSON string
+// values doesn't terminate the match early. Returns null if the markers
+// aren't found or if there is more than one BEGIN marker (ambiguous file).
+function extractEditModeBlock(
+  text: string,
+): { json: string; start: number; end: number } | null {
+  const BEGIN = "/*EDITMODE-BEGIN*/";
+  const END = "/*EDITMODE-END*/";
+  const b1 = text.indexOf(BEGIN);
+  if (b1 < 0) return null;
+  // Reject files with more than one EDITMODE-BEGIN block.
+  if (text.indexOf(BEGIN, b1 + BEGIN.length) >= 0) return null;
+  const jsonStart = b1 + BEGIN.length;
+  const e1 = text.indexOf(END, jsonStart);
+  if (e1 < 0) return null;
+  return { json: text.slice(jsonStart, e1).trim(), start: b1, end: e1 + END.length };
+}
+
+// Escape the star-slash sequence in JSON output so it never prematurely
+// terminates the EDITMODE-END marker. Backslash-slash (\/) is valid JSON
+// per RFC 8259 §7 and round-trips through JSON.parse transparently.
+function escapeEditModeJson(s: string): string {
+  return s.replace(/\*\//g, "*\\/");
+}
+
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".htm":  "text/html; charset=utf-8",
@@ -439,41 +480,59 @@ projectsRoutes.post("/api/projects/:id/tweak", async (c) => {
   if (!body.edits || typeof body.edits !== "object" || Array.isArray(body.edits)) {
     return c.json({ error: "edits must be a plain object" }, 400);
   }
-  try {
-    const read = await getRepos().projectFiles.readText(id, validated.path);
-    if (!read.ok) return c.json({ error: "File not found" }, 404);
-    const text = read.text;
-    const re = /\/\*EDITMODE-BEGIN\*\/\s*([\s\S]*?)\s*\/\*EDITMODE-END\*\//;
-    const match = text.match(re);
-    if (!match) {
-      return c.json({
-        error: "No EDITMODE-marked block found in file",
-        hint: "The file must contain `/*EDITMODE-BEGIN*/{...}/*EDITMODE-END*/` exactly once.",
-      }, 404);
+  // Serialize writes per project so concurrent slider-drag requests can't
+  // clobber each other (the storage driver is last-write-wins).
+  return withTweakLock(id, async () => {
+    try {
+      const read = await getRepos().projectFiles.readText(id, validated.path);
+      if (!read.ok) return c.json({ error: "File not found" }, 404);
+      const text = read.text;
+      // Use a literal byte-scan extractor so `*/` inside JSON string values
+      // doesn't prematurely terminate the match. Also rejects files with
+      // duplicate EDITMODE-BEGIN blocks.
+      const block = extractEditModeBlock(text);
+      if (!block) {
+        return c.json({
+          error: "No EDITMODE-marked block found in file",
+          hint: "The file must contain `/*EDITMODE-BEGIN*/{...}/*EDITMODE-END*/` exactly once.",
+        }, 404);
+      }
+      let parsed: Record<string, unknown>;
+      try { parsed = JSON.parse(block.json); }
+      catch (err) {
+        return c.json({
+          error: "EDITMODE block is not valid JSON",
+          detail: err instanceof Error ? err.message : String(err),
+        }, 422);
+      }
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        return c.json({ error: "EDITMODE block must be a plain object" }, 422);
+      }
+      // Reject keys not present in the existing block to prevent injection
+      // of arbitrary keys via hostile postMessage.
+      const unknownKeys = Object.keys(body.edits!).filter((k) => !(k in parsed));
+      if (unknownKeys.length > 0) {
+        return c.json({
+          error: "Edit contains keys not declared in the EDITMODE block",
+          unknownKeys,
+        }, 422);
+      }
+      const merged = { ...parsed, ...body.edits };
+      // Escape `*/` in output so it never terminates the EDITMODE-END marker.
+      const afterJson = escapeEditModeJson(JSON.stringify(merged, null, 2));
+      const replaced =
+        text.slice(0, block.start) +
+        `/*EDITMODE-BEGIN*/\n${afterJson}\n/*EDITMODE-END*/` +
+        text.slice(block.end);
+      if (replaced === text) {
+        return c.json({ file: validated.path, unchanged: true });
+      }
+      await getRepos().projectFiles.write(id, validated.path, replaced);
+      return c.json({ file: validated.path, before: parsed, after: merged });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
-    const beforeJson = match[1];
-    let parsed: Record<string, unknown>;
-    try { parsed = JSON.parse(beforeJson); }
-    catch (err) {
-      return c.json({
-        error: "EDITMODE block is not valid JSON",
-        detail: err instanceof Error ? err.message : String(err),
-      }, 422);
-    }
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return c.json({ error: "EDITMODE block must be a plain object" }, 422);
-    }
-    const merged = { ...parsed, ...body.edits };
-    const afterJson = JSON.stringify(merged, null, 2);
-    const replaced = text.replace(re, `/*EDITMODE-BEGIN*/${afterJson}/*EDITMODE-END*/`);
-    if (replaced === text) {
-      return c.json({ file: validated.path, unchanged: true });
-    }
-    await getRepos().projectFiles.write(id, validated.path, replaced);
-    return c.json({ file: validated.path, before: parsed, after: merged });
-  } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
-  }
+  });
 });
 
 projectsRoutes.post("/api/projects/:id/inspector-css", async (c) => {

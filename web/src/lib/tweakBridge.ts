@@ -120,11 +120,16 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
     // route changes (a route change usually swaps the iframe src).
   }, [activeFile, iframeRef]);
 
-  // Window-level message listener. The iframe is same-origin so we
-  // could do `event.source === ifr.contentWindow` for tighter scoping,
-  // but the message types are namespaced enough that we can accept all.
+  // Window-level message listener. Gate on origin AND source so only the
+  // project iframe can post messages we act on — prevents any hostile
+  // page framed inside an artifact from injecting tweak edits.
   useEffect(() => {
     const onMsg = async (e: MessageEvent) => {
+      // Security: accept only same-origin messages from the known iframe.
+      if (e.origin !== window.location.origin) return;
+      const expectedSource = iframeRef.current?.contentWindow;
+      if (expectedSource && e.source !== expectedSource) return;
+
       const data = e.data as
         | { type?: string; edits?: Record<string, unknown>; defaults?: Record<string, unknown> }
         | undefined;
@@ -172,7 +177,8 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
   const sendToIframe = useCallback((type: string) => {
     const w = iframeRef.current?.contentWindow;
     if (!w) return;
-    try { w.postMessage({ type }, "*"); } catch { /* ignore */ }
+    // Use explicit origin — the iframe is always same-origin.
+    try { w.postMessage({ type }, window.location.origin); } catch { /* ignore */ }
   }, [iframeRef]);
 
   /** Push partial edits from the host-side Tweaks panel into the iframe
@@ -187,7 +193,8 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
     setDefaults((prev) => (prev ? { ...prev, ...edits } : { ...edits }));
     const w = iframeRef.current?.contentWindow;
     if (w) {
-      try { w.postMessage({ type: "__edit_mode_set_keys", edits }, "*"); } catch { /* ignore */ }
+      // Use explicit origin — the iframe is always same-origin.
+      try { w.postMessage({ type: "__edit_mode_set_keys", edits }, window.location.origin); } catch { /* ignore */ }
     }
     // Fire-and-forget — failures land in console.warn via persistEdits.
     void persistEdits(projectIdRef.current, activeFileRef.current, edits);
@@ -272,5 +279,6 @@ function sendThemeToIframe(iframeRef: React.RefObject<HTMLIFrameElement | null>)
     surface: read("--surface"),
     brand: read("--brand"),
   };
-  try { w.postMessage({ type: "__dc_set_theme", tokens }, "*"); } catch { /* ignore */ }
+  // Use explicit origin — canvas iframes are always same-origin.
+  try { w.postMessage({ type: "__dc_set_theme", tokens }, window.location.origin); } catch { /* ignore */ }
 }

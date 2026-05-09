@@ -18,10 +18,10 @@ The user can toggle **Tweaks** on/off from the toolbar. When on, show additional
   `{type: '__activate_edit_mode'}` → show your Tweaks panel
   `{type: '__deactivate_edit_mode'}` → hide it
 - **Then** — only once that listener is live — call:
-  `window.parent.postMessage({type: '__edit_mode_available'}, '*')`
+  `window.parent.postMessage({type: '__edit_mode_available'}, window.location.origin)`
   This makes the toolbar toggle appear.
 - When the user changes a value, apply it live in the page **and** persist it by calling:
-  `window.parent.postMessage({type: '__edit_mode_set_keys', edits: {fontSize: 18}}, '*')`
+  `window.parent.postMessage({type: '__edit_mode_set_keys', edits: {fontSize: 18}}, window.location.origin)`
   You can send partial updates — only the keys you include are merged.
 
 ## Persisting state
@@ -38,6 +38,22 @@ const TWEAK_DEFAULS = /*EDITMODE-BEGIN*/{
 
 The block between the markers **must be valid JSON** (double-quoted keys and strings). There must be exactly one such block in the root HTML file, inside inline `<script>`. When you post `__edit_mode_set_keys`, the host parses the JSON, merges your edits, and writes the file back — so the change survives reload.
 
+## Opting out of the auto-bridge
+
+When you ship a custom Tweaks panel, the host's auto-bridge (`/tweaks-bridge.js`) is still injected into the page. Without an opt-out it will *also* post `__edit_mode_available` and render a host-side sidebar — both work, but the duplicate UI is noisy.
+
+### `window.__editModeOwned` — the opt-out flag
+
+Set this **synchronously in an inline `<script>` near the top of `<body>`**, *before* any `defer`-ed or `DOMContentLoaded`-fired script runs:
+
+```html
+<script>window.__editModeOwned = true;</script>
+```
+
+**Timing is critical.** The auto-bridge is injected with `defer` and runs after `DOMContentLoaded`. If you set `__editModeOwned` inside a `DOMContentLoaded` handler or in a `defer`-ed script, you may lose the race and the auto-bridge will already have announced itself. An inline script (no `defer`, no `async`) at the top of `<body>` is always safe.
+
+Any truthy value disables the bridge (`true`, `1`, `"yes"` all work).
+
 ## Tips
 
 - Keep the Tweaks surface small — a floating panel in the bottom-right of the screen, or inline handles. Don't overbuild.
@@ -45,7 +61,6 @@ The block between the markers **must be valid JSON** (double-quoted keys and str
 - If the user asks for multiple variants of a single element within a largher design, use this to allow cycling thru the options.
 - If the user does not ask for any tweaks, add a couple anyway by default; be creative and try to expose the user to interesting possibilities.
 - Add `data-cc-no-inspect="true"` to the panel root and the FAB so the editor's inspector skips them.
-- **Set `window.__editModeOwned = true`** at the top of your panel script so the host's auto-bridge backs off. Without it, the host renders its own typed Tweaks sidebar from your EDITMODE block in addition to your panel — both work, but it's noisy.
 
 ## Cheap path: no panel, just an EDITMODE block
 

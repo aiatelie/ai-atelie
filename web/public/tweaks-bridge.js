@@ -49,7 +49,9 @@
 
   // Pages that ship their own Tweaks panel set this flag — back off
   // entirely so we don't double-announce or fight their listener.
-  if (window.__editModeOwned === true) return;
+  // Check here (synchronous opt-out from an inline script) and again in
+  // start() (deferred opt-out for DOMContentLoaded-order edge cases).
+  if (window.__editModeOwned) return;
 
   // ─── Find an EDITMODE block in the document ────────────────────
   // The marker can live in inline <script>, inline <style>, or the
@@ -77,13 +79,10 @@
     return null;
   }
 
-  function fetchRawAndFind(cb) {
-    // Fallback for JSX / external-script artifacts: re-fetch our own
-    // URL (cheap, served from local API) and grep the raw text. Same
-    // origin so this can never fail on CORS.
+  function fetchRaw(url, cb) {
     try {
       var xhr = new XMLHttpRequest();
-      xhr.open("GET", location.href, true);
+      xhr.open("GET", url, true);
       xhr.onload = function () {
         try {
           var m = (xhr.responseText || "").match(EDITMODE_RE);
@@ -93,6 +92,35 @@
       xhr.onerror = function () { cb(null); };
       xhr.send();
     } catch (e) { cb(null); }
+  }
+
+  function fetchRawAndFind(cb) {
+    // Fallback for JSX / external-script artifacts: walk every external
+    // script we know about (own URL + each <script src>) and stop at
+    // the first EDITMODE hit. Same origin, so XHR is safe; serial walk
+    // keeps us off the parallel-request flood path for pages with
+    // many <script> tags.
+    var sources = [location.href];
+    var scripts = document.scripts;
+    for (var i = 0; i < scripts.length; i++) {
+      var src = scripts[i].getAttribute("src");
+      if (!src) continue;
+      // Skip ourselves and well-known third-party scripts (React, Babel)
+      // that can't possibly contain an EDITMODE block.
+      if (/tweaks-bridge\.js/.test(src)) continue;
+      if (/unpkg\.com|cdn\.jsdelivr\.net|googleapis\.com|gstatic\.com/.test(src)) continue;
+      sources.push(src);
+    }
+    var idx = 0;
+    function step() {
+      if (idx >= sources.length) { cb(null); return; }
+      var url = sources[idx++];
+      fetchRaw(url, function (hit) {
+        if (hit) cb(hit);
+        else step();
+      });
+    }
+    step();
   }
 
   function tryParse(text) {
@@ -167,6 +195,11 @@
   // arrive before we're ready.
   function registerListener() {
     window.addEventListener("message", function (e) {
+      // Security: only accept messages from the host (parent) window.
+      // Both sides are same-origin, so we gate on source AND origin to
+      // prevent hostile frames or sibling windows from injecting edits.
+      if (e.source !== window.parent) return;
+      if (e.origin !== window.location.origin) return;
       var data = e.data;
       if (!data || typeof data !== "object" || typeof data.type !== "string") return;
       switch (data.type) {
@@ -185,7 +218,8 @@
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") {
         try {
-          window.parent.postMessage({ type: "__edit_mode_dismissed" }, "*");
+          // Use explicit origin — both sides are same-origin.
+          window.parent.postMessage({ type: "__edit_mode_dismissed" }, window.location.origin);
         } catch (err) { /* ignore */ }
       }
     });
@@ -194,14 +228,20 @@
   function announce(defaults) {
     if (!defaults) return;
     try {
+      // Use explicit origin — both sides are same-origin.
       window.parent.postMessage({
         type: "__edit_mode_available",
         defaults: defaults,
-      }, "*");
+      }, window.location.origin);
     } catch (e) { /* ignore */ }
   }
 
   function start() {
+    // Re-check opt-out here too: an artifact whose script runs during
+    // DOMContentLoaded (same phase as this bridge) may have set the flag
+    // after the top-of-IIFE check ran but before start() fires. Truthy
+    // check matches any value the artifact might assign (true, 1, "yes").
+    if (window.__editModeOwned) return;
     // First try inline blocks — fastest path, no network.
     var inline = tryParse(findInline());
     if (inline) {
@@ -217,6 +257,7 @@
     // their work in JSX served via Babel-Standalone end up here —
     // the EDITMODE block lives in JSX source the parsed DOM can't see.
     fetchRawAndFind(function (raw) {
+      if (window.__editModeOwned) return;
       var parsed = tryParse(raw);
       if (!parsed) return;
       registerListener();
