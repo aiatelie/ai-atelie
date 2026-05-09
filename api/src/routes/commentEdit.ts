@@ -70,13 +70,48 @@ async function runAgent(
 export const commentEditRoutes = new Hono();
 
 commentEditRoutes.post("/api/comment-edit", async (c) => {
-  // Reject oversized bodies before buffering them into memory.
-  const cl = c.req.header("content-length");
-  if (cl && parseInt(cl, 10) > MAX_BODY_BYTES) {
-    return c.json({ error: `Request body too large (max ${MAX_BODY_BYTES / 1024 / 1024}MB)` }, 413);
+  // Strict body size enforcement: read the raw bytes first so chunked
+  // or headerless transfers can't bypass the cap. Hono's c.req.json()
+  // buffers the entire body regardless; checking .arrayBuffer() first
+  // catches oversized payloads before they inflate into JS objects.
+  let rawBody: ArrayBuffer;
+  try {
+    const r = c.req.raw;
+    if (r.body && typeof ReadableStream !== "undefined") {
+      const reader = r.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        total += value.byteLength;
+        if (total > MAX_BODY_BYTES) {
+          reader.cancel();
+          return c.json(
+            { error: `Request body too large (max ${MAX_BODY_BYTES / 1024 / 1024}MB)` },
+            413,
+          );
+        }
+      }
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+      rawBody = merged.buffer;
+    } else {
+      rawBody = await r.arrayBuffer();
+      if (rawBody.byteLength > MAX_BODY_BYTES) {
+        return c.json(
+          { error: `Request body too large (max ${MAX_BODY_BYTES / 1024 / 1024}MB)` },
+          413,
+        );
+      }
+    }
+  } catch {
+    return c.text("Failed to read request body", 400);
   }
   let payload: CommentPayload;
-  try { payload = await c.req.json(); }
+  try { payload = JSON.parse(new TextDecoder().decode(rawBody)) as CommentPayload; }
   catch { return c.text("Bad JSON", 400); }
   if (!payload.comment || !payload.route) {
     return c.text("Missing route or comment", 400);

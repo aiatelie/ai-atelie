@@ -533,8 +533,11 @@ function createFsAppendLog(metaDir: string): AppendLog & { __destroy(): void } {
 /* ─── Driver assembly ────────────────────────────────────────────── */
 
 export function createFsDriver(opts: FsDriverOptions): StorageDriver {
-  const projectsRoot = resolvePath(opts.projectsRoot);
-  const sharedRoot = resolvePath(opts.sharedRoot);
+  // Resolve symlinks once at init so every isInside() call in the hot
+  // path hits the VFS cache instead of walking /var→/private/var on
+  // every blob operation. macOS /tmp→/private/tmp is the main case.
+  const projectsRoot = realpathSync(resolvePath(opts.projectsRoot));
+  const sharedRoot = realpathSync(resolvePath(opts.sharedRoot));
   const reloadDebounceMs = opts.reloadDebounceMs ?? 250;
 
   // Lazy per-project caches. Created on first project(id) call.
