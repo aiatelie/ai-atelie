@@ -88,74 +88,74 @@ export async function runClaude(
         : { sessionId: sid }
       : {};
 
-    const q = query({
-      prompt,
-      options: {
-        cwd: rootDir,
-        env: buildClaudeEnv(),
-        // Tell the SDK to spawn `claude` under Bun. Without this, the
-        // spawned CLI crashes with `ReferenceError: Bun is not defined`
-        // when our parent is Bun (see claude-agent-sdk #266).
-        executable: "bun" as const,
-        additionalDirectories: [
-          ENV.SKILLS_DIR,
-          screenshotDirFor(payload.projectId),
-        ],
-        model: payload.modelId || undefined,
-        permissionMode: "bypassPermissions",
-        allowDangerouslySkipPermissions: true,
-        // Skills come from `additionalDirectories` only — never from cwd's
-        // `.claude/` or `~/.claude/`. Empty `settingSources` makes that
-        // explicit and prevents an adapter cwd that happens to contain a
-        // `.claude/skills/` from silently bleeding into product runtime.
-        settingSources: [],
-        // Disallowed tools — force MCP ask-user, tighten toolbox to relevant tools.
-        // Claude Code's native AskUserQuestion has no UI surface in our chat sidebar;
-        // force the model onto mcp__ask-user__ask_user which routes through the
-        // editor's ElicitForm. The rest are SDK tools irrelevant to a sandbox
-        // web-design editor (no cron, no worktrees, no notebooks, no remote
-        // triggers, no scheduling, no LSP, no subagent-spawning).
-        disallowedTools: [
-          "AskUserQuestion",
-          "CronCreate", "CronDelete", "CronList",
-          "EnterWorktree", "ExitWorktree",
-          "Monitor",
-          "NotebookEdit",
-          "PushNotification",
-          "RemoteTrigger",
-          "ScheduleWakeup",
-          "Task", "TaskOutput", "TaskStop",
-          "LSP",
-          ...(isSandbox ? ["Bash"] : []),
-        ] as string[],
-        abortController,
-        ...sessionOpts,
-        mcpServers: {
-          "ask-user":  { type: "stdio", ...ASK_USER_STDIO() },
-          "starters":  { type: "stdio", ...STARTERS(rootDir) },
-          ...(baseUrl
-            ? { "capabilities": { type: "stdio" as const, ...CAPABILITIES(baseUrl) } }
-            : {}),
-        },
-        onElicitation: async (req: any) => {
-          const { id, promise } = createPending(streamId);
-          send("elicit", {
-            id,
-            serverName: req.serverName,
-            message: req.message,
-            mode: req.mode,
-            schema: req.requestedSchema,
-            title: req.title,
-            displayName: req.displayName,
-            description: req.description,
-          });
-          const result = await promise;
-          return result as any;
-        },
-      },
-    });
-
     try {
+      const q = query({
+        prompt,
+        options: {
+          cwd: rootDir,
+          env: buildClaudeEnv(),
+          // Tell the SDK to spawn `claude` under Bun. Without this, the
+          // spawned CLI crashes with `ReferenceError: Bun is not defined`
+          // when our parent is Bun (see claude-agent-sdk #266).
+          executable: "bun" as const,
+          additionalDirectories: [
+            ENV.SKILLS_DIR,
+            screenshotDirFor(payload.projectId),
+          ],
+          model: payload.modelId || undefined,
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+          // Skills come from `additionalDirectories` only — never from cwd's
+          // `.claude/` or `~/.claude/`. Empty `settingSources` makes that
+          // explicit and prevents an adapter cwd that happens to contain a
+          // `.claude/skills/` from silently bleeding into product runtime.
+          settingSources: [],
+          // Disallowed tools — force MCP ask-user, tighten toolbox to relevant tools.
+          // Claude Code's native AskUserQuestion has no UI surface in our chat sidebar;
+          // force the model onto mcp__ask-user__ask_user which routes through the
+          // editor's ElicitForm. The rest are SDK tools irrelevant to a sandbox
+          // web-design editor (no cron, no worktrees, no notebooks, no remote
+          // triggers, no scheduling, no LSP, no subagent-spawning).
+          disallowedTools: [
+            "AskUserQuestion",
+            "CronCreate", "CronDelete", "CronList",
+            "EnterWorktree", "ExitWorktree",
+            "Monitor",
+            "NotebookEdit",
+            "PushNotification",
+            "RemoteTrigger",
+            "ScheduleWakeup",
+            "Task", "TaskOutput", "TaskStop",
+            "LSP",
+            ...(isSandbox ? ["Bash"] : []),
+          ] as string[],
+          abortController,
+          ...sessionOpts,
+          mcpServers: {
+            "ask-user":  { type: "stdio", ...ASK_USER_STDIO() },
+            "starters":  { type: "stdio", ...STARTERS(rootDir) },
+            ...(baseUrl
+              ? { "capabilities": { type: "stdio" as const, ...CAPABILITIES(baseUrl) } }
+              : {}),
+          },
+          onElicitation: async (req: any) => {
+            const { id, promise } = createPending(streamId);
+            send("elicit", {
+              id,
+              serverName: req.serverName,
+              message: req.message,
+              mode: req.mode,
+              schema: req.requestedSchema,
+              title: req.title,
+              displayName: req.displayName,
+              description: req.description,
+            });
+            const result = await promise;
+            return result as any;
+          },
+        },
+      });
+
       for await (const msg of q) {
         for (const evt of sdkMessageToAgentEvents(msg)) send("agent", evt);
       }

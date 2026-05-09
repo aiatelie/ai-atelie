@@ -51,6 +51,11 @@ function isSafeStreamId(s: unknown): s is string {
  *  subprocesses, not to throttle thoughtful work. */
 const RUN_MAX_DURATION_MS = 10 * 60 * 1000;
 
+/** Reject request bodies larger than 10MB. The dominant payload component
+ *  is the base64-encoded screenshotDataUrl; a 4K retina canvas produces
+ *  ~2MB. 10MB gives headroom for multiple large image attachments. */
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
+
 async function runAgent(
   payload: CommentPayload,
   send: (event: string, data: unknown) => void,
@@ -65,6 +70,11 @@ async function runAgent(
 export const commentEditRoutes = new Hono();
 
 commentEditRoutes.post("/api/comment-edit", async (c) => {
+  // Reject oversized bodies before buffering them into memory.
+  const cl = c.req.header("content-length");
+  if (cl && parseInt(cl, 10) > MAX_BODY_BYTES) {
+    return c.json({ error: `Request body too large (max ${MAX_BODY_BYTES / 1024 / 1024}MB)` }, 413);
+  }
   let payload: CommentPayload;
   try { payload = await c.req.json(); }
   catch { return c.text("Bad JSON", 400); }
@@ -273,7 +283,11 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
       // events stick around for BUFFER_GC_MS — covers the slow-reload
       // case where the user reloads AFTER the run completed but before
       // they could see the result.
-      const terminal: "done" | "error" = abortController.signal.aborted ? "error" : "done";
+      // When the client disconnected (grace timer fired), the abort was
+      // triggered by us, not by a genuine failure. Classify as "done" so
+      // the ring-buffer GC retains termination events for replay.
+      const terminal: "done" | "error" =
+        abortController.signal.aborted && !clientAborted ? "error" : "done";
       markRunFinished(requestStreamId, terminal);
       unregisterStreamEmitter(requestStreamId);
       try { await heartbeat; } catch { /* ignore */ }

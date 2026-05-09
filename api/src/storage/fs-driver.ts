@@ -12,6 +12,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import { realpathSync } from "node:fs";
 import { watch } from "node:fs";
 import {
   appendFile,
@@ -24,6 +25,7 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import type {
   AppendLog,
@@ -65,7 +67,13 @@ function etagFromMtime(mtimeMs: number): ETag {
 }
 
 function isInside(parent: string, child: string): boolean {
-  return child === parent || child.startsWith(parent + "/");
+  try {
+    const realParent = realpathSync(parent);
+    const realChild = realpathSync(child);
+    return realChild === realParent || realChild.startsWith(realParent + "/");
+  } catch {
+    return child === parent || child.startsWith(parent + "/");
+  }
 }
 
 /** Path traversal guard for BlobStore. Rejects absolute paths, `..`,
@@ -86,13 +94,18 @@ function safeBlobPath(root: string, rel: string): string | null {
 
 async function atomicWriteFile(path: string, data: Uint8Array | string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  const tmp = path + ".tmp";
-  if (typeof data === "string") {
-    await writeFile(tmp, data, "utf8");
-  } else {
-    await writeFile(tmp, data);
+  const tmp = `${path}.${randomUUID()}.tmp`;
+  try {
+    if (typeof data === "string") {
+      await writeFile(tmp, data, "utf8");
+    } else {
+      await writeFile(tmp, data);
+    }
+    await rename(tmp, path);
+  } catch (err) {
+    try { await unlink(tmp); } catch { /* best-effort cleanup */ }
+    throw err;
   }
-  await rename(tmp, path);
 }
 
 async function statOrNull(path: string): Promise<BlobStat | null> {
