@@ -544,6 +544,13 @@
   color: var(--ink-60);
   font-style: italic;
 }
+/* When the agent is paused on an `ask_user` form, swap to a warmer,
+ * un-animated label so the bubble visibly registers "your move" rather
+ * than "still working" — the elapsed timer is hidden in JSX too. */
+.liveStatus[data-waiting="true"] {
+  color: var(--brand, #d97757);
+  font-style: normal;
+}
 .liveStatusLabel {
   font-family: var(--font-mono);
   white-space: nowrap;

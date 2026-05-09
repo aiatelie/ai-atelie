@@ -816,19 +816,102 @@ export default function Editor() {
     });
   };
 
-  // Build a stable mutator for an assistant message at index `aIdx`
-  // inside the active thread. Used both by runTurn and the re-attach effect.
+  // Build a stable mutator that always targets the LATEST pending
+  // assistant message in the thread. Index-based addressing was fragile
+  // against mid-turn array splices (the lazy-split inserts a synthetic
+  // user-echo + a fresh pending assistant on `ask_user` accept). The
+  // last-pending lookup is unambiguous because we only allow one
+  // pending assistant per thread. The legacy `aIdx` is kept as the
+  // fallback target for re-attached streams whose ts may not yet match
+  // a pending state.
   const makeAssistantUpdater = (threadId: string, aIdx: number) =>
     (mut: (m: Extract<ChatMessage, { role: "assistant" }>) => Extract<ChatMessage, { role: "assistant" }>) => {
       setThreads((prev) => prev.map((t) => {
         if (t.id !== threadId) return t;
+        let openIdx = -1;
+        for (let i = t.messages.length - 1; i >= 0; i--) {
+          const m = t.messages[i];
+          if (m.role === "assistant" && m.pending) { openIdx = i; break; }
+        }
+        if (openIdx === -1) {
+          // Fallback for re-attach: target the captured index if it
+          // still points at an assistant message.
+          const m = t.messages[aIdx];
+          if (!m || m.role !== "assistant") return t;
+          const next = [...t.messages];
+          next[aIdx] = mut(m);
+          return { ...t, messages: next };
+        }
+
+        const open = t.messages[openIdx] as Extract<ChatMessage, { role: "assistant" }>;
+
+        // Lazy split: if the open assistant has a pending splitMarker
+        // (set when the user just submitted an `ask_user` form), do
+        // the split now. Close the current bubble, insert the user-echo
+        // after it, open a fresh pending bubble, and route the mutation
+        // to the fresh one. Lazy so we only spend a new bubble when the
+        // agent actually has more to say.
+        if (open.splitMarker) {
+          const { echo, ts: echoTs } = open.splitMarker;
+          const closed: Extract<ChatMessage, { role: "assistant" }> = {
+            ...open,
+            pending: false,
+            splitMarker: undefined,
+          };
+          const userEcho: ChatMessage = { role: "user", content: echo, ts: echoTs };
+          const fresh: Extract<ChatMessage, { role: "assistant" }> = {
+            role: "assistant",
+            content: "",
+            tools: [],
+            ts: Date.now(),
+            pending: true,
+            turnId: open.turnId,
+          };
+          const mutated = mut(fresh);
+          const next = [...t.messages];
+          next[openIdx] = closed;
+          next.push(userEcho, mutated);
+          return { ...t, messages: next };
+        }
+
         const next = [...t.messages];
-        const m = next[aIdx];
-        if (!m || m.role !== "assistant") return t;
-        next[aIdx] = mut(m);
+        next[openIdx] = mut(open);
         return { ...t, messages: next };
       }));
     };
+
+  // Drop the user-echo message for a still-pending splitMarker into the
+  // thread without opening a fresh assistant bubble. Called from the
+  // turn-close paths (done / error) so an unanswered split — i.e. the
+  // user submitted the form but the agent had nothing more to say —
+  // still leaves a record of the answer in the chat.
+  //
+  // Persistence note: the lazy split lives entirely in React state.
+  // The streamPersistence shadow handler keeps writing to its captured
+  // msgIdx, so disk-backed history doesn't get the split. On a reload
+  // mid-stream the chat reverts to the single-bubble layout. Live UX
+  // is the load-bearing case; reload-during-stream is rare. Future
+  // work can mirror the splice into the archive for full parity.
+  const flushOrphanSplitMarker = (threadId: string) => {
+    setThreads((prev) => prev.map((t) => {
+      if (t.id !== threadId) return t;
+      const next = [...t.messages];
+      for (let i = next.length - 1; i >= 0; i--) {
+        const m = next[i];
+        if (m.role !== "assistant") continue;
+        if (!m.splitMarker) break;
+        const echoMsg: ChatMessage = {
+          role: "user",
+          content: m.splitMarker.echo,
+          ts: m.splitMarker.ts,
+        };
+        next[i] = { ...m, splitMarker: undefined };
+        next.splice(i + 1, 0, echoMsg);
+        break;
+      }
+      return { ...t, messages: next };
+    }));
+  };
 
   // Wire one chatStream into a thread's assistant message. Returns the
   // event handler that translates StreamEvent → setThreads mutations.
@@ -868,11 +951,25 @@ export default function Editor() {
       if (e.type === "thinking") { thinkBuf += e.chunk; scheduleFlush(); return; }
       if (e.type === "tool") { updateAssistant((m) => ({ ...m, tools: [...m.tools, e.tool] })); return; }
       if (e.type === "toolResult") {
-        updateAssistant((m) => ({
-          ...m,
-          tools: m.tools.map((t) =>
-            t.id === e.id ? { ...t, result: e.content, isError: e.isError } : t,
-          ),
+        // After a lazy split the tool_use lives on the OLD (pre-answer)
+        // assistant card while the agent's continuation work goes onto
+        // a fresh post-answer card. Match by tool id across all assistant
+        // messages in the thread so the result lands on the bubble that
+        // owns the tool_use, not the active one.
+        setThreads((prev) => prev.map((t) => {
+          if (t.id !== threadId) return t;
+          const next = [...t.messages];
+          for (let i = next.length - 1; i >= 0; i--) {
+            const m = next[i];
+            if (m.role !== "assistant") continue;
+            const toolIdx = m.tools.findIndex((tt) => tt.id === e.id);
+            if (toolIdx === -1) continue;
+            const tools = [...m.tools];
+            tools[toolIdx] = { ...tools[toolIdx], result: e.content, isError: e.isError };
+            next[i] = { ...m, tools };
+            break;
+          }
+          return { ...t, messages: next };
         }));
         return;
       }
@@ -918,7 +1015,8 @@ export default function Editor() {
         flushText();
         setPendingElicit(null);
         setPendingElicitPreview(null);
-        updateAssistant((m) => ({ ...m, error: e.message, pending: false }));
+        updateAssistant((m) => ({ ...m, error: e.message, pending: false, splitMarker: undefined }));
+        flushOrphanSplitMarker(threadId);
         notifyTurnComplete({
           status: "failure",
           title: `${projectTitle} · agent error`,
@@ -937,13 +1035,14 @@ export default function Editor() {
             const summary = files.length > 0
               ? `Made ${m.tools.length} tool call${m.tools.length === 1 ? "" : "s"}, touching: ${files.join(", ")}.`
               : `Made ${m.tools.length} tool call${m.tools.length === 1 ? "" : "s"}.`;
-            return { ...m, content: summary, pending: false };
+            return { ...m, content: summary, pending: false, splitMarker: undefined };
           }
           if (!m.content && !m.error) {
-            return { ...m, error: "No reply received from AI (process exited without output).", pending: false };
+            return { ...m, error: "No reply received from AI (process exited without output).", pending: false, splitMarker: undefined };
           }
-          return { ...m, pending: false };
+          return { ...m, pending: false, splitMarker: undefined };
         });
+        flushOrphanSplitMarker(threadId);
         notifyTurnComplete({
           status: "success",
           title: `${projectTitle} · agent done`,
@@ -2505,15 +2604,31 @@ export default function Editor() {
           onElicitResolved={(action, answers) => {
             // Echo the user's answers (or skip notice) into the chat as a
             // synthetic user-role message so the conversation stays
-            // auditable. The model already has the answers via the tool
-            // result return value — this is purely a UI artifact.
+            // auditable. We DON'T append it eagerly — instead we stamp a
+            // splitMarker on the current pending assistant. The next
+            // additive event from the agent triggers the lazy split:
+            // close the current bubble, insert the user-echo right after
+            // it, open a fresh post-answer bubble. This produces the
+            // canonical chat flow [assistant #1] → [user echo] → [assistant #2]
+            // (Cline / Claude.ai pattern), instead of the buggy
+            // [one-giant-bubble-with-everything] → [echo at the end].
             const threadId = pendingElicit?.threadId;
             if (threadId) {
               const echo = formatElicitAnswerEcho(action, answers);
               if (echo) {
-                setThreads((prev) => prev.map((t) => t.id === threadId
-                  ? { ...t, messages: [...t.messages, { role: "user", content: echo, ts: Date.now() } as ChatMessage] }
-                  : t));
+                const stampTs = Date.now();
+                setThreads((prev) => prev.map((t) => {
+                  if (t.id !== threadId) return t;
+                  const next = [...t.messages];
+                  for (let i = next.length - 1; i >= 0; i--) {
+                    const m = next[i];
+                    if (m.role === "assistant" && m.pending) {
+                      next[i] = { ...m, splitMarker: { echo, ts: stampTs } };
+                      break;
+                    }
+                  }
+                  return { ...t, messages: next };
+                }));
               }
             }
             setPendingElicit(null);
@@ -2858,13 +2973,28 @@ export default function Editor() {
               request={pendingElicit?.request ?? null}
               preview={pendingElicit ? null : (pendingElicitPreview ?? null)}
               onResolved={(action, answers) => {
+                // Stamp splitMarker on the open assistant bubble so the
+                // next agent event triggers a lazy split — see the inline
+                // ChatSidebar handler for the full rationale. Mirroring
+                // the same logic here keeps the tab and inline forms in
+                // lockstep.
                 const threadId = pendingElicit?.threadId ?? pendingElicitPreview?.threadId;
                 if (threadId) {
                   const echo = formatElicitAnswerEcho(action, answers);
                   if (echo) {
-                    setThreads((prev) => prev.map((t) => t.id === threadId
-                      ? { ...t, messages: [...t.messages, { role: "user", content: echo, ts: Date.now() } as ChatMessage] }
-                      : t));
+                    const stampTs = Date.now();
+                    setThreads((prev) => prev.map((t) => {
+                      if (t.id !== threadId) return t;
+                      const next = [...t.messages];
+                      for (let i = next.length - 1; i >= 0; i--) {
+                        const m = next[i];
+                        if (m.role === "assistant" && m.pending) {
+                          next[i] = { ...m, splitMarker: { echo, ts: stampTs } };
+                          break;
+                        }
+                      }
+                      return { ...t, messages: next };
+                    }));
                   }
                 }
                 setPendingElicit(null);

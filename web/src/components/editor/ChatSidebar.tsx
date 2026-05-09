@@ -140,6 +140,14 @@ export type ChatMessage =
       error?: string;
       turnId?: string;       // server-side snapshot id for undo
       reverted?: boolean;    // edits for this turn have been undone
+      /** Set when the user has just submitted an `ask_user` form mid-turn.
+       *  Triggers a lazy split on the NEXT additive event from the agent:
+       *  the current bubble closes, a synthetic user-echo message is
+       *  inserted right after it, and a fresh pending bubble opens for
+       *  any post-answer work. Lazy so we don't end up with an empty
+       *  post-answer bubble if the agent has nothing more to say.
+       *  Cleared by the split or by the close-of-turn handler. */
+      splitMarker?: { echo: string; ts: number };
     };
 
 export type ChatThread = {
@@ -1953,24 +1961,36 @@ function TodoUpdateCard({ todos, prevTodos }: { todos: TodoItem[]; prevTodos: To
  *  by the parent's m.content check). */
 function LiveStatus({ tools, since }: { tools: ToolCall[]; since?: number }) {
   const last = tools.length > 0 ? tools[tools.length - 1] : null;
+  // Detect "agent is paused waiting for the user to fill an ask_user
+  // form" from the tool shape: a pending `ask_user` tool_use with no
+  // result yet. Swap the verb to a human-readable waiting copy and
+  // hide the elapsed timer — a 5-minute form-fill shouldn't read as
+  // "Thinking… 5m" when the agent is in fact idle. Continue.dev's
+  // pattern (replace streaming indicator with a static "awaiting input"
+  // badge) was the inspiration here.
+  const isWaitingForUser = !!last
+    && (last.name === "mcp__ask-user__ask_user" || last.name === "ask_user")
+    && !last.result;
   // Derive verb from the tool's semantic kind so this preview stays
   // aligned with the chip color below it (single source of truth in
   // toolKind.ts). The tool's label still drives the file/target text.
   let verb = "Working";
   let target = "";
-  if (last) {
+  if (last && !isWaitingForUser) {
     verb = verbOf(last.name);
     const label = last.label || "";
     const m = label.match(/^[^·]+·\s*(.+)$/);
     target = m ? m[1].trim() : "";
   }
   return (
-    <div className={s.liveStatus}>
-      <StreamingDots />
+    <div className={s.liveStatus} data-waiting={isWaitingForUser ? "true" : undefined}>
+      {!isWaitingForUser && <StreamingDots />}
       <span className={s.liveStatusLabel}>
-        {target ? `${verb} ${target}…` : "Thinking…"}
+        {isWaitingForUser
+          ? "Waiting for your answer"
+          : (target ? `${verb} ${target}…` : "Thinking…")}
       </span>
-      {since !== undefined && <ElapsedSince since={since} />}
+      {since !== undefined && !isWaitingForUser && <ElapsedSince since={since} />}
     </div>
   );
 }
