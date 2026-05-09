@@ -3,13 +3,19 @@
  * Top: sticky app chrome bar (brand mark + wordmark, avatar slot).
  * Left: sidebar with the always-visible NewProjectForm and the
  *       "Local-first · stored on disk" chip pinned to the bottom.
- * Main: tab strip (single "Projects" tab today, ready for more) above
- *       the project grid. Loading skeleton, empty hero, and populated
- *       grid all render inside the main pane.
+ * Main: tab strip ("Projects" + "Examples") above the main pane.
+ *       Loading skeleton, empty hero, and populated grid all render
+ *       inside the main pane on the Projects tab; the Examples tab
+ *       renders a curated set of prompt cards with live previews.
  *
  * Project creation is owned by `handleCreate`; the sidebar form calls
  * it directly. Errors surface as an inline `role="alert"` under the
  * form input rather than a browser `alert()`.
+ *
+ * Example cards round-trip through the same project-create flow — the
+ * card's "Use this prompt" button creates a new project named after
+ * the example, then navigates to /editor?fresh=1&prompt=<text> so the
+ * Editor auto-fires the prompt as the user's first turn.
  */
 
 import { useMemo, useState } from "react";
@@ -26,12 +32,16 @@ import {
   useProjects,
   type Project,
 } from "../lib/projects";
+import { EXAMPLES, type Example } from "../data/examples";
+
+type HomeTab = "projects" | "examples";
 
 export default function Projects() {
   const { all, loading } = useProjects();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const [activeTab, setActiveTab] = useState<HomeTab>("projects");
 
   // `?journey-mode=1` filters the home grid to the demo project + any
   // project whose name starts with "Journey · ". The journey suite
@@ -64,6 +74,18 @@ export default function Projects() {
     navigate("/editor?fresh=1");
   };
 
+  /** "Use this prompt" on the Examples tab. Creates a fresh project
+   *  named after the example, then navigates with `prompt=<text>` so
+   *  the Editor's intake effect auto-fires the prompt as the user's
+   *  first turn. activeSkills is omitted — the API picks the default
+   *  set, matching the behaviour of a no-skill-picked sidebar create. */
+  const handleUseExample = async (example: Example) => {
+    const p = await createProject(example.title);
+    setActiveProject(p.id);
+    const qs = new URLSearchParams({ fresh: "1", prompt: example.prompt });
+    navigate(`/editor?${qs.toString()}`);
+  };
+
   return (
     <div className={s.shell}>
       <header className={s.appbar}>
@@ -90,8 +112,9 @@ export default function Projects() {
             <button
               type="button"
               className={s.tab}
-              data-active="true"
-              aria-current="page"
+              data-active={activeTab === "projects" ? "true" : undefined}
+              aria-current={activeTab === "projects" ? "page" : undefined}
+              onClick={() => setActiveTab("projects")}
             >
               Projects
               {!loading && (
@@ -100,27 +123,43 @@ export default function Projects() {
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              className={s.tab}
+              data-active={activeTab === "examples" ? "true" : undefined}
+              aria-current={activeTab === "examples" ? "page" : undefined}
+              onClick={() => setActiveTab("examples")}
+            >
+              Examples
+              <span className={s.tabCount} aria-label={`${EXAMPLES.length} examples`}>
+                {EXAMPLES.length}
+              </span>
+            </button>
           </nav>
 
           <div className={s.mainBody}>
-            {visible.length === 0 ? (
-              loading ? (
-                <LoadingSkeleton />
+            {activeTab === "projects" ? (
+              visible.length === 0 ? (
+                loading ? (
+                  <LoadingSkeleton />
+                ) : (
+                  <EmptyState />
+                )
               ) : (
-                <EmptyState />
+                <div className={s.grid}>
+                  {visible.map((p) => (
+                    <ProjectCard
+                      key={p.id}
+                      project={p}
+                      onOpen={() => openProject(p.id)}
+                      onDelete={() => setDeleting(p)}
+                      onRename={(next) => updateProject(p.id, { name: next })}
+                    />
+                  ))}
+                </div>
               )
             ) : (
-              <div className={s.grid}>
-                {visible.map((p) => (
-                  <ProjectCard
-                    key={p.id}
-                    project={p}
-                    onOpen={() => openProject(p.id)}
-                    onDelete={() => setDeleting(p)}
-                    onRename={(next) => updateProject(p.id, { name: next })}
-                  />
-                ))}
-              </div>
+              <ExamplesGrid examples={EXAMPLES} onUse={handleUseExample} />
             )}
           </div>
         </main>
@@ -264,4 +303,75 @@ function formatTime(ts: number): string {
   if (diff < day) return `${Math.floor(diff / hr)}h ago`;
   if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
   return new Date(ts).toLocaleDateString();
+}
+
+/** Grid of curated prompt examples. Each card shows a live HTML preview
+ *  rendered inside a sandboxed iframe. The sandbox is intentionally
+ *  locked down to `sandbox=""` (no scripts, no same-origin) because the
+ *  current `previewHtml` snippets are pure static HTML/CSS. If examples
+ *  ever need JS (e.g. animated previews), widen the sandbox explicitly
+ *  with an allowlist (e.g. `sandbox="allow-scripts"`) and add a comment
+ *  explaining why — never leave the door open by default. */
+function ExamplesGrid({
+  examples,
+  onUse,
+}: {
+  examples: readonly Example[];
+  onUse: (e: Example) => void | Promise<void>;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [errorId, setErrorId] = useState<string | null>(null);
+  const handle = async (ex: Example) => {
+    if (busyId) return;
+    setBusyId(ex.id);
+    setErrorId(null);
+    try {
+      await onUse(ex);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      // Surface the failure inline so the user isn't left with a silently
+      // reset button and no feedback (compare handleCreate in the same file).
+      alert(`Could not create project: ${msg}`);
+      setErrorId(ex.id);
+    } finally {
+      setBusyId(null);
+    }
+  };
+  return (
+    <div className={s.examplesGrid}>
+      {examples.map((ex) => (
+        <article
+          key={ex.id}
+          className={s.exampleCard}
+          data-id={ex.id}
+        >
+          <div className={s.examplePreviewFrame} aria-hidden="true">
+            <iframe
+              className={s.examplePreviewIframe}
+              title={`${ex.title} preview`}
+              tabIndex={-1}
+              // No scripts needed — pure static HTML/CSS previews. See the
+              // ExamplesGrid comment above before widening this allowlist.
+              sandbox=""
+              loading="lazy"
+              srcDoc={`<!doctype html><html><head><meta charset="utf-8"/><style>html,body{margin:0;height:100%;overflow:hidden}</style></head><body>${ex.previewHtml}</body></html>`}
+            />
+          </div>
+          <div className={s.exampleBody}>
+            <div className={s.exampleTitle}>{ex.title}</div>
+            <blockquote className={s.examplePrompt}>{ex.prompt}</blockquote>
+            <button
+              type="button"
+              className={s.exampleUseBtn}
+              onClick={() => void handle(ex)}
+              disabled={busyId !== null}
+              aria-label={`Use the "${ex.title}" prompt`}
+            >
+              {busyId === ex.id ? "Creating…" : errorId === ex.id ? "Try again" : "Use this prompt"}
+            </button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
 }

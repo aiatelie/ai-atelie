@@ -531,6 +531,103 @@
   max-width: 100%;
 }
 
+/* ── Examples tab ──────────────────────────────────────────── */
+/* Grid of prompt-example cards. Larger min-width than the project
+ * grid because each card carries a live preview iframe + a quoted
+ * prompt block — they need room to breathe. Auto-fit collapses to
+ * 1 column on the compact viewport. */
+.examplesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+.exampleCard {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  transition:
+    border-color var(--motion-fast) var(--ease-out-expressive),
+    box-shadow var(--motion-fast) var(--ease-out-expressive),
+    transform var(--motion-fast) var(--ease-out-expressive);
+}
+.exampleCard:hover {
+  border-color: var(--ink-15);
+  box-shadow: var(--shadow-pop);
+  transform: translateY(-1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .exampleCard { transition: none; }
+  .exampleCard:hover { transform: none; }
+}
+/* Fixed-aspect preview window. The iframe inside fills it absolutely so
+ * the card height is deterministic regardless of preview content. */
+.examplePreviewFrame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--ink-04);
+  border-bottom: 1px solid var(--ink-08);
+  overflow: hidden;
+}
+.examplePreviewIframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  /* Prevent the iframe content from intercepting card hover/click; the
+   * "Use this prompt" button is the only intentional interaction. */
+  pointer-events: none;
+}
+.exampleBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+.exampleTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+  letter-spacing: -0.005em;
+  color: var(--ink-92);
+}
+.examplePrompt {
+  margin: 0;
+  padding: 0 0 0 10px;
+  border-left: 2px solid var(--ink-12);
+  font-style: italic;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink-65);
+}
+.exampleUseBtn {
+  appearance: none;
+  align-self: flex-start;
+  border: 1px solid var(--ink-15);
+  background: var(--brand);
+  color: var(--on-brand);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  margin-top: 4px;
+  min-height: 30px;
+  transition: background var(--motion-fast) var(--ease-out-expressive);
+}
+.exampleUseBtn:hover { background: var(--brand-fg); }
+.exampleUseBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.exampleUseBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ── Empty hero (centered inside main pane) ────────────────── */
 .empty {
   background: var(--surface);
