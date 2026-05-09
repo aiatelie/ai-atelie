@@ -687,6 +687,304 @@
 .dialogDanger:hover { filter: brightness(0.95); }
 .dialogDanger:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ── Design system picker on the new-project form ─────────── */
+.formDsField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-md);
+  background: var(--surface-warm);
+}
+.formDsLabel {
+  font: var(--weight-semi) var(--text-sm) var(--font-system);
+  color: var(--ink-92);
+  letter-spacing: -0.005em;
+}
+.formSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 8px 28px 8px 10px;
+  font: var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  outline: none;
+  min-height: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-65) 50%),
+    linear-gradient(-45deg, transparent 50%, var(--ink-65) 50%);
+  background-position: right 12px top 50%, right 7px top 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.formSelect:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-color: var(--ink-15);
+}
+.formSelect:disabled { opacity: 0.6; cursor: not-allowed; }
+.formDsHint {
+  font: var(--weight-regular) var(--text-xs) var(--font-system);
+  color: var(--ink-50);
+  letter-spacing: 0;
+  padding: 0 2px;
+}
+
+/* ── Design Systems tab — list, row, editor ─────────────── */
+.dsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 4px;
+}
+.dsLead {
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semi);
+  color: var(--ink-92);
+  letter-spacing: var(--tracking-heading);
+}
+.dsSub {
+  margin-top: 4px;
+  font-size: var(--text-md);
+  color: var(--ink-65);
+  line-height: 1.5;
+  max-width: 520px;
+}
+.dsCreateBtn {
+  appearance: none;
+  border: 1px solid var(--ink-15);
+  background: var(--brand);
+  color: var(--on-brand);
+  font: var(--weight-medium) var(--text-md) var(--font-system);
+  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dsCreateBtn:hover { background: var(--brand-fg); }
+.dsCreateBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.dsEmpty {
+  background: var(--surface);
+  border: 1px dashed var(--ink-10);
+  border-radius: var(--radius-xl);
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--ink-65);
+}
+.dsEmptyTitle {
+  font-size: var(--text-h4, var(--text-lg));
+  font-weight: var(--weight-semi);
+  color: var(--ink-92);
+  margin-bottom: 6px;
+}
+.dsEmptyBody {
+  font-size: var(--text-md);
+  line-height: 1.5;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.dsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dsRow {
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+.dsRow:hover { border-color: var(--ink-15); }
+.dsRowMain {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dsRowMain:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.dsRowName {
+  font: var(--weight-semi) var(--text-lg) var(--font-system);
+  color: var(--ink-92);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dsRowMeta {
+  font: var(--weight-regular) var(--text-xs) var(--font-system);
+  color: var(--ink-65);
+}
+.dsRowActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.dsRowBtn {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-92);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  min-height: 28px;
+}
+.dsRowBtn:hover { background: var(--ink-04); }
+.dsRowBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.dsRowBtnDanger { color: var(--danger); }
+.dsRowBtnDanger:hover { background: var(--danger-bg); }
+
+/* Toggle — visually hidden checkbox + a switch the label paints. */
+.dsToggleWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  color: var(--ink-65);
+}
+.dsToggleInput {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.dsToggleVisual {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--ink-12);
+  transition: background 0.18s var(--ease-out-expressive);
+}
+.dsToggleVisual::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  transition: transform 0.18s var(--ease-out-expressive);
+}
+.dsToggleWrap:has(.dsToggleInput:checked) .dsToggleVisual {
+  background: var(--brand);
+}
+.dsToggleWrap:has(.dsToggleInput:checked) .dsToggleVisual::after {
+  transform: translateX(14px);
+}
+.dsToggleWrap:has(.dsToggleInput:focus-visible) .dsToggleVisual {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.dsToggleWrap:has(.dsToggleInput:checked) .dsToggleLabel {
+  color: var(--ink-92);
+}
+
+/* Editor — same form chrome but laid out for a long textarea. */
+.dsEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  max-width: 720px;
+}
+.dsEditorHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.dsBackBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-65);
+  cursor: pointer;
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+}
+.dsBackBtn:hover { background: var(--ink-04); color: var(--ink-92); }
+.dsEditorTitle {
+  font: var(--weight-semi) var(--text-h3) var(--font-system);
+  color: var(--ink-92);
+  letter-spacing: var(--tracking-heading);
+}
+.dsFieldLabel {
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  color: var(--ink-65);
+  margin-top: 6px;
+}
+.dsTextarea {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font: var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  outline: none;
+  resize: vertical;
+  min-height: 240px;
+  line-height: 1.5;
+}
+.dsTextarea:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-color: var(--ink-15);
+}
+.dsTextarea:disabled { opacity: 0.6; }
+.dsEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 /* ── Compact viewport — collapse to single column ──────────── */
 @media (max-width: 720px) {
   .body {

@@ -24,6 +24,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import s from "./projects.module.css";
+import { useDesignSystems } from "../../lib/designSystems";
 
 type CatalogEntry = {
   name: string;
@@ -57,8 +58,14 @@ type CatalogResponse = { skills: CatalogEntry[] };
 type Props = {
   /** May be async — the form enters a busy state until it resolves.
    *  `activeSkills` is the user's aesthetic-skill picks at creation
-   *  time; pass through to `POST /api/projects/create`. */
-  onSubmit: (name: string, activeSkills: string[]) => Promise<void>;
+   *  time; pass through to `POST /api/projects/create`.
+   *  `designSystemId` is optional — when set, the project's manifest
+   *  records the binding so every agent turn injects the brand. */
+  onSubmit: (
+    name: string,
+    activeSkills: string[],
+    designSystemId?: string,
+  ) => Promise<void>;
 };
 
 export function NewProjectForm({ onSubmit }: Props) {
@@ -70,6 +77,10 @@ export function NewProjectForm({ onSubmit }: Props) {
   // Defaults to all-aesthetic-checked when the catalog arrives.
   const [aesthetic, setAesthetic] = useState<CatalogEntry[]>([]);
   const [activeSet, setActiveSet] = useState<Set<string>>(new Set());
+  // Design system binding — empty string = "no DS bound" (the default).
+  // The full DS list is workspace-wide; useDesignSystems handles fetch.
+  const { all: designSystems } = useDesignSystems();
+  const [designSystemId, setDesignSystemId] = useState<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +114,7 @@ export function NewProjectForm({ onSubmit }: Props) {
       // Preserve catalog order (display order) in the manifest array;
       // priority for name collisions is stable across reloads.
       const ordered = aesthetic.map((e) => e.name).filter((n) => activeSet.has(n));
-      await onSubmit(name, ordered);
+      await onSubmit(name, ordered, designSystemId || undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);
@@ -146,6 +157,35 @@ export function NewProjectForm({ onSubmit }: Props) {
       {error && (
         <div id={errorId} className={s.formError} role="alert">
           {error}
+        </div>
+      )}
+
+      {/* Design system picker — visible only when at least one DS exists,
+        * so users without one don't see a confusing "None" dropdown. The
+        * Design Systems tab on the home page is where users author them. */}
+      {designSystems.length > 0 && (
+        <div className={s.formDsField}>
+          <label htmlFor="new-project-ds" className={s.formDsLabel}>
+            Design system
+          </label>
+          <select
+            id="new-project-ds"
+            data-testid="new-project-ds"
+            className={s.formSelect}
+            value={designSystemId}
+            onChange={(e) => setDesignSystemId(e.target.value)}
+            disabled={submitting}
+          >
+            <option value="">None — generic visual defaults</option>
+            {designSystems.map((ds) => (
+              <option key={ds.id} value={ds.id}>
+                {ds.name}{ds.published ? "" : " (draft)"}
+              </option>
+            ))}
+          </select>
+          <div className={s.formDsHint}>
+            Bind a brand and Claude follows it on every visual decision.
+          </div>
         </div>
       )}
 
