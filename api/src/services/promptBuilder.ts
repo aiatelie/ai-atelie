@@ -308,7 +308,7 @@ async function buildSandboxPrompt(
     lines.push(
       "",
       `**Page screenshot (current iframe state):** \`${screenshotPath}\``,
-      `→ Read this image FIRST to see what the user is looking at right now.`,
+      `This file contains the current visual state of the page the user is looking at. Use it for visual context.`,
     );
   }
   if (userUploads.length) {
