@@ -1517,14 +1517,48 @@ export default function Editor() {
   // user sees a calm welcome screen first instead of a wall of pre-
   // fired instructions before they've typed anything.
   const [pendingIntakeFor, setPendingIntakeFor] = useState<string | null>(null);
+  // ?prompt=<encoded> — set by the home page's "Use this prompt" button
+  // on the Examples tab. We auto-fire this as the user's first turn so
+  // they land directly in a streaming reply instead of having to type.
+  // Per-project guard mirrors the intake one: same project + same prompt
+  // never fires twice, even on remounts. Captured here on first read so
+  // the URL strip below doesn't lose the value before runTurn fires.
+  const promptFiredFor = useRef<Set<string>>(new Set());
+  const [pendingAutoPrompt, setPendingAutoPrompt] = useState<string | null>(null);
   useEffect(() => {
     if (params.get("fresh") !== "1") return;
     if (intakeFiredFor.current.has(activeProject.id)) return;
     intakeFiredFor.current.add(activeProject.id);
     setChatTabSwitchKey((k) => k + 1);
-    setParams((next) => { next.delete("fresh"); return next; }, { replace: true });
+    const autoPrompt = params.get("prompt");
+    setParams((next) => {
+      next.delete("fresh");
+      next.delete("prompt");
+      return next;
+    }, { replace: true });
     setPendingIntakeFor(activeProject.id);
+    if (autoPrompt && !promptFiredFor.current.has(activeProject.id)) {
+      promptFiredFor.current.add(activeProject.id);
+      setPendingAutoPrompt(autoPrompt);
+    }
   }, [params, setParams, activeProject?.id]);
+
+  // Drain the pending auto-prompt once the project + threads are ready.
+  // queueOrSend handles intake-preamble attachment + the in-flight lock,
+  // so the auto-prompt rides exactly the same path as a typed message.
+  useEffect(() => {
+    if (!pendingAutoPrompt) return;
+    if (!activeProject) return;
+    // Defer one tick so the freshly-set pendingIntakeFor flag is visible
+    // to queueOrSend's preamble check (both setters run in the same
+    // batch above, but reading state in the same render is racy).
+    const id = setTimeout(() => {
+      queueOrSend(pendingAutoPrompt, [], "");
+      setPendingAutoPrompt(null);
+    }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoPrompt, activeProject?.id]);
 
   // Same brief that used to auto-fire as a giant hidden user message.
   // Now generated lazily and ridden as `preamble` on the user's first
