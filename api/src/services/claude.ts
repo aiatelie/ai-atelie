@@ -20,8 +20,8 @@ import { access } from "node:fs/promises";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { ENV, screenshotDirFor } from "../env.ts";
 import { preparePromptForPayload, UUID_RE } from "./promptBuilder.ts";
-import { createPending } from "./elicitBus.ts";
-import { sdkMessageToAgentEvents } from "./agentEvents.ts";
+import { createPending, hasStreamEmitter } from "./elicitBus.ts";
+import { sdkMessageToAgentEvents, newAgentEventState } from "./agentEvents.ts";
 import { ASK_USER_STDIO, STARTERS, CAPABILITIES } from "../agents/shared/mcpServers.ts";
 import { effectiveSessionId, orphanSession, sessionRemapSize } from "../agents/shared/sessionStore.ts";
 import type { CommentPayload, Emitter } from "./types.ts";
@@ -88,6 +88,15 @@ export async function runClaude(
         : { sessionId: sid }
       : {};
 
+    // Track in-flight ask_user tool_uses in FIFO order so each
+    // onElicitation pairs with its originating tool_use even when the
+    // model emits two ask_user blocks in one assistant message. Single
+    // `let lastAskUserToolUseId` would lose the first id when the
+    // second block's start event arrived; the SDK then awaits the
+    // elicit callbacks serially in block order, so a queue (pushed on
+    // preview start, shifted on onElicitation) lines up correctly.
+    const pendingAskUserToolUseIds: string[] = [];
+
     const q = query({
       prompt,
       options: {
@@ -104,11 +113,17 @@ export async function runClaude(
         model: payload.modelId || undefined,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
-        // Skills come from `additionalDirectories` only — never from cwd's
-        // `.claude/` or `~/.claude/`. Empty `settingSources` makes that
-        // explicit and prevents an adapter cwd that happens to contain a
-        // `.claude/skills/` from silently bleeding into product runtime.
-        settingSources: [],
+        // Project skills come from `additionalDirectories` only — never
+        // from cwd's `.claude/` or local `.claude/settings.local.json`.
+        // We DO need the user-level source ("user" loads
+        // `~/.claude/settings.json` which is where the SDK resolves the
+        // OAuth bearer token from `~/.claude/.credentials.json`); without
+        // it every run 401s with "Failed to authenticate." The previous
+        // empty-array config silently broke auth — the SDK docstring
+        // notes that `query()` defaults to ALL sources, while explicit
+        // `[]` loads NONE, which in turn means no auth bootstrap.
+        // Valid values per the SDK type: 'user' | 'project' | 'local'.
+        settingSources: ["user"],
         // Disallowed tools — force MCP ask-user, tighten toolbox to relevant tools.
         // Claude Code's native AskUserQuestion has no UI surface in our chat sidebar;
         // force the model onto mcp__ask-user__ask_user which routes through the
@@ -138,9 +153,24 @@ export async function runClaude(
             : {}),
         },
         onElicitation: async (req: any) => {
+          // No client subscribed → the SSE elicit event would emit into
+          // the void. The grace timer (GRACE_DISCONNECT_MS) usually
+          // covers brief disconnects, but if the user has fully gone
+          // away the pending would hang the agent forever. Resolve
+          // immediately as cancel so the agent's `ask_user` returns
+          // and the run can either continue ("user skipped") or wind
+          // down cleanly via the existing abort path.
+          if (!hasStreamEmitter(streamId)) {
+            return { action: "cancel", content: { _reason: "no-active-client" } } as any;
+          }
           const { id, promise } = createPending(streamId);
           send("elicit", {
             id,
+            // FIFO match against the queue of in-flight ask_user
+            // tool_uses. The SDK invokes onElicitation in the same
+            // order the content blocks completed, so the oldest
+            // queued id is the one this elicit corresponds to.
+            previewToolUseId: pendingAskUserToolUseIds.shift(),
             serverName: req.serverName,
             message: req.message,
             mode: req.mode,
@@ -155,12 +185,28 @@ export async function runClaude(
       },
     });
 
+    // Per-call state for content_block index tracking. A module-level
+    // Map would cross-contaminate concurrent runs (two tabs, two
+    // projects) since their content-block indices both start at 0.
+    const agentState = newAgentEventState();
     try {
       for await (const msg of q) {
-        for (const evt of sdkMessageToAgentEvents(msg)) send("agent", evt);
+        for (const evt of sdkMessageToAgentEvents(msg, agentState)) {
+          if (evt.type === "elicitPreviewStart") {
+            pendingAskUserToolUseIds.push(evt.toolUseId);
+          }
+          send("agent", evt);
+        }
       }
       return; // success
     } catch (err) {
+      // Drain the FIFO queue on error so orphaned tool_use ids from
+      // this run can't bleed into a future run's onElicitation pairing.
+      // The queue is scoped to this while-iteration's `query()` call, so
+      // clearing it here is safe and prevents desync if error recovery
+      // or a retry loop is ever introduced.
+      pendingAskUserToolUseIds.length = 0;
+
       if (abortController.signal.aborted) {
         return;
       }
@@ -172,16 +218,29 @@ export async function runClaude(
       if (err instanceof Error && err.stack) {
         console.error(err.stack.split("\n").slice(0, 5).join("\n"));
       }
+      // Auto-heal heuristics for stale-session resume:
+      //   1. `exited with code 1` — the spawned `claude` CLI crashed
+      //      partway through replaying a corrupt session log.
+      //   2. `401` / `Failed to authenticate` — the session was created
+      //      under a different credential context (e.g. user toggled
+      //      login state between runs); the bearer the SDK replays no
+      //      longer authenticates even though `~/.claude/.credentials.json`
+      //      itself is valid. Orphan and start fresh; the new session
+      //      picks up current credentials.
+      const isCorruptSession = /exited with code 1/i.test(msg);
+      const isAuthFailureOnResume = /401\b|Failed to authenticate|Invalid authentication credentials/i
+        .test(msg);
       if (
         attempt === 1 &&
         triedResume &&
         originalSid &&
-        /exited with code 1/i.test(msg)
+        (isCorruptSession || isAuthFailureOnResume)
       ) {
         sid = orphanSession("claude", rootDir, originalSid);
         sessionExists = false;
-        console.log(`[runClaude] auto-healing → orphan + retry with sid=${sid.slice(0, 8)}`);
-        send("status", { phase: "retry", reason: "session-corrupted" });
+        const reason = isAuthFailureOnResume ? "session-auth-stale" : "session-corrupted";
+        console.log(`[runClaude] auto-healing → orphan + retry with sid=${sid.slice(0, 8)} (${reason})`);
+        send("status", { phase: "retry", reason });
         continue;
       }
       send("error", { message: `claude SDK error: ${msg}` });

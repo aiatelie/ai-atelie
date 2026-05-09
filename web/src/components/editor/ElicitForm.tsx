@@ -1,14 +1,23 @@
 /* ElicitForm.tsx — renders an MCP elicitation form inside the chat sidebar.
  *
  * The dev server emits an `elicit` SSE event when Claude calls ask_user
- * (mcp/ask-user-server.mjs). We surface a structured form for the user to
- * fill, then POST the answer to /api/elicit-response so the server resolves
- * the pending elicitation and Claude can continue.
+ * (mcp/ask-user-server.mjs). We surface a structured form with N
+ * questions for the user to fill, then POST the answers to
+ * /api/elicit-response so the server resolves the pending elicitation
+ * and Claude can continue.
  *
  * Schema shape we expect (built by mcp/ask-user-server.mjs):
- *   { type: "object", properties: { answer: <field> }, required: ["answer"] }
+ *   {
+ *     type: "object",
+ *     title: "Quick questions about ...",
+ *     properties: {
+ *       <snake_case_id>: <field-schema>,   // one entry per question
+ *       ...
+ *     },
+ *     required: [<id>, ...]
+ *   }
  *
- * Field kinds we support (single answer field — keep it simple):
+ * Per-question field kinds we support:
  *   - enum single  → radio        { type:"string", enum:[…] }
  *   - enum multi   → checkbox     { type:"array",  items:{ type:"string", enum:[…] } }
  *   - number       → range/slider { type:"number", minimum, maximum, multipleOf }
@@ -16,88 +25,179 @@
  *   - dropzone     → file drop    { type:"string", format:"uri", "x-input":"dropzone" }
  *   - textarea     → textarea     { type:"string", "x-input":"textarea" }
  *   - string       → text input   { type:"string" }
+ *
+ * Two escape-hatch patterns coexist:
+ *   1. ENUM kinds: the MCP server auto-injects "Decide for me" /
+ *      "Explore a few" / "Other" options into the enum list for every
+ *      enum question. The user picks one of those chips like any other
+ *      option — the value submitted is the literal label string. There
+ *      is no inline freeform input on enum kinds: the SDK strict-validates
+ *      the elicit reply against the enum, so a custom string would fail.
+ *      Use a follow-up text question if free-form text is needed.
+ *   2. NON-ENUM kinds (number, boolean, dropzone): a per-question
+ *      "Other" toggle bypasses the structured input and falls back to
+ *      a freeform textarea — useful when the model's choices don't
+ *      cover what the user wants.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import DOMPurify from "dompurify";
 import s from "./chat.module.css";
 import type { ElicitRequest } from "../../lib/chatStream";
+import { parsePartialQuestions, type StreamingQuestion } from "../../lib/streamingJson";
 
 type Schema = Record<string, unknown> | undefined;
 
-type Props = {
-  request: ElicitRequest;
-  /** Called once the user submits / declines / cancels. */
-  onResolved: () => void;
+type Question = {
+  id: string;
+  schema: Schema;
+  required: boolean;
+  title: string;
+  subtitle?: string;
 };
 
-export function ElicitForm({ request, onResolved }: Props) {
-  const answerField = getAnswerField(request.schema);
-  const detectedKind = detectKind(answerField);
-  // "Type freely" toggle — lets the user bypass the structured input and
-  // write a freeform answer regardless of the field kind. Useful when the
-  // model's options don't quite cover what the user wants to say.
-  const canTypeFreely = detectedKind !== "text" && detectedKind !== "textarea";
-  const [freeMode, setFreeMode] = useState(false);
-  const kind: FieldKind = freeMode ? "textarea" : detectedKind;
+type Props = {
+  /** Real elicitation request — present once the MCP elicitation has
+   *  fired and the form is ready to accept answers. */
+  request?: ElicitRequest | null;
+  /** Streaming preview, before the elicitation fires. The form
+   *  derives questions by lenient-parsing `partialJson` and renders
+   *  them progressively without any submit affordance. */
+  preview?: { toolUseId: string; partialJson: string; done: boolean } | null;
+  /** Called once the user submits / declines / cancels.
+   *  When `accept`, `answers` carries the final per-question values
+   *  so the parent can echo them into the chat as a synthetic user
+   *  message (see Editor.tsx). Required when `request` is set. */
+  onResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
+  /** "inline" = sidebar render (default; heavier chrome to draw
+   *  attention inside the chat scroll); "tab" = canvas-tab render
+   *  (lighter chrome, larger typography, more whitespace — the
+   *  surrounding tab area is already a focused surface). */
+  variant?: "inline" | "tab";
+};
 
-  // One value type per kind — keep them in separate state slots.
-  const [single, setSingle] = useState<string>(() => initialString(answerField));
-  const [multi, setMulti] = useState<string[]>(() => initialArray(answerField));
-  const [num, setNum] = useState<number>(() => initialNumber(answerField));
-  const [bool, setBool] = useState<boolean>(() => initialBoolean(answerField));
-  const [text, setText] = useState<string>(() => initialString(answerField));
-  /** Pasted/dropped images for text/textarea fields. Rendered as chips
-   *  above the textarea (composer-style); appended to the answer as
-   *  markdown image references on submit so Claude can Read each path. */
-  const [textAttachments, setTextAttachments] = useState<{ path: string; dataUrl: string }[]>([]);
-  const [dropPath, setDropPath] = useState<string>("");
-  const [dragOver, setDragOver] = useState(false);
+export function ElicitForm({ request, preview, onResolved, variant = "inline" }: Props) {
+  const isPreview = !request && !!preview;
+
+  // Source of truth for the question list. Real mode parses the
+  // server-built schema; preview mode lenient-parses the streaming
+  // JSON. The latter is recomputed on every delta — cheap enough at
+  // O(n) over partialJson, and the question id-set only ever grows
+  // monotonically so React diffs are well-behaved.
+  const questions = useMemo<Question[]>(() => {
+    if (request?.schema) return parseQuestions(request.schema);
+    if (preview) {
+      const parsed = parsePartialQuestions(preview.partialJson);
+      return parsed.questions.map(streamingQuestionToQuestion);
+    }
+    return [];
+  }, [request?.schema, preview?.partialJson]);
+
+  // Header text. Preview mode shows the streamed `title` as soon as
+  // its closing quote has arrived; real mode uses request.message.
+  const headerTitle = useMemo(() => {
+    if (request?.message) return request.message;
+    if (preview) {
+      const parsed = parsePartialQuestions(preview.partialJson);
+      return parsed.title ?? "Generating questions…";
+    }
+    return "";
+  }, [request?.message, preview?.partialJson]);
+
+  // Persist in-progress answers to localStorage so a page reload
+  // doesn't drop everything the user already typed. The key is keyed
+  // off the elicit's id (real form) or the toolUseId (preview state),
+  // whichever is the stable handle right now. When promotion happens
+  // (preview gets its real id), we copy the draft over so nothing is
+  // lost across the transition. Cleared on resolve.
+  const draftKey = request?.id ? `elicit-draft:${request.id}` : preview ? `elicit-draft:preview:${preview.toolUseId}` : null;
+  const [answers, setAnswers] = useState<Record<string, unknown>>(() => {
+    const fromQuestions = Object.fromEntries(questions.map((q) => [q.id, initialValue(q.schema)]));
+    if (!draftKey) return fromQuestions;
+    try {
+      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(draftKey) : null;
+      if (!raw) return fromQuestions;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      // Merge: fromQuestions provides defaults; parsed wins per-key.
+      return { ...fromQuestions, ...parsed };
+    } catch {
+      return fromQuestions;
+    }
+  });
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const valid = (() => {
-    switch (kind) {
-      case "enum-single": return !!single;
-      case "enum-multi":  return multi.length > 0;
-      case "number":      return Number.isFinite(num);
-      case "boolean":     return true;
-      case "dropzone":    return !!dropPath;
-      case "textarea":
-      case "text":        return text.trim().length > 0 || textAttachments.length > 0;
-      default:            return text.trim().length > 0;
+  // Migrate the draft when the elicit promotes from preview→real.
+  // Both keys live in localStorage simultaneously for a beat; we
+  // copy from the preview key over the real key, then clear the
+  // preview key so it doesn't accumulate.
+  useEffect(() => {
+    if (!request?.id || !preview?.toolUseId) return;
+    if (typeof localStorage === "undefined") return;
+    const previewKey = `elicit-draft:preview:${preview.toolUseId}`;
+    const realKey = `elicit-draft:${request.id}`;
+    const previewDraft = localStorage.getItem(previewKey);
+    if (previewDraft && !localStorage.getItem(realKey)) {
+      localStorage.setItem(realKey, previewDraft);
+      localStorage.removeItem(previewKey);
     }
-  })();
+  }, [request?.id, preview?.toolUseId]);
 
-  const buildAnswer = (): unknown => {
-    switch (kind) {
-      case "enum-single": return single;
-      case "enum-multi":  return multi;
-      case "number":      return num;
-      case "boolean":     return bool;
-      case "dropzone":    return dropPath;
-      case "textarea":
-      case "text": {
-        // Append attachments as markdown image refs so Claude can Read
-        // each path. Keeps the textarea visually clean while still
-        // delivering the file references through the single-string
-        // elicitation answer field.
-        if (textAttachments.length === 0) return text;
-        const refs = textAttachments.map((a) => `![](${a.path})`).join("\n");
-        return text.trim() ? `${text}\n\n${refs}` : refs;
-      }
-      default:            return text;
+  // Write answers to localStorage on every change. Cheap (small JSON,
+  // synchronous) and keeps reload-survival reliable. The cleanup on
+  // resolve happens in `send()` below.
+  useEffect(() => {
+    if (!draftKey || typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify(answers));
+    } catch {
+      // Quota exceeded or private mode — non-fatal; the form just
+      // won't survive a reload, which is the prior behavior.
     }
-  };
+  }, [draftKey, answers]);
+
+  // Sync answers map when new questions arrive during streaming. We
+  // only ADD missing keys; existing user input is preserved across
+  // delta updates and across the preview→real promotion.
+  useEffect(() => {
+    setAnswers((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const q of questions) {
+        if (!(q.id in next)) {
+          next[q.id] = initialValue(q.schema);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [questions]);
+
+  // Per-question required-and-not-yet-valid count. Drives the "(N more)"
+  // hint next to a disabled Continue button so the user knows what's
+  // standing between them and submission.
+  const missingRequired = isPreview
+    ? questions.filter((q) => q.required).length
+    : questions.filter((q) => q.required && !isValid(q.schema, answers[q.id])).length;
+  const allValid = !isPreview && missingRequired === 0;
 
   const send = async (action: "accept" | "decline" | "cancel") => {
-    if (submitting) return;
+    if (submitting || !request) return;
     setSubmitting(true);
     setErrorMsg(null);
-    const body: { id: string; action: string; content?: { answer: unknown } } = {
+    // The MCP elicitation contract: `content` matches the
+    // `requestedSchema` shape directly. Our schema has flat per-
+    // question properties (platform, discipline, …), so the answers
+    // map IS the content — no wrapper. Wrapping it under `{ answers }`
+    // (an earlier mistake) made the SDK validate the wrapper against
+    // the flat schema and reject every reply with invalid_union.
+    const body: { id: string; action: string; content?: Record<string, unknown> } = {
       id: request.id,
       action,
     };
-    if (action === "accept") body.content = { answer: buildAnswer() };
+    if (action === "accept") {
+      body.content = answers;
+    }
     try {
       const res = await fetch("/api/elicit-response", {
         method: "POST",
@@ -110,7 +210,15 @@ export function ElicitForm({ request, onResolved }: Props) {
         setSubmitting(false);
         return;
       }
-      onResolved();
+      // Clear both potential draft keys (real + preview) so the
+      // form starts clean next time. Cheap and idempotent.
+      if (typeof localStorage !== "undefined") {
+        try {
+          if (request?.id) localStorage.removeItem(`elicit-draft:${request.id}`);
+          if (preview?.toolUseId) localStorage.removeItem(`elicit-draft:preview:${preview.toolUseId}`);
+        } catch { /* ignore */ }
+      }
+      onResolved?.(action, action === "accept" ? answers : undefined);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setSubmitting(false);
@@ -118,331 +226,499 @@ export function ElicitForm({ request, onResolved }: Props) {
   };
 
   return (
-    <div className={s.elicitCard}>
+    <div className={s.elicitCard} data-preview={isPreview ? "true" : undefined} data-variant={variant}>
       <div className={s.elicitHeader}>
         <span className={s.elicitDot} />
-        <span className={s.elicitTitle}>{request.message}</span>
+        <span className={s.elicitTitle}>{headerTitle}</span>
       </div>
 
       <div className={s.elicitBody}>
-        {kind === "enum-single" && (
-          <RadioGroup
-            options={enumOptions(answerField)}
-            value={single}
-            onChange={setSingle}
+        {questions.map((q) => (
+          <QuestionSection
+            key={q.id}
+            question={q}
+            value={answers[q.id]}
+            onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+            onSubmitShortcut={() => { if (allValid) send("accept"); }}
           />
-        )}
-
-        {kind === "enum-multi" && (
-          <CheckboxGroup
-            options={enumOptions(answerField)}
-            value={multi}
-            onChange={setMulti}
-          />
-        )}
-
-        {kind === "number" && (
-          <NumberInput
-            field={answerField}
-            value={num}
-            onChange={setNum}
-          />
-        )}
-
-        {kind === "boolean" && (
-          <BooleanToggle value={bool} onChange={setBool} />
-        )}
-
-        {kind === "dropzone" && (
-          <DropZone
-            accept={(answerField as { ["x-accept"]?: string })?.["x-accept"] ?? null}
-            value={dropPath}
-            onPath={setDropPath}
-            dragOver={dragOver}
-            setDragOver={setDragOver}
-          />
-        )}
-
-        {(kind === "textarea" || kind === "text") && (
-          <PasteableTextarea
-            value={text}
-            onChange={setText}
-            attachments={textAttachments}
-            onAttachmentsChange={setTextAttachments}
-            multiline={kind === "textarea"}
-            onSubmit={() => { if (valid) send("accept"); }}
-          />
-        )}
+        ))}
       </div>
 
       {errorMsg && <div className={s.elicitError}>{errorMsg}</div>}
 
       <div className={s.elicitActions}>
-        {canTypeFreely && (
-          <button
-            type="button"
-            className={s.elicitTextToggle}
-            onClick={() => setFreeMode((v) => !v)}
-            disabled={submitting}
-          >
-            {freeMode ? "← Use the form" : "Type freely instead"}
-          </button>
-        )}
+        {isPreview ? (
+          <span className={s.elicitGenerating}>
+            {questions.length > 0
+              ? `Generating question ${questions.length + 1}…`
+              : "Generating questions…"}
+          </span>
+        ) : missingRequired > 0 && questions.length > 0 ? (
+          <span className={s.elicitMissingHint}>
+            {missingRequired} more required
+          </span>
+        ) : null}
         <div className={s.elicitActionsSpacer} />
         <button
           className={s.elicitBtn}
           onClick={() => send("cancel")}
-          disabled={submitting}
+          disabled={isPreview || submitting}
         >
           Cancel
         </button>
         <button
           className={`${s.elicitBtn} ${s.elicitPrimary}`}
           onClick={() => send("accept")}
-          disabled={!valid || submitting}
+          disabled={isPreview || !allValid || submitting}
         >
-          {submitting ? "Sending…" : "Send answer"}
+          {submitting ? "Sending…" : questions.length > 1 ? "Continue" : "Send answer"}
         </button>
       </div>
     </div>
   );
 }
 
-/* ─── Sub-controls ──────────────────────────────────────────── */
+/* ─── Streaming → Question schema adapter ───────────────────────── */
 
-function RadioGroup({
-  options, value, onChange,
-}: { options: string[]; value: string; onChange: (v: string) => void }) {
+/** Map a streaming-parsed question (shape from ask_user input JSON)
+ *  into the internal Question structure. Mirrors what the MCP server
+ *  does on its side for fully-formed inputs, but tolerant of missing
+ *  fields — the JSON is partial and the form needs to render even
+ *  when e.g. the options array hasn't streamed in yet. */
+function streamingQuestionToQuestion(q: StreamingQuestion): Question {
+  const id = typeof q.id === "string" ? q.id : "_unnamed";
+  const kind = typeof q.kind === "string" ? q.kind : "text";
+  const title = typeof q.title === "string" ? q.title : id;
+  const subtitle = typeof q.subtitle === "string" ? q.subtitle : undefined;
+  const required = q.required !== false;
+
+  let schema: Record<string, unknown>;
+  if (kind === "enum") {
+    const opts = Array.isArray(q.options) ? q.options.filter((o): o is string => typeof o === "string") : [];
+    const RESERVED = new Set(["Decide for me", "Explore a few", "Other"]);
+    const userOpts = opts.filter((o) => !RESERVED.has(o));
+    const finalOptions = [...userOpts, "Decide for me", "Explore a few", "Other"];
+    // Strict enum to match the server schema (the MCP SDK rejects
+    // requestedSchema with unknown fields). The "Other" pick is a
+    // literal sentinel — no inline freeform input, since custom
+    // strings fail enum validation on submit.
+    schema = q.multi
+      ? { type: "array", items: { type: "string", enum: finalOptions } }
+      : { type: "string", enum: finalOptions };
+  } else if (kind === "svg-options") {
+    const opts = Array.isArray(q.options) ? q.options.filter((o): o is string => typeof o === "string") : [];
+    const labels = Array.isArray(q.optionLabels)
+      ? (q.optionLabels as unknown[]).filter((l): l is string => typeof l === "string")
+      : [];
+    const indexOptions = opts.map((_, i) => String(i));
+    const finalOptions = [...indexOptions, "Decide for me", "Other"];
+    schema = {
+      type: "string",
+      enum: finalOptions,
+      "x-input": "svg-options",
+      "x-svg-options": opts,
+      "x-svg-labels": labels,
+    };
+  } else if (kind === "number") {
+    schema = {
+      type: "number",
+      ...(typeof q.min === "number" ? { minimum: q.min } : {}),
+      ...(typeof q.max === "number" ? { maximum: q.max } : {}),
+      ...(typeof q.step === "number" ? { multipleOf: q.step } : {}),
+    };
+  } else if (kind === "boolean") {
+    schema = { type: "boolean" };
+  } else if (kind === "file") {
+    schema = {
+      type: "string",
+      format: "uri",
+      "x-input": "dropzone",
+      "x-accept": typeof q.accept === "string" ? q.accept : undefined,
+    };
+  } else {
+    schema = {
+      type: "string",
+      ...(q.multiline ? { "x-input": "textarea" } : {}),
+    };
+  }
+  if (q.default !== undefined) schema.default = q.default;
+  schema.title = title;
+  if (subtitle) schema["x-subtitle"] = subtitle;
+  return { id, schema, required, title, subtitle };
+}
+
+/* ─── Question section ──────────────────────────────────────── */
+
+function QuestionSection({
+  question, value, onChange, onSubmitShortcut,
+}: {
+  question: Question;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  onSubmitShortcut: () => void;
+}) {
+  const kind = detectKind(question.schema);
+  // The per-field "Other" toggle bypasses the structured input on
+  // non-enum / non-text kinds. Enums get the per-option Other (inline
+  // textarea below the chips); text is already freeform so the toggle
+  // is meaningless there.
+  const canSwitchToOther = kind === "number" || kind === "boolean" || kind === "dropzone";
+  const [otherMode, setOtherMode] = useState(false);
+  const effectiveKind: FieldKind = otherMode ? "textarea" : kind;
+
+  // Other-text state for non-enum "Other" toggle: when otherMode is on,
+  // we treat `value` as the freeform string directly.
+  const onOtherToggle = () => {
+    setOtherMode((prev) => {
+      const next = !prev;
+      // Reset value to a sane default for the new mode so validity behaves.
+      onChange(next ? "" : initialValue(question.schema));
+      return next;
+    });
+  };
+
   return (
-    <div className={s.elicitOptions}>
-      {options.map((opt) => (
-        <label key={opt} className={`${s.elicitOption} ${value === opt ? s.elicitOptionOn : ""}`}>
-          <input
-            type="radio"
-            name="elicit-radio"
-            checked={value === opt}
-            onChange={() => onChange(opt)}
-          />
-          <span>{opt}</span>
-        </label>
-      ))}
+    <div className={s.elicitSection}>
+      {question.title && (
+        <div className={s.elicitSectionTitle}>{question.title}</div>
+      )}
+      {question.subtitle && (
+        <div className={s.elicitSectionSubtitle}>{question.subtitle}</div>
+      )}
+
+      {effectiveKind === "enum-single" && (
+        <EnumSingle
+          field={question.schema}
+          value={typeof value === "string" ? value : ""}
+          onChange={(v) => onChange(v)}
+        />
+      )}
+
+      {effectiveKind === "enum-multi" && (
+        <EnumMulti
+          field={question.schema}
+          value={Array.isArray(value) ? (value as string[]) : []}
+          onChange={(v) => onChange(v)}
+        />
+      )}
+
+      {effectiveKind === "svg-options" && (
+        <SvgOptions
+          field={question.schema}
+          value={typeof value === "string" ? value : ""}
+          onChange={(v) => onChange(v)}
+        />
+      )}
+
+      {effectiveKind === "number" && (
+        <NumberInput
+          field={question.schema}
+          value={value}
+          onChange={(v) => onChange(v)}
+          required={question.required}
+        />
+      )}
+
+      {effectiveKind === "boolean" && (
+        <BooleanToggle
+          value={value}
+          onChange={(v) => onChange(v)}
+          required={question.required}
+        />
+      )}
+
+      {effectiveKind === "dropzone" && (
+        <DropZoneField
+          field={question.schema}
+          value={typeof value === "string" ? value : ""}
+          onChange={(v) => onChange(v)}
+        />
+      )}
+
+      {(effectiveKind === "textarea" || effectiveKind === "text") && (
+        <PasteableTextarea
+          questionId={question.id}
+          value={typeof value === "string" ? value : ""}
+          onChange={(v) => onChange(v)}
+          multiline={effectiveKind === "textarea"}
+          onSubmit={onSubmitShortcut}
+        />
+      )}
+
+      {canSwitchToOther && (
+        <button
+          type="button"
+          className={s.elicitTextToggle}
+          onClick={onOtherToggle}
+        >
+          {otherMode ? "← Back" : "Other"}
+        </button>
+      )}
     </div>
   );
 }
 
-function CheckboxGroup({
-  options, value, onChange,
-}: { options: string[]; value: string[]; onChange: (v: string[]) => void }) {
-  const toggle = (opt: string) => {
-    if (value.includes(opt)) onChange(value.filter((v) => v !== opt));
-    else onChange([...value, opt]);
-  };
+/* ─── Sub-controls ──────────────────────────────────────────── */
+
+/** Single-select chips. The MCP SDK strictly validates the elicit reply
+ *  against `enum`, so the "Other" chip is a literal sentinel — picking
+ *  it submits the string "Other" and the agent can ask a follow-up. */
+function EnumSingle({
+  field, value, onChange,
+}: { field: Schema; value: string; onChange: (v: string) => void }) {
+  const options = enumOptions(field);
+  // Decide for me / Explore a few / Other are escape hatches — render
+  // them with a distinct data-attribute so CSS can mute them slightly
+  // (italic, dimmer) so the eye lands on canonical options first.
+  const ESCAPE = new Set(["Decide for me", "Explore a few", "Other"]);
   return (
     <div className={s.elicitOptions}>
-      {options.map((opt) => (
-        <label key={opt} className={`${s.elicitOption} ${value.includes(opt) ? s.elicitOptionOn : ""}`}>
-          <input
-            type="checkbox"
-            checked={value.includes(opt)}
-            onChange={() => toggle(opt)}
-          />
-          <span>{opt}</span>
-        </label>
-      ))}
+      {options.map((opt) => {
+        const checked = value === opt;
+        const isEscape = ESCAPE.has(opt);
+        return (
+          <label
+            key={opt}
+            className={`${s.elicitOption} ${checked ? s.elicitOptionOn : ""}`}
+            data-escape={isEscape ? "true" : undefined}
+          >
+            <input
+              type="radio"
+              name="elicit-radio"
+              checked={checked}
+              onChange={() => onChange(opt)}
+            />
+            <span>{opt}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Multi-select chips. "Other" is a literal sentinel (no inline
+ *  freeform input — strict enum validation rejects custom strings). */
+function EnumMulti({
+  field, value, onChange,
+}: { field: Schema; value: string[]; onChange: (v: string[]) => void }) {
+  const options = enumOptions(field);
+  const toggle = (opt: string) => {
+    if (value.includes(opt)) {
+      onChange(value.filter((v) => v !== opt));
+    } else {
+      onChange([...value, opt]);
+    }
+  };
+
+  const ESCAPE = new Set(["Decide for me", "Explore a few", "Other"]);
+  return (
+    <div className={s.elicitOptions}>
+      {options.map((opt) => {
+        const checked = value.includes(opt);
+        const isEscape = ESCAPE.has(opt);
+        return (
+          <label
+            key={opt}
+            className={`${s.elicitOption} ${checked ? s.elicitOptionOn : ""}`}
+            data-escape={isEscape ? "true" : undefined}
+          >
+            <input type="checkbox" checked={checked} onChange={() => toggle(opt)} />
+            <span>{opt}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Sanitize an inline SVG option string from agent-supplied content.
+ *  The model is trusted in normal use, but tool_results can echo
+ *  user-uploaded content into a future ask_user call — so even a
+ *  trusted agent could end up rendering attacker-controlled SVG.
+ *
+ *  Uses DOMPurify with svg+svgFilters profiles to keep valid SVG
+ *  drawing primitives while stripping the documented XSS vectors:
+ *   - <script> and on* event handlers (including `/onload=` slash-separator form)
+ *   - <foreignObject> (arbitrary HTML injection inside SVG)
+ *   - <use href="data:…"> (embedded SVG-as-data-URI with script)
+ *   - <style> @import / expression() (CSS injection)
+ *   - javascript: URLs */
+function sanitizeSvg(raw: string): string {
+  return DOMPurify.sanitize(raw, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    // <foreignObject> lets arbitrary HTML in; <use> with data: URIs can
+    // embed a script-carrying SVG. Strip both outright.
+    FORBID_TAGS: ["foreignObject", "use"],
+    FORBID_ATTR: ["style"],
+  });
+}
+
+/** Visual-options grid — each option is an inline SVG (~80×56). The
+ *  wire value is the option's index as a string ("0", "1", …) so the
+ *  model can match against `optionLabels[i]`. Decide-for-me / Other
+ *  resolve to their literal label strings as in the text-options case. */
+function SvgOptions({
+  field, value, onChange,
+}: { field: Schema; value: string; onChange: (v: string) => void }) {
+  const f = (field ?? {}) as {
+    enum?: string[];
+    ["x-svg-options"]?: string[];
+    ["x-svg-labels"]?: string[];
+  };
+  const svgs = Array.isArray(f["x-svg-options"]) ? f["x-svg-options"] : [];
+  const labels = Array.isArray(f["x-svg-labels"]) ? f["x-svg-labels"] : [];
+  // The enum list determines which sentinels are valid (it's what the
+  // SDK validates the reply against). Always render Decide for me; only
+  // render Other if it was emitted as a valid sentinel by the server.
+  const validSentinels = new Set(Array.isArray(f.enum) ? f.enum : []);
+  const hasOther = validSentinels.has("Other");
+
+  return (
+    <div className={s.elicitSvgGrid}>
+      {svgs.map((svg, i) => {
+        const idx = String(i);
+        const checked = value === idx;
+        return (
+          <button
+            key={idx}
+            type="button"
+            className={`${s.elicitSvgCard} ${checked ? s.elicitSvgCardOn : ""}`}
+            onClick={() => onChange(idx)}
+            title={labels[i] ?? `Option ${i + 1}`}
+          >
+            <span className={s.elicitSvgInner} dangerouslySetInnerHTML={{ __html: sanitizeSvg(svg) }} />
+            <span className={s.elicitSvgLabel}>{labels[i] ?? `Option ${i + 1}`}</span>
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        className={`${s.elicitSvgCard} ${value === "Decide for me" ? s.elicitSvgCardOn : ""}`}
+        onClick={() => onChange("Decide for me")}
+      >
+        <span className={s.elicitSvgInner} aria-hidden>✦</span>
+        <span className={s.elicitSvgLabel}>Decide for me</span>
+      </button>
+      {hasOther && (
+        <button
+          type="button"
+          className={`${s.elicitSvgCard} ${value === "Other" ? s.elicitSvgCardOn : ""}`}
+          onClick={() => onChange("Other")}
+        >
+          <span className={s.elicitSvgInner} aria-hidden>…</span>
+          <span className={s.elicitSvgLabel}>Other</span>
+        </button>
+      )}
     </div>
   );
 }
 
 function NumberInput({
-  field, value, onChange,
-}: { field: Schema; value: number; onChange: (v: number) => void }) {
-  const f = (field ?? {}) as { minimum?: number; maximum?: number; multipleOf?: number };
+  field, value, onChange, required,
+}: { field: Schema; value: unknown; onChange: (v: number | string) => void; required: boolean }) {
+  const f = (field ?? {}) as { minimum?: number; maximum?: number; multipleOf?: number; default?: number };
   const showSlider = typeof f.minimum === "number" && typeof f.maximum === "number";
+  // The user has deferred to the agent — value is the literal string,
+  // not a number. We freeze the numeric controls to the schema default
+  // (or minimum) so the slider has a sensible position to return to
+  // if they un-defer.
+  const isDeferred = value === "Decide for me";
+  const numValue = typeof value === "number" && Number.isFinite(value)
+    ? value
+    : (typeof f.default === "number" ? f.default : (typeof f.minimum === "number" ? f.minimum : 0));
   return (
-    <div className={s.elicitNumberRow}>
-      {showSlider && (
+    <>
+      <div className={s.elicitNumberRow} data-deferred={isDeferred ? "true" : undefined}>
+        {showSlider && (
+          <input
+            type="range"
+            className={s.elicitSlider}
+            min={f.minimum}
+            max={f.maximum}
+            step={f.multipleOf ?? 1}
+            value={numValue}
+            disabled={isDeferred}
+            onChange={(e) => onChange(Number(e.target.value))}
+          />
+        )}
         <input
-          type="range"
-          className={s.elicitSlider}
+          type="number"
+          className={s.elicitNumber}
           min={f.minimum}
           max={f.maximum}
-          step={f.multipleOf ?? 1}
-          value={value}
+          step={f.multipleOf ?? "any"}
+          value={isDeferred ? "" : (Number.isFinite(numValue) ? numValue : "")}
+          disabled={isDeferred}
+          placeholder={isDeferred ? "Decide for me" : undefined}
           onChange={(e) => onChange(Number(e.target.value))}
         />
-      )}
-      <input
-        type="number"
-        className={s.elicitNumber}
-        min={f.minimum}
-        max={f.maximum}
-        step={f.multipleOf ?? "any"}
-        value={Number.isFinite(value) ? value : ""}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </div>
-  );
-}
-
-/**
- * Auto-growing textarea that also accepts pasted/dropped images.
- *
- * Each uploaded image is added to the `attachments` array (rendered as
- * a small chip above the textarea, composer-style — × to remove) rather
- * than inserted into the text as raw markdown. ElicitForm appends the
- * markdown refs to the answer string at submit time so the textarea
- * stays clean while the file paths still reach Claude.
- */
-function PasteableTextarea({
-  value, onChange, attachments, onAttachmentsChange, multiline, onSubmit,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  attachments: { path: string; dataUrl: string }[];
-  onAttachmentsChange: (next: { path: string; dataUrl: string }[]) => void;
-  multiline: boolean;
-  onSubmit: () => void;
-}) {
-  const ref = useRef<HTMLTextAreaElement | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  // Auto-resize: 1 line min, 8 lines max for multiline; 4 lines max for "text".
-  const maxPx = multiline ? 200 : 110;
-  const onResize = () => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, maxPx) + "px";
-  };
-
-  // Resize when value changes from the outside.
-  if (typeof requestAnimationFrame !== "undefined") {
-    requestAnimationFrame(onResize);
-  }
-
-  const uploadAndAttach = async (file: File) => {
-    setBusy(true);
-    setErr(null);
-    try {
-      const dataUrl = await new Promise<string>((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result as string);
-        r.onerror = () => rej(r.error ?? new Error("read failed"));
-        r.readAsDataURL(file);
-      });
-      const stamp = Date.now();
-      const safeName = (file.name || "image.png").replace(/[^a-zA-Z0-9._-]+/g, "-");
-      const target = `public/uploads/elicit-${stamp}-${safeName}`;
-      const res = await fetch("/api/file/upload", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: target, dataUrl }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j?.error ?? `HTTP ${res.status}`);
-      }
-      const j = (await res.json()) as { path: string };
-      onAttachmentsChange([...attachments, { path: j.path, dataUrl }]);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const removeAttachment = (idx: number) => {
-    onAttachmentsChange(attachments.filter((_, i) => i !== idx));
-  };
-
-  return (
-    <div
-      className={`${s.elicitTextareaWrap} ${dragOver ? s.elicitTextareaDrag : ""}`}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={async (e) => {
-        e.preventDefault();
-        setDragOver(false);
-        const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
-        for (const f of files) await uploadAndAttach(f);
-      }}
-    >
-      {attachments.length > 0 && (
-        <div className={s.elicitAttaches}>
-          {attachments.map((a, i) => (
-            <div key={a.path} className={s.elicitAttachItem} title={a.path}>
-              <img src={a.dataUrl} alt="" />
-              <button
-                type="button"
-                className={s.elicitAttachRemove}
-                onClick={() => removeAttachment(i)}
-                aria-label="Remove attachment"
-              >×</button>
-            </div>
-          ))}
-        </div>
-      )}
-      <textarea
-        ref={ref}
-        className={s.elicitTextarea}
-        value={value}
-        onChange={(e) => { onChange(e.target.value); onResize(); }}
-        onInput={onResize}
-        onPaste={async (e) => {
-          const items = Array.from(e.clipboardData.items).filter((it) => it.type.startsWith("image/"));
-          if (items.length === 0) return;
-          e.preventDefault();
-          const files = items.map((it) => it.getAsFile()).filter((f): f is File => f != null);
-          for (const f of files) await uploadAndAttach(f);
-        }}
-        onKeyDown={(e) => {
-          // Cmd/Ctrl+Enter sends; plain Enter inserts newline (matches
-          // the chat composer where Enter sends, but here multi-line is
-          // the default so the inverted behavior is safer).
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            onSubmit();
-          }
-        }}
-        placeholder={busy ? "Uploading image…" : "Type, ⌘V to paste an image, or drop a file"}
-        autoFocus
-        rows={multiline ? 4 : 2}
-        style={{ maxHeight: maxPx }}
-      />
-      <div className={s.elicitTextareaHint}>
-        {busy ? "Uploading…" : "⌘V to paste · drop images · ⌘↵ to send"}
       </div>
-      {err && <div className={s.elicitError}>{err}</div>}
-    </div>
+      {required && (
+        <button
+          type="button"
+          className={s.elicitDeferToggle}
+          onClick={() => onChange(isDeferred
+            ? (typeof f.default === "number" ? f.default : (typeof f.minimum === "number" ? f.minimum : 0))
+            : "Decide for me",
+          )}
+        >
+          {isDeferred ? "← Pick a number" : "Decide for me"}
+        </button>
+      )}
+    </>
   );
 }
 
 function BooleanToggle({
-  value, onChange,
-}: { value: boolean; onChange: (v: boolean) => void }) {
+  value, onChange, required,
+}: { value: unknown; onChange: (v: boolean | string) => void; required: boolean }) {
+  // Sliding switch with a Yes/No track. Required questions also surface
+  // a separate "Decide for me" link below so the user can defer
+  // (matches the number-input defer pattern). Optional questions skip
+  // the link — they just don't gate Continue if left untouched.
+  const isYes = value === true;
+  const isNo = value === false;
+  const isDefer = value === "Decide for me";
+  // The switch shows "unset" visually when no choice has been made
+  // (initial state for required booleans). Click anywhere on the
+  // track to commit Yes or No; click "Decide for me" to defer.
+  const state: "yes" | "no" | "unset" | "defer" = isYes ? "yes" : isNo ? "no" : isDefer ? "defer" : "unset";
   return (
-    <div className={s.elicitOptions}>
-      <label className={`${s.elicitOption} ${value === true  ? s.elicitOptionOn : ""}`}>
-        <input type="radio" checked={value === true}  onChange={() => onChange(true)} /><span>Yes</span>
-      </label>
-      <label className={`${s.elicitOption} ${value === false ? s.elicitOptionOn : ""}`}>
-        <input type="radio" checked={value === false} onChange={() => onChange(false)} /><span>No</span>
-      </label>
+    <div className={s.elicitBoolean}>
+      <button
+        type="button"
+        className={s.elicitSwitch}
+        role="switch"
+        aria-checked={isYes}
+        data-state={state}
+        onClick={() => onChange(!isYes)}
+        title={isYes ? "Yes — click to flip to No" : isNo ? "No — click to flip to Yes" : "Click to set Yes"}
+      >
+        <span className={s.elicitSwitchTrack}>
+          <span className={s.elicitSwitchThumb} aria-hidden />
+        </span>
+        <span className={s.elicitSwitchLabel}>
+          {state === "yes" ? "Yes" : state === "no" ? "No" : state === "defer" ? "Decide for me" : "—"}
+        </span>
+      </button>
+      {required && (
+        <button
+          type="button"
+          className={s.elicitDeferToggle}
+          onClick={() => onChange(isDefer ? false : "Decide for me")}
+        >
+          {isDefer ? "← Pick Yes / No" : "Decide for me"}
+        </button>
+      )}
     </div>
   );
 }
 
-function DropZone({
-  accept, value, onPath, dragOver, setDragOver,
-}: {
-  accept: string | null;
-  value: string;
-  onPath: (path: string) => void;
-  dragOver: boolean;
-  setDragOver: (v: boolean) => void;
-}) {
+function DropZoneField({
+  field, value, onChange,
+}: { field: Schema; value: string; onChange: (v: string) => void }) {
+  const accept = (field as { ["x-accept"]?: string })?.["x-accept"] ?? null;
+  const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -470,7 +746,7 @@ function DropZone({
         throw new Error(j?.error ?? `HTTP ${res.status}`);
       }
       const j = (await res.json()) as { path: string };
-      onPath(j.path);
+      onChange(j.path);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -517,19 +793,200 @@ function DropZone({
   );
 }
 
+/**
+ * Auto-growing textarea that also accepts pasted/dropped images.
+ *
+ * Each uploaded image is appended to the answer text as a markdown
+ * image reference (`![](path)`) so Claude can Read each path. This
+ * keeps the schema flat (single string) while still passing file
+ * paths through.
+ */
+function PasteableTextarea({
+  questionId, value, onChange, multiline, onSubmit,
+}: {
+  questionId: string;
+  value: string;
+  onChange: (v: string) => void;
+  multiline: boolean;
+  onSubmit: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Auto-resize: 1 line min, 8 lines max for multiline; 4 lines max for "text".
+  const maxPx = multiline ? 200 : 110;
+  const onResize = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, maxPx) + "px";
+  };
+
+  // Re-measure after the value changes (incl. external mutations like
+  // pasted images appending markdown). Using `useLayoutEffect` keeps
+  // the resize synchronous with paint so the textarea doesn't flicker
+  // between its old and new heights.
+  useLayoutEffect(() => {
+    onResize();
+    // onResize reads only `ref.current` and `maxPx` (closed over), so
+    // the deps array can stay value-only — eslint-react would warn
+    // about onResize, but it's stable enough across renders that we
+    // don't need to reify it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, maxPx]);
+
+  const uploadAndAppend = async (file: File) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result as string);
+        r.onerror = () => rej(r.error ?? new Error("read failed"));
+        r.readAsDataURL(file);
+      });
+      const stamp = Date.now();
+      const safeName = (file.name || "image.png").replace(/[^a-zA-Z0-9._-]+/g, "-");
+      const target = `public/uploads/elicit-${stamp}-${safeName}`;
+      const res = await fetch("/api/file/upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: target, dataUrl }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      const j = (await res.json()) as { path: string };
+      const ref = `![](${j.path})`;
+      onChange(value.trim() ? `${value}\n\n${ref}` : ref);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <div
+      className={`${s.elicitTextareaWrap} ${dragOver ? s.elicitTextareaDrag : ""}`}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+        for (const f of files) await uploadAndAppend(f);
+      }}
+    >
+      <textarea
+        ref={ref}
+        className={s.elicitTextarea}
+        name={questionId}
+        value={value}
+        onChange={(e) => { onChange(e.target.value); onResize(); }}
+        onInput={onResize}
+        onPaste={async (e) => {
+          const items = Array.from(e.clipboardData.items).filter((it) => it.type.startsWith("image/"));
+          if (items.length === 0) return;
+          e.preventDefault();
+          const files = items.map((it) => it.getAsFile()).filter((f): f is File => f != null);
+          for (const f of files) await uploadAndAppend(f);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            onSubmit();
+          }
+        }}
+        placeholder={busy ? "Uploading image…" : "Type, ⌘V to paste an image, or drop a file"}
+        rows={multiline ? 4 : 2}
+        style={{ maxHeight: maxPx }}
+      />
+      {/* Per-question image-attach trigger — same upload path as
+       *  paste/drop, just visible. Lives in the bottom-right corner
+       *  of the textarea so it doesn't compete with the typed text. */}
+      <button
+        type="button"
+        className={s.elicitTextareaAttach}
+        onClick={() => fileInputRef.current?.click()}
+        disabled={busy}
+        title="Attach an image"
+        aria-label="Attach an image"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M11 4 V11 a3 3 0 0 1 -6 0 V5 a2 2 0 0 1 4 0 V10 a1 1 0 0 1 -2 0 V6" />
+        </svg>
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: "none" }}
+        onChange={async (e) => {
+          const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith("image/"));
+          for (const f of files) await uploadAndAppend(f);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }}
+      />
+      <div className={s.elicitTextareaHint}>
+        {busy ? "Uploading…" : "⌘V to paste · drop images · ⌘↵ to send"}
+      </div>
+      {err && <div className={s.elicitError}>{err}</div>}
+    </div>
+  );
+}
+
 /* ─── Schema helpers ────────────────────────────────────────── */
 
-type FieldKind = "enum-single" | "enum-multi" | "number" | "boolean" | "dropzone" | "textarea" | "text";
+type FieldKind =
+  | "enum-single"
+  | "enum-multi"
+  | "svg-options"
+  | "number"
+  | "boolean"
+  | "dropzone"
+  | "textarea"
+  | "text";
 
-function getAnswerField(schema: Schema): Schema {
-  if (!schema || typeof schema !== "object") return undefined;
-  const props = (schema as { properties?: Record<string, Schema> }).properties;
-  return props?.answer;
+function parseQuestions(schema: Schema): Question[] {
+  if (!schema || typeof schema !== "object") return [];
+  const properties = (schema as { properties?: Record<string, Schema> }).properties;
+  if (!properties || typeof properties !== "object") return [];
+  const required = new Set(
+    Array.isArray((schema as { required?: string[] }).required)
+      ? ((schema as { required?: string[] }).required as string[])
+      : [],
+  );
+  const out: Question[] = [];
+  for (const [id, fieldSchema] of Object.entries(properties)) {
+    if (!fieldSchema || typeof fieldSchema !== "object") continue;
+    const f = fieldSchema as { title?: string; ["x-subtitle"]?: string };
+    out.push({
+      id,
+      schema: fieldSchema,
+      required: required.has(id),
+      title: typeof f.title === "string" ? f.title : id,
+      subtitle: typeof f["x-subtitle"] === "string" ? f["x-subtitle"] : undefined,
+    });
+  }
+  return out;
 }
 
 function detectKind(field: Schema): FieldKind {
   if (!field || typeof field !== "object") return "text";
-  const f = field as { type?: string; enum?: string[]; items?: { enum?: string[] }; ["x-input"]?: string; format?: string };
+  const f = field as {
+    type?: string;
+    enum?: string[];
+    items?: { enum?: string[] };
+    ["x-input"]?: string;
+    format?: string;
+  };
+  if (f.type === "string" && f["x-input"] === "svg-options") return "svg-options";
   if (f.type === "array" && Array.isArray(f.items?.enum)) return "enum-multi";
   if (Array.isArray(f.enum)) return "enum-single";
   if (f.type === "number" || f.type === "integer") return "number";
@@ -542,6 +999,7 @@ function detectKind(field: Schema): FieldKind {
   return "text";
 }
 
+/** Read the option list off of `enum` (single) or `items.enum` (multi). */
 function enumOptions(field: Schema): string[] {
   if (!field || typeof field !== "object") return [];
   const f = field as { enum?: string[]; items?: { enum?: string[] } };
@@ -550,24 +1008,45 @@ function enumOptions(field: Schema): string[] {
   return [];
 }
 
-function initialString(field: Schema): string {
-  const d = (field as { default?: unknown } | undefined)?.default;
-  return typeof d === "string" ? d : "";
+function initialValue(schema: Schema): unknown {
+  const kind = detectKind(schema);
+  const f = (schema ?? {}) as { default?: unknown; minimum?: number };
+  switch (kind) {
+    case "enum-single": return typeof f.default === "string" ? f.default : "";
+    case "enum-multi":  return Array.isArray(f.default) ? f.default : [];
+    case "svg-options": return typeof f.default === "string" ? f.default : "";
+    case "number":
+      if (typeof f.default === "number") return f.default;
+      if (typeof f.minimum === "number") return f.minimum;
+      return 0;
+    // Initial undefined for boolean so the user has to explicitly
+    // pick (Yes / No / Decide for me) on required questions. A
+    // pre-selected `false` would silently submit "No" if Continue
+    // was clicked without interacting with the toggle.
+    case "boolean":     return typeof f.default === "boolean" ? f.default : undefined;
+    case "dropzone":    return typeof f.default === "string" ? f.default : "";
+    case "textarea":
+    case "text":        return typeof f.default === "string" ? f.default : "";
+  }
 }
 
-function initialArray(field: Schema): string[] {
-  const d = (field as { default?: unknown } | undefined)?.default;
-  return Array.isArray(d) ? d.filter((v): v is string => typeof v === "string") : [];
-}
-
-function initialNumber(field: Schema): number {
-  const f = (field ?? {}) as { default?: unknown; minimum?: number };
-  if (typeof f.default === "number") return f.default;
-  if (typeof f.minimum === "number") return f.minimum;
-  return 0;
-}
-
-function initialBoolean(field: Schema): boolean {
-  const d = (field as { default?: unknown } | undefined)?.default;
-  return typeof d === "boolean" ? d : false;
+function isValid(schema: Schema, value: unknown): boolean {
+  const kind = detectKind(schema);
+  // "Decide for me" is a valid sentinel for any kind that auto-injects
+  // the defer affordance; it satisfies the required check identically
+  // to a real answer.
+  if (value === "Decide for me") return true;
+  switch (kind) {
+    case "enum-single": return typeof value === "string" && value.length > 0;
+    case "enum-multi":  return Array.isArray(value) && value.length > 0;
+    case "svg-options": return typeof value === "string" && value.length > 0;
+    case "number":      return typeof value === "number" && Number.isFinite(value);
+    // Required boolean questions need an explicit pick (incl. defer).
+    // Once we're here without "Decide for me", the value must be a
+    // real boolean.
+    case "boolean":     return typeof value === "boolean";
+    case "dropzone":    return typeof value === "string" && value.length > 0;
+    case "textarea":
+    case "text":        return typeof value === "string" && value.trim().length > 0;
+  }
 }

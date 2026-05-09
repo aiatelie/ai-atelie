@@ -87,6 +87,39 @@ export const KIND_VERB: Record<ToolKind, string> = {
   other: "Working",
 };
 
+/** Per-tool semantic verb overrides. More specific than KIND_VERB —
+ *  takes precedence when present. The goal is to replace generic
+ *  "Working" with something the user can read at a glance and
+ *  understand (e.g. "Asking" instead of "Working" for ask_user). */
+const TOOL_VERB: Record<string, string> = {
+  // Interaction
+  ask_user: "Asking",
+  // Todos
+  todowrite: "Updating todos",
+  todoread: "Reading todos",
+  update_todos: "Updating todos",
+  // Starters / scaffolding
+  copy_starter: "Copying starter",
+  list_starters: "Listing starters",
+  // Filesystem (more specific than kind)
+  list_files: "Listing files",
+  ls: "Listing files",
+  glob: "Finding files",
+  // Web
+  web_search: "Searching the web",
+  websearch: "Searching the web",
+  web_fetch: "Fetching",
+  webfetch: "Fetching",
+};
+
+/** Resolve the most-specific verb for a tool. Per-tool override wins,
+ *  then per-kind verb, then "Working". */
+export function verbOf(name: string | null | undefined): string {
+  if (!name) return "Working";
+  const normalized = name.replace(/^mcp__[^_]+__/, "").toLowerCase();
+  return TOOL_VERB[normalized] ?? KIND_VERB[kindOf(name)];
+}
+
 /** Stable label per kind, used for screen-reader hints and
  *  occasional debug output. */
 export const KIND_LABEL: Record<ToolKind, string> = {

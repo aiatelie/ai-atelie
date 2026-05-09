@@ -6,7 +6,7 @@ Local MCP servers spawned by the editor's dev server (`api/src/services/claude.t
 
 ## Servers
 
-- **`ask-user-server.mjs`** — exposes `ask_user`. The model calls it to get structured input from the user mid-turn, using the `questions_v2`-style schema common in design-tool agents. Sends MCP `elicitation/create` up to the host; the host's `onElicitation` callback in `commentEdit.ts` bridges to the editor's chat sidebar over SSE.
+- **`ask-user-server.mjs`** — exposes `ask_user`. The model calls it with a BATCHED set of questions (`{ title, questions: [...] }`); the user fills one form and the agent proceeds with full context. Each enum question auto-gets `Decide for me` / `Explore a few` / `Other` (with inline free-text) appended server-side. Sends MCP `elicitation/create` up to the host; the host's `onElicitation` callback in `commentEdit.ts` bridges to the editor's chat sidebar over SSE. The HTTP twin (`ask-user-http-server.mjs`) shares the same shape via `buildBatchedSchema`.
 - **`starters-server.mjs`** — exposes `copy_starter` and `list_starters`. Drops ready-made overlay scaffolds (`Stage16x9.jsx`, `Stage9x16.jsx`, `LowerThird.jsx`) into the active project directory using a `copy_starter_component`-style mechanism. Templates live in `./starters/`. The server reads `STARTERS_TARGET_DIR` from its env to know which project dir to write into; `commentEdit.ts` sets it per-spawn from the active `projectId`.
 
 ## Test the server standalone

@@ -33,12 +33,54 @@ type SdkMsg = {
     model?: string;
     usage?: SdkUsage;
   };
-  event?: { type?: string; delta?: { type?: string; text?: string; thinking?: string } };
+  event?: {
+    type?: string;
+    /** index of the content block this event is for. We use it to
+     *  match content_block_delta and content_block_stop events back
+     *  to the originating content_block_start (which carries the
+     *  tool_use id and name). */
+    index?: number;
+    /** Set on content_block_start for tool_use blocks. */
+    content_block?: { type?: string; id?: string; name?: string };
+    delta?: {
+      type?: string;
+      text?: string;
+      thinking?: string;
+      /** Set on input_json_delta — partial JSON for a tool_use input.
+       *  Concatenate across deltas to reconstruct the full JSON. */
+      partial_json?: string;
+    };
+  };
   result?: string;
   usage?: SdkUsage;
   duration_ms?: number;
   model?: string;
 };
+
+/** Per-call state for tracking which content_block index belongs to
+ *  which ask_user tool_use call. Filled by content_block_start,
+ *  consumed by content_block_delta and content_block_stop.
+ *
+ *  Each `runClaude` invocation should mint its own `AgentEventState`
+ *  via `newAgentEventState()` and pass it as the second arg to
+ *  `sdkMessageToAgentEvents`. Two concurrent runs (two tabs, two
+ *  projects) emit overlapping content-block indices — sharing one
+ *  module-level Map would cross-contaminate them. */
+export type AgentEventState = {
+  askUserBlocks: Map<number, { toolUseId: string; toolName: string }>;
+};
+
+export function newAgentEventState(): AgentEventState {
+  return { askUserBlocks: new Map() };
+}
+
+/** True if `name` is one of our ask_user tool aliases. The model may
+ *  see either the bare name (when running outside the MCP envelope)
+ *  or the namespaced one (`mcp__ask-user__ask_user`). */
+function isAskUserToolName(name: string | undefined): boolean {
+  if (!name) return false;
+  return name === "ask_user" || name === "mcp__ask-user__ask_user";
+}
 
 type KimiContentItem = {
   type: string;
@@ -70,15 +112,57 @@ function extractSdkUsage(m: SdkMsg): AgentUsage | undefined {
 /** Map one Anthropic claude-agent-sdk message to zero or more AgentEvents.
  *  Handles stream_event deltas (text/thinking), assistant tool_use blocks,
  *  user tool_result blocks, and the terminal `result` message (finalText
- *  + per-turn usage). Mirrors chatStream.ts:parseSseBlock pre-Phase-1. */
-export function sdkMessageToAgentEvents(msg: unknown): AgentEvent[] {
+ *  + per-turn usage). Mirrors chatStream.ts:parseSseBlock pre-Phase-1.
+ *
+ *  Pass a per-`runClaude` `state` (via `newAgentEventState()`) to scope
+ *  the content-block tracking. Concurrent calls without per-call state
+ *  would collide on overlapping indices. */
+export function sdkMessageToAgentEvents(
+  msg: unknown,
+  state: AgentEventState = newAgentEventState(),
+): AgentEvent[] {
   if (!msg || typeof msg !== "object") return [];
   const m = msg as SdkMsg;
+  const askUserBlocks = state.askUserBlocks;
 
-  if (m.type === "stream_event" && m.event?.type === "content_block_delta") {
-    const d = m.event.delta;
-    if (d?.type === "text_delta" && d.text) return [{ type: "text", chunk: d.text }];
-    if (d?.type === "thinking_delta" && d.thinking) return [{ type: "thinking", chunk: d.thinking }];
+  if (m.type === "stream_event") {
+    // Tool-use streaming: announce the start of an ask_user tool_use
+    // block so the frontend can mount an empty preview form, then
+    // forward each input_json_delta so it can lenient-parse and
+    // render questions progressively.
+    if (m.event?.type === "content_block_start") {
+      const cb = m.event.content_block;
+      const idx = m.event.index;
+      if (cb?.type === "tool_use" && isAskUserToolName(cb.name) && typeof cb.id === "string" && typeof idx === "number") {
+        askUserBlocks.set(idx, { toolUseId: cb.id, toolName: cb.name as string });
+        return [{ type: "elicitPreviewStart", toolUseId: cb.id, toolName: cb.name as string }];
+      }
+      return [];
+    }
+    if (m.event?.type === "content_block_delta") {
+      const d = m.event.delta;
+      const idx = m.event.index;
+      if (d?.type === "text_delta" && d.text) return [{ type: "text", chunk: d.text }];
+      if (d?.type === "thinking_delta" && d.thinking) return [{ type: "thinking", chunk: d.thinking }];
+      if (d?.type === "input_json_delta" && typeof d.partial_json === "string" && typeof idx === "number") {
+        const tracked = askUserBlocks.get(idx);
+        if (tracked) {
+          return [{ type: "elicitPreviewDelta", toolUseId: tracked.toolUseId, partialJson: d.partial_json }];
+        }
+      }
+      return [];
+    }
+    if (m.event?.type === "content_block_stop") {
+      const idx = m.event.index;
+      if (typeof idx === "number") {
+        const tracked = askUserBlocks.get(idx);
+        if (tracked) {
+          askUserBlocks.delete(idx);
+          return [{ type: "elicitPreviewStop", toolUseId: tracked.toolUseId }];
+        }
+      }
+      return [];
+    }
     return [];
   }
 

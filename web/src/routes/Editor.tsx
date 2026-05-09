@@ -69,6 +69,8 @@ import { captureDomSnapshot, restoreDomSnapshot } from "../lib/domSnapshot";
 import { captureIframeAsDataUrl, captureElementAsDataUrl, downloadDataUrl, type ExportFormat } from "../lib/screenshot";
 import { useTweakBridge } from "../lib/tweakBridge";
 import type { ChatMessage, ChatThread, ThreadArchive, QueuedMessage } from "../components/editor/ChatSidebar";
+import { ElicitForm } from "../components/editor/ElicitForm";
+import { parsePartialQuestions } from "../lib/streamingJson";
 import { loadThreads as libLoadThreads, saveThreads, subscribeThreads, releaseProject as releaseThreadsProject } from "../lib/threads";
 import { attachStreamToThread, detachStream, isThreadShadowed } from "../lib/streamPersistence";
 import { cssPath, resolveCssPath, buildDescriptor } from "../lib/cssPath";
@@ -125,6 +127,19 @@ function defaultDisplay(route: string): DisplayMode {
  *  openTabs. It always sits at the start of the tab strip and renders a
  *  full file browser + preview pane in place of the iframe canvas. */
 const DESIGN_FILES_TAB_ID = "__design_files__";
+
+/** Synthetic tab id used when the active ask_user form has enough
+ *  questions (>= QUESTIONS_TAB_THRESHOLD) to warrant moving out of
+ *  the chat sidebar's inline scroll into a dedicated canvas tab.
+ *  Auto-mounts when the threshold is met; auto-removes when the
+ *  form resolves. Closing the tab via × cancels the elicitation. */
+const QUESTIONS_TAB_ID = "__questions__";
+
+/** Render the form in a dedicated tab once it carries this many
+ *  questions. Below the threshold the inline chat-sidebar form is
+ *  fine — the goal is keeping the chat scroll usable for long
+ *  forms, not forcing a context switch on every clarifying ask. */
+const QUESTIONS_TAB_THRESHOLD = 3;
 
 function uniqueTabId(): string {
   return Math.random().toString(36).slice(2, 9);
@@ -286,6 +301,66 @@ function formatTime(ts: number): string {
   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
 }
 
+/** Count the questions in an active elicit or its streaming preview.
+ *  Used to decide whether the form is big enough to mount in a
+ *  dedicated tab versus inline in the chat sidebar.
+ *
+ *  Real schema → keys of `properties`. Preview → defers to the
+ *  lenient parser the form itself uses, so the count is consistent
+ *  with what's actually rendered (and we don't double-implement
+ *  the JSON walker). */
+function countElicitQuestions(
+  request: ElicitRequest | undefined | null,
+  preview: { partialJson: string } | undefined | null,
+): number {
+  if (request?.schema && typeof request.schema === "object") {
+    const props = (request.schema as { properties?: Record<string, unknown> }).properties;
+    if (props && typeof props === "object") return Object.keys(props).length;
+  }
+  if (preview?.partialJson) {
+    try {
+      return parsePartialQuestions(preview.partialJson).questions.length;
+    } catch {
+      return 0;
+    }
+  }
+  return 0;
+}
+
+/** Build the chat-echo string emitted as a synthetic user message after
+ *  the user submits an ElicitForm. The real tool-result return value
+ *  (which the model sees) is unaffected — this is purely a chat
+ *  rendering artifact for human-readable audit trail. */
+function formatElicitAnswerEcho(
+  action: "accept" | "decline" | "cancel",
+  answers: Record<string, unknown> | undefined,
+): string | null {
+  if (action !== "accept") return "Skipped — proceed with your best judgment.";
+  if (!answers || Object.keys(answers).length === 0) return null;
+  const lines: string[] = ["Answer:"];
+  for (const [key, raw] of Object.entries(answers)) {
+    const v = formatElicitValue(raw);
+    if (v === null) continue;
+    lines.push(`- ${key}: ${v}`);
+  }
+  return lines.length > 1 ? lines.join("\n") : null;
+}
+
+function formatElicitValue(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : null;
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (Array.isArray(v)) {
+    const parts = v.map(formatElicitValue).filter((x): x is string => x !== null);
+    return parts.length > 0 ? parts.join(", ") : null;
+  }
+  try { return JSON.stringify(v); } catch { return String(v); }
+}
+
 function uniqueFiles(tools: ToolCall[]): string[] {
   const seen = new Set<string>();
   for (const t of tools) {
@@ -443,6 +518,16 @@ export default function Editor() {
   // sidebar can auto-switch to that thread — otherwise the form floats
   // above an "empty" body when the user is on a different thread.
   const [pendingElicit, setPendingElicit] = useState<{ request: ElicitRequest; threadId: string } | null>(null);
+  // Streaming preview of an in-flight ask_user form. Mounted on the
+  // first elicitPreviewStart, grown by elicitPreviewDelta, promoted to
+  // pendingElicit when the matching MCP elicitation fires (matched by
+  // toolUseId carried on the elicit event as `previewToolUseId`).
+  const [pendingElicitPreview, setPendingElicitPreview] = useState<{
+    toolUseId: string;
+    partialJson: string;
+    done: boolean;
+    threadId: string;
+  } | null>(null);
   // One-slot composer queue. When the user types into a disabled
   // composer (assistant still streaming or an elicit form is open) and
   // hits Enter, the message lands here instead of dropping. A useEffect
@@ -731,19 +816,102 @@ export default function Editor() {
     });
   };
 
-  // Build a stable mutator for an assistant message at index `aIdx`
-  // inside the active thread. Used both by runTurn and the re-attach effect.
+  // Build a stable mutator that always targets the LATEST pending
+  // assistant message in the thread. Index-based addressing was fragile
+  // against mid-turn array splices (the lazy-split inserts a synthetic
+  // user-echo + a fresh pending assistant on `ask_user` accept). The
+  // last-pending lookup is unambiguous because we only allow one
+  // pending assistant per thread. The legacy `aIdx` is kept as the
+  // fallback target for re-attached streams whose ts may not yet match
+  // a pending state.
   const makeAssistantUpdater = (threadId: string, aIdx: number) =>
     (mut: (m: Extract<ChatMessage, { role: "assistant" }>) => Extract<ChatMessage, { role: "assistant" }>) => {
       setThreads((prev) => prev.map((t) => {
         if (t.id !== threadId) return t;
+        let openIdx = -1;
+        for (let i = t.messages.length - 1; i >= 0; i--) {
+          const m = t.messages[i];
+          if (m.role === "assistant" && m.pending) { openIdx = i; break; }
+        }
+        if (openIdx === -1) {
+          // Fallback for re-attach: target the captured index if it
+          // still points at an assistant message.
+          const m = t.messages[aIdx];
+          if (!m || m.role !== "assistant") return t;
+          const next = [...t.messages];
+          next[aIdx] = mut(m);
+          return { ...t, messages: next };
+        }
+
+        const open = t.messages[openIdx] as Extract<ChatMessage, { role: "assistant" }>;
+
+        // Lazy split: if the open assistant has a pending splitMarker
+        // (set when the user just submitted an `ask_user` form), do
+        // the split now. Close the current bubble, insert the user-echo
+        // after it, open a fresh pending bubble, and route the mutation
+        // to the fresh one. Lazy so we only spend a new bubble when the
+        // agent actually has more to say.
+        if (open.splitMarker) {
+          const { echo, ts: echoTs } = open.splitMarker;
+          const closed: Extract<ChatMessage, { role: "assistant" }> = {
+            ...open,
+            pending: false,
+            splitMarker: undefined,
+          };
+          const userEcho: ChatMessage = { role: "user", content: echo, ts: echoTs };
+          const fresh: Extract<ChatMessage, { role: "assistant" }> = {
+            role: "assistant",
+            content: "",
+            tools: [],
+            ts: Date.now(),
+            pending: true,
+            turnId: open.turnId,
+          };
+          const mutated = mut(fresh);
+          const next = [...t.messages];
+          next[openIdx] = closed;
+          next.push(userEcho, mutated);
+          return { ...t, messages: next };
+        }
+
         const next = [...t.messages];
-        const m = next[aIdx];
-        if (!m || m.role !== "assistant") return t;
-        next[aIdx] = mut(m);
+        next[openIdx] = mut(open);
         return { ...t, messages: next };
       }));
     };
+
+  // Drop the user-echo message for a still-pending splitMarker into the
+  // thread without opening a fresh assistant bubble. Called from the
+  // turn-close paths (done / error) so an unanswered split — i.e. the
+  // user submitted the form but the agent had nothing more to say —
+  // still leaves a record of the answer in the chat.
+  //
+  // Persistence note: the lazy split lives entirely in React state.
+  // The streamPersistence shadow handler keeps writing to its captured
+  // msgIdx, so disk-backed history doesn't get the split. On a reload
+  // mid-stream the chat reverts to the single-bubble layout. Live UX
+  // is the load-bearing case; reload-during-stream is rare. Future
+  // work can mirror the splice into the archive for full parity.
+  const flushOrphanSplitMarker = (threadId: string) => {
+    setThreads((prev) => prev.map((t) => {
+      if (t.id !== threadId) return t;
+      const next = [...t.messages];
+      for (let i = next.length - 1; i >= 0; i--) {
+        const m = next[i];
+        if (m.role !== "assistant") continue;
+        if (!m.splitMarker) break;
+        const echoMsg: ChatMessage = {
+          role: "user",
+          content: m.splitMarker.echo,
+          ts: m.splitMarker.ts,
+        };
+        next[i] = { ...m, splitMarker: undefined };
+        next.splice(i + 1, 0, echoMsg);
+        break;
+      }
+      return { ...t, messages: next };
+    }));
+  };
 
   // Wire one chatStream into a thread's assistant message. Returns the
   // event handler that translates StreamEvent → setThreads mutations.
@@ -783,28 +951,72 @@ export default function Editor() {
       if (e.type === "thinking") { thinkBuf += e.chunk; scheduleFlush(); return; }
       if (e.type === "tool") { updateAssistant((m) => ({ ...m, tools: [...m.tools, e.tool] })); return; }
       if (e.type === "toolResult") {
-        updateAssistant((m) => ({
-          ...m,
-          tools: m.tools.map((t) =>
-            t.id === e.id ? { ...t, result: e.content, isError: e.isError } : t,
-          ),
+        // After a lazy split the tool_use lives on the OLD (pre-answer)
+        // assistant card while the agent's continuation work goes onto
+        // a fresh post-answer card. Match by tool id across all assistant
+        // messages in the thread so the result lands on the bubble that
+        // owns the tool_use, not the active one.
+        setThreads((prev) => prev.map((t) => {
+          if (t.id !== threadId) return t;
+          const next = [...t.messages];
+          for (let i = next.length - 1; i >= 0; i--) {
+            const m = next[i];
+            if (m.role !== "assistant") continue;
+            const toolIdx = m.tools.findIndex((tt) => tt.id === e.id);
+            if (toolIdx === -1) continue;
+            const tools = [...m.tools];
+            tools[toolIdx] = { ...tools[toolIdx], result: e.content, isError: e.isError };
+            next[i] = { ...m, tools };
+            break;
+          }
+          return { ...t, messages: next };
         }));
         return;
       }
       if (e.type === "turnId") { updateAssistant((m) => ({ ...m, turnId: e.turnId })); return; }
       if (e.type === "elicit") {
         setPendingElicit({ request: e.request, threadId });
+        // If a preview was streaming for this same tool_use, drop it —
+        // the real form is now mounted in its place.
+        setPendingElicitPreview((p) =>
+          p && e.request.previewToolUseId === p.toolUseId ? null : p,
+        );
         // Force-switch the active thread to whichever one the model is
         // currently asking from. Stale switching shouldn't strand a form
         // on a thread the user can't see.
         setActiveThreadId(threadId);
         return;
       }
-      if (e.type === "elicitClear") { setPendingElicit((p) => (p && p.request.id === e.id ? null : p)); return; }
+      if (e.type === "elicitClear") {
+        setPendingElicit((p) => (p && p.request.id === e.id ? null : p));
+        setPendingElicitPreview(null);
+        return;
+      }
+      if (e.type === "elicitPreviewStart") {
+        setPendingElicitPreview({ toolUseId: e.toolUseId, partialJson: "", done: false, threadId });
+        setActiveThreadId(threadId);
+        return;
+      }
+      if (e.type === "elicitPreviewDelta") {
+        setPendingElicitPreview((p) =>
+          p && p.toolUseId === e.toolUseId
+            ? { ...p, partialJson: p.partialJson + e.partialJson }
+            : p,
+        );
+        return;
+      }
+      if (e.type === "elicitPreviewStop") {
+        setPendingElicitPreview((p) =>
+          p && p.toolUseId === e.toolUseId ? { ...p, done: true } : p,
+        );
+        return;
+      }
       if (e.type === "error") {
         flushText();
         setPendingElicit(null);
-        updateAssistant((m) => ({ ...m, error: e.message, pending: false }));
+        setPendingElicitPreview(null);
+        updateAssistant((m) => ({ ...m, error: e.message, pending: false, splitMarker: undefined }));
+        flushOrphanSplitMarker(threadId);
         notifyTurnComplete({
           status: "failure",
           title: `${projectTitle} · agent error`,
@@ -816,19 +1028,21 @@ export default function Editor() {
       if (e.type === "done") {
         flushText();
         setPendingElicit(null);
+        setPendingElicitPreview(null);
         updateAssistant((m) => {
           if (!m.content && !m.error && m.tools.length > 0) {
             const files = uniqueFiles(m.tools);
             const summary = files.length > 0
               ? `Made ${m.tools.length} tool call${m.tools.length === 1 ? "" : "s"}, touching: ${files.join(", ")}.`
               : `Made ${m.tools.length} tool call${m.tools.length === 1 ? "" : "s"}.`;
-            return { ...m, content: summary, pending: false };
+            return { ...m, content: summary, pending: false, splitMarker: undefined };
           }
           if (!m.content && !m.error) {
-            return { ...m, error: "No reply received from AI (process exited without output).", pending: false };
+            return { ...m, error: "No reply received from AI (process exited without output).", pending: false, splitMarker: undefined };
           }
-          return { ...m, pending: false };
+          return { ...m, pending: false, splitMarker: undefined };
         });
+        flushOrphanSplitMarker(threadId);
         notifyTurnComplete({
           status: "success",
           title: `${projectTitle} · agent done`,
@@ -873,6 +1087,14 @@ export default function Editor() {
         error: cur.error ?? m.error,
       }));
       if (cur.elicit) setPendingElicit({ request: cur.elicit, threadId: activeThread.id });
+      if (cur.elicitPreview && !cur.elicit) {
+        setPendingElicitPreview({
+          toolUseId: cur.elicitPreview.toolUseId,
+          partialJson: cur.elicitPreview.partialJson,
+          done: cur.elicitPreview.done,
+          threadId: activeThread.id,
+        });
+      }
       const handler = buildStreamHandler(activeThread.id, aIdx);
       return subscribeStream(streamId, handler);
     }
@@ -1541,21 +1763,23 @@ export default function Editor() {
       ``,
       `**Don't touch any file yet.** First, understand what I want. Follow this order:`,
       ``,
-      `1. **Open with one structured question** via \`mcp__ask-user__ask_user\` to nail down the artifact type. Use \`kind: "enum"\` with options like:`,
-      `   "Lower third", "Titling system", "Thumbnail", "Opening title", "Animated overlay", "Episode card", "Other"`,
+      `1. **Call \`mcp__ask-user__ask_user\` ONCE** with a batched form. Pass { title, questions: [...] } where each question has { id, kind, title, options? }. The form auto-injects "Decide for me" / "Explore a few" / "Other" — don't add them to your options.`,
       ``,
-      `2. Once I pick, follow up with **5–8 more questions**. Mix structured (\`ask_user\`) and prose. Cover:`,
+      `2. The first question pins down the artifact type:`,
+      `   \`{ id: "artifact_type", kind: "enum", title: "What kind of artifact?", options: ["Lower third", "Titling system", "Thumbnail", "Opening title", "Animated overlay", "Episode card"] }\``,
+      ``,
+      `3. Follow up in the SAME batched form with 5-8 more questions covering:`,
       `   • aspect ratio / platform (YouTube 16:9, Shorts 9:16, podcast 1:1, etc.)`,
       `   • tone & aesthetic direction (editorial, broadcast, cinematic, brutalist, soft-minimal, etc.)`,
       `   • brand context — existing system, references to upload, or starting from scratch?`,
       `   • how many variations and across which dimensions (color, layout, motion, copy)?`,
       `   • constraints (safe areas, broadcast-safe colors, copy length, motion timing)`,
       ``,
-      `3. After I've answered, **invoke the \`frontend-design\` skill** (via the Skill tool) for guidance on committing to a bold aesthetic direction before writing any code.`,
+      `4. After I've answered, **invoke the \`frontend-design\` skill** (via the Skill tool) for guidance on committing to a bold aesthetic direction before writing any code.`,
       ``,
-      `4. Then plan briefly (one short paragraph), and only then start building inside the sandbox dir.`,
+      `5. Then plan briefly (one short paragraph), and only then start building inside the sandbox dir.`,
       ``,
-      `Don't ask all questions at once — one form at a time, conversational. Don't read the starter files yet; they're just empty scaffolding.`,
+      `One batched form first; conversational follow-ups only if something genuinely needs nuance after I answer. Don't read the starter files yet; they're just empty scaffolding.`,
       ``,
       `---`,
       ``,
@@ -1604,6 +1828,38 @@ export default function Editor() {
   }, [activeProject.id]);
 
   const isDesignFiles = activeTabId === DESIGN_FILES_TAB_ID;
+  const isQuestionsTab = activeTabId === QUESTIONS_TAB_ID;
+
+  // Move the elicit form out of the chat scroll into a dedicated tab
+  // whenever the form is large enough to warrant the context switch.
+  // The threshold is conservative — small clarifying asks (1-2 fields)
+  // stay inline so they don't force the user to leave the chat.
+  const elicitQuestionCount = countElicitQuestions(pendingElicit?.request, pendingElicitPreview);
+  const shouldMountElicitInTab = elicitQuestionCount >= QUESTIONS_TAB_THRESHOLD;
+
+  // Auto-activate the Questions tab the moment the form FIRST crosses
+  // the threshold — but only on the false→true transition, not on
+  // every render where the threshold happens to still be met. Once
+  // active, the user is free to click back to any other tab without
+  // getting yanked back. When the form resolves (true→false), fall
+  // back to whatever tab they were on before crossing — or Design
+  // Files if we don't know.
+  const previousActiveTabRef = useRef<string | null>(null);
+  const wasMountingInTabRef = useRef(false);
+  useEffect(() => {
+    const prev = wasMountingInTabRef.current;
+    wasMountingInTabRef.current = shouldMountElicitInTab;
+    if (!prev && shouldMountElicitInTab) {
+      // Just crossed the threshold — bring the user to the form.
+      previousActiveTabRef.current = activeTabId || null;
+      setActiveTabId(QUESTIONS_TAB_ID);
+    } else if (prev && !shouldMountElicitInTab && activeTabId === QUESTIONS_TAB_ID) {
+      // Form resolved and the user was still on the tab — fall back.
+      const fallback = previousActiveTabRef.current ?? DESIGN_FILES_TAB_ID;
+      previousActiveTabRef.current = null;
+      setActiveTabId(fallback);
+    }
+  }, [shouldMountElicitInTab, activeTabId, setActiveTabId]);
   // When the synthetic Design Files tab is active, fall back to the first
   // real tab so downstream handlers (toolbar callbacks, applyToSelection)
   // still resolve a route without null-checking everywhere. The toolbar +
@@ -2279,6 +2535,36 @@ export default function Editor() {
             return next;
           });
         }}
+        showQuestionsTab={shouldMountElicitInTab}
+        questionsTabBadge={elicitQuestionCount}
+        // Only allow ×-close once the real elicit fires. Closing during
+        // preview-only would race: the cancel POST has no `id` yet, so
+        // the elicit would still arrive and resurrect the form.
+        canCloseQuestionsTab={!!pendingElicit}
+        onCloseQuestionsTab={() => {
+          // Closing the Questions tab cancels the elicitation.
+          // Build the same answer-echo a Cancel click would.
+          const threadId = pendingElicit?.threadId ?? pendingElicitPreview?.threadId;
+          if (threadId) {
+            const echo = formatElicitAnswerEcho("cancel", undefined);
+            if (echo) {
+              setThreads((prev) => prev.map((t) => t.id === threadId
+                ? { ...t, messages: [...t.messages, { role: "user", content: echo, ts: Date.now() } as ChatMessage] }
+                : t));
+            }
+          }
+          // POST cancel so the model unblocks; the server-side
+          // pending elicitation needs an explicit resolve.
+          if (pendingElicit) {
+            void fetch("/api/elicit-response", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ id: pendingElicit.request.id, action: "cancel" }),
+            }).catch(() => {});
+          }
+          setPendingElicit(null);
+          setPendingElicitPreview(null);
+        }}
       />
 
       <div className={s.stage}>
@@ -2308,7 +2594,45 @@ export default function Editor() {
           } : undefined}
           chatTabSwitchKey={chatTabSwitchKey}
           pendingElicit={pendingElicit?.request ?? null}
-          onElicitResolved={() => setPendingElicit(null)}
+          pendingElicitPreview={pendingElicitPreview ?? null}
+          /* When the form is mounted in the Questions tab, the chat
+           * sidebar shows a compact link card pointing the user there
+           * — no need to render two copies of the form. */
+          elicitMountedInTab={shouldMountElicitInTab}
+          onFocusQuestionsTab={() => setActiveTabId(QUESTIONS_TAB_ID)}
+          elicitQuestionCount={elicitQuestionCount}
+          onElicitResolved={(action, answers) => {
+            // Echo the user's answers (or skip notice) into the chat as a
+            // synthetic user-role message so the conversation stays
+            // auditable. We DON'T append it eagerly — instead we stamp a
+            // splitMarker on the current pending assistant. The next
+            // additive event from the agent triggers the lazy split:
+            // close the current bubble, insert the user-echo right after
+            // it, open a fresh post-answer bubble. This produces the
+            // canonical chat flow [assistant #1] → [user echo] → [assistant #2]
+            // (Cline / Claude.ai pattern), instead of the buggy
+            // [one-giant-bubble-with-everything] → [echo at the end].
+            const threadId = pendingElicit?.threadId;
+            if (threadId) {
+              const echo = formatElicitAnswerEcho(action, answers);
+              if (echo) {
+                const stampTs = Date.now();
+                setThreads((prev) => prev.map((t) => {
+                  if (t.id !== threadId) return t;
+                  const next = [...t.messages];
+                  for (let i = next.length - 1; i >= 0; i--) {
+                    const m = next[i];
+                    if (m.role === "assistant" && m.pending) {
+                      next[i] = { ...m, splitMarker: { echo, ts: stampTs } };
+                      break;
+                    }
+                  }
+                  return { ...t, messages: next };
+                }));
+              }
+            }
+            setPendingElicit(null);
+          }}
           onStop={() => {
             // Abort the in-flight stream — server's req.on("close")
             // aborts the SDK query and cancels any pending elicitation.
@@ -2325,7 +2649,23 @@ export default function Editor() {
               void notifyServerStop(streamId);
               abortStream(streamId);
             }
+            // If a question form was up when Stop was pressed, echo the
+            // same "Skipped — proceed with your best judgment." message
+            // we'd echo on Cancel. Without this, the form just disappears
+            // and the chat scroll has no record of why the user killed
+            // the run. Symmetric with the Cancel button's behavior.
+            const hadElicit = (pendingElicit && pendingElicit.threadId === t.id)
+              || (pendingElicitPreview && pendingElicitPreview.threadId === t.id);
+            if (hadElicit) {
+              const echo = formatElicitAnswerEcho("cancel", undefined);
+              if (echo) {
+                setThreads((prev) => prev.map((th) => th.id === t.id
+                  ? { ...th, messages: [...th.messages, { role: "user", content: echo, ts: Date.now() } as ChatMessage] }
+                  : th));
+              }
+            }
             setPendingElicit((p) => (p && p.threadId === t.id ? null : p));
+            setPendingElicitPreview((p) => (p && p.threadId === t.id ? null : p));
             // No live stream to abort (page reloaded mid-turn, watchdog
             // missed the stall, etc.). The pending:true is just stale —
             // flip it locally so the composer unblocks. Save useEffect
@@ -2625,7 +2965,44 @@ export default function Editor() {
             }}
           />}
           <div className={s.rightBody}>
-        {isDesignFiles ? (
+        {isQuestionsTab ? (
+          <div className={s.questionsTabBody}>
+            <ElicitForm
+              key={pendingElicit?.request.previewToolUseId ?? pendingElicit?.request.id ?? pendingElicitPreview?.toolUseId ?? "questions"}
+              variant="tab"
+              request={pendingElicit?.request ?? null}
+              preview={pendingElicit ? null : (pendingElicitPreview ?? null)}
+              onResolved={(action, answers) => {
+                // Stamp splitMarker on the open assistant bubble so the
+                // next agent event triggers a lazy split — see the inline
+                // ChatSidebar handler for the full rationale. Mirroring
+                // the same logic here keeps the tab and inline forms in
+                // lockstep.
+                const threadId = pendingElicit?.threadId ?? pendingElicitPreview?.threadId;
+                if (threadId) {
+                  const echo = formatElicitAnswerEcho(action, answers);
+                  if (echo) {
+                    const stampTs = Date.now();
+                    setThreads((prev) => prev.map((t) => {
+                      if (t.id !== threadId) return t;
+                      const next = [...t.messages];
+                      for (let i = next.length - 1; i >= 0; i--) {
+                        const m = next[i];
+                        if (m.role === "assistant" && m.pending) {
+                          next[i] = { ...m, splitMarker: { echo, ts: stampTs } };
+                          break;
+                        }
+                      }
+                      return { ...t, messages: next };
+                    }));
+                  }
+                }
+                setPendingElicit(null);
+                setPendingElicitPreview(null);
+              }}
+            />
+          </div>
+        ) : isDesignFiles ? (
           <FileBrowserView
             projectId={activeProject.id}
             onOpenRoute={openRouteAsTab}
@@ -2980,6 +3357,10 @@ function TabBar({
   dirtyRoutes,
   onReorder,
   onCloseMany,
+  showQuestionsTab,
+  questionsTabBadge,
+  canCloseQuestionsTab,
+  onCloseQuestionsTab,
 }: {
   projectTitle: string;
   onRenameProject: (next: string) => void;
@@ -2999,6 +3380,19 @@ function TabBar({
   onReorder: (fromId: string, toId: string) => void;
   /** Bulk close — used by the IDE-style context-menu items. */
   onCloseMany: (predicate: (t: Tab) => boolean) => void;
+  /** Render the synthetic Questions tab when the agent has a
+   *  >=QUESTIONS_TAB_THRESHOLD form open. The tab disappears when the
+   *  form resolves; closing it via × cancels the elicitation. */
+  showQuestionsTab: boolean;
+  /** Question count to surface as a small badge on the tab. */
+  questionsTabBadge: number;
+  /** True only once the form has a real elicitation id to cancel
+   *  against. False during preview-only state — the × is hidden so
+   *  the user can't trigger a no-op cancel that would let the
+   *  about-to-arrive elicit resurrect the form. */
+  canCloseQuestionsTab: boolean;
+  /** Cancels the elicitation and removes the tab. */
+  onCloseQuestionsTab: () => void;
 }) {
   const [menu, setMenu] = useState<{ tab: Tab; x: number; y: number } | null>(null);
   const tabbarRef = useRef<HTMLDivElement>(null);
@@ -3036,6 +3430,28 @@ function TabBar({
         </svg>
         <span className={s.label}>Design Files</span>
       </div>
+      {showQuestionsTab && (
+        <div
+          className={`${s.tab} ${activeId === QUESTIONS_TAB_ID ? s.active : ""}`}
+          onClick={() => onActivate(QUESTIONS_TAB_ID)}
+          title={`${questionsTabBadge} quick question${questionsTabBadge === 1 ? "" : "s"} to answer`}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="8" r="6.5" />
+            <path d="M8 11 V11.5" />
+            <path d="M6 6.5 a2 2 0 0 1 4 0 c0 1.5 -2 1.5 -2 3" />
+          </svg>
+          <span className={s.label}>Questions</span>
+          {canCloseQuestionsTab && (
+            <button
+              type="button"
+              className={s.x}
+              aria-label="Cancel and close"
+              onClick={(e) => { e.stopPropagation(); onCloseQuestionsTab(); }}
+            >×</button>
+          )}
+        </div>
+      )}
       {tabs.map((t) => (
         <TabCell
           key={t.id}

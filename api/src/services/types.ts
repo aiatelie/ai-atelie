@@ -91,4 +91,16 @@ export type AgentEvent =
   | { type: "thinking"; chunk: string }
   | { type: "tool"; tool: AgentToolCall }
   | { type: "toolResult"; id: string; content: string; isError?: boolean }
-  | { type: "usage"; usage: AgentUsage };
+  | { type: "usage"; usage: AgentUsage }
+  /** Tool-input streaming for `ask_user` calls. Lets the editor render
+   *  the question form progressively as the model writes it, instead
+   *  of waiting for the elicitation request to fire after the full
+   *  JSON is parsed. The Anthropic SDK emits these via stream_event /
+   *  content_block_delta with `input_json_delta` deltas; the editor
+   *  buffers `partialJson` keyed by `toolUseId`, lenient-parses on
+   *  each delta, and mounts each completed question section as it
+   *  arrives. When the matching `elicit` event finally fires it
+   *  carries the same `toolUseId` so the preview promotes in place. */
+  | { type: "elicitPreviewStart"; toolUseId: string; toolName: string }
+  | { type: "elicitPreviewDelta"; toolUseId: string; partialJson: string }
+  | { type: "elicitPreviewStop"; toolUseId: string };

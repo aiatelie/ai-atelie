@@ -67,7 +67,16 @@ type Props = {
   ) => void;
   onRestore?: (m: Extract<ChatThread["messages"][number], { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
-  onElicitResolved?: () => void;
+  pendingElicitPreview?: { toolUseId: string; partialJson: string; done: boolean } | null;
+  /** When true, the chat sidebar shows a link card pointing the user
+   *  to the Questions canvas tab instead of rendering the form inline.
+   *  Set by Editor.tsx when the question count crosses the threshold. */
+  elicitMountedInTab?: boolean;
+  /** Brings the Questions tab into focus from the chat link card. */
+  onFocusQuestionsTab?: () => void;
+  /** Used to label the link card ("3 questions →"). */
+  elicitQuestionCount?: number;
+  onElicitResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
   onStop?: () => void;
   /** A message held until the active turn drains. Rendered above the
    *  composer as a dimmer "queued" bubble. See route-level queueOrSend. */
@@ -123,7 +132,7 @@ export function LeftPanel(props: Props) {
     projectId,
     threads, activeThread, onNewThread, onSwitchThread, onDeleteThread,
     onRenameThread, onUndo, onRetry, onDeleteMessage, onSend, onRestore,
-    pendingElicit, onElicitResolved, onStop,
+    pendingElicit, pendingElicitPreview, elicitMountedInTab, onFocusQuestionsTab, elicitQuestionCount, onElicitResolved, onStop,
     queuedMessage, onCancelQueued,
     activeFile, selectedPinId, onSelectPin, onPromoteComments, onRestoreComment,
     captureRouteScreenshot,
@@ -288,6 +297,10 @@ export function LeftPanel(props: Props) {
           onSend={onSend}
           onRestore={onRestore}
           pendingElicit={pendingElicit}
+          pendingElicitPreview={pendingElicitPreview}
+          elicitMountedInTab={elicitMountedInTab}
+          onFocusQuestionsTab={onFocusQuestionsTab}
+          elicitQuestionCount={elicitQuestionCount}
           onElicitResolved={onElicitResolved}
           onStop={onStop}
           queuedMessage={queuedMessage}

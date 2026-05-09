@@ -22,7 +22,7 @@ import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
-import { kindOf, KIND_VERB, type ToolKind } from "../../lib/toolKind";
+import { kindOf, verbOf, type ToolKind } from "../../lib/toolKind";
 import { smartLabel } from "../../lib/smartLabel";
 
 /* KindIcon — 12px inline SVG icons for tool-call chips. Lucide-style
@@ -140,6 +140,14 @@ export type ChatMessage =
       error?: string;
       turnId?: string;       // server-side snapshot id for undo
       reverted?: boolean;    // edits for this turn have been undone
+      /** Set when the user has just submitted an `ask_user` form mid-turn.
+       *  Triggers a lazy split on the NEXT additive event from the agent:
+       *  the current bubble closes, a synthetic user-echo message is
+       *  inserted right after it, and a fresh pending bubble opens for
+       *  any post-answer work. Lazy so we don't end up with an empty
+       *  post-answer bubble if the agent has nothing more to say.
+       *  Cleared by the split or by the close-of-turn handler. */
+      splitMarker?: { echo: string; ts: number };
     };
 
 export type ChatThread = {
@@ -179,6 +187,10 @@ export function ChatTab({
   onSend,
   onRestore,
   pendingElicit,
+  pendingElicitPreview,
+  elicitMountedInTab,
+  onFocusQuestionsTab,
+  elicitQuestionCount,
   onElicitResolved,
   onStop,
   composerContext,
@@ -206,7 +218,19 @@ export function ChatTab({
   ) => void;
   onRestore?: (m: Extract<ChatMessage, { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
-  onElicitResolved?: () => void;
+  /** Streaming preview of an in-flight ask_user form. The form renders
+   *  questions as the SDK writes the JSON, before the elicitation
+   *  request arrives. Promoted in place when the matching `elicit`
+   *  event fires (matched by `previewToolUseId`). */
+  pendingElicitPreview?: { toolUseId: string; partialJson: string; done: boolean } | null;
+  /** When true, the form is rendered in the Questions canvas tab — the
+   *  chat shows a compact link card instead of the inline form. */
+  elicitMountedInTab?: boolean;
+  /** Brings the Questions tab into focus from the chat link card. */
+  onFocusQuestionsTab?: () => void;
+  /** Used to label the link card ("3 questions →"). */
+  elicitQuestionCount?: number;
+  onElicitResolved?: (action: "accept" | "decline" | "cancel", answers?: Record<string, unknown>) => void;
   onStop?: () => void;
   /** Human-readable label of the context the next turn will carry. */
   composerContext?: string;
@@ -262,13 +286,40 @@ export function ChatTab({
           setEditSeed({ text, nonce: Date.now() });
         }}
       />
-      {pendingElicit && (
+      {(pendingElicit || pendingElicitPreview) && elicitMountedInTab ? (
+        // Form lives in the Questions canvas tab; render a compact
+        // link card here so the chat scroll stays usable but the user
+        // still sees that an ask is open.
+        <button
+          type="button"
+          className={s.elicitLinkCard}
+          onClick={() => onFocusQuestionsTab?.()}
+        >
+          <span className={s.elicitLinkIcon} aria-hidden>⚠</span>
+          <span className={s.elicitLinkBody}>
+            <span className={s.elicitLinkTitle}>
+              {elicitQuestionCount === 1 ? "A quick question" : `${elicitQuestionCount ?? "A few"} quick questions`}
+            </span>
+            <span className={s.elicitLinkHint}>Tap to answer →</span>
+          </span>
+        </button>
+      ) : pendingElicit ? (
         <ElicitForm
-          key={pendingElicit.id}
+          // Key off the preview's toolUseId when there's a matching
+          // preview, so the streaming form's component identity
+          // survives the promote-to-real-elicit transition (preserves
+          // focus, scroll position, and any partially-filled answers).
+          // Falls back to the elicit id when there was no preview.
+          key={pendingElicit.previewToolUseId ?? pendingElicit.id}
           request={pendingElicit}
           onResolved={onElicitResolved ?? (() => {})}
         />
-      )}
+      ) : pendingElicitPreview ? (
+        <ElicitForm
+          key={pendingElicitPreview.toolUseId}
+          preview={pendingElicitPreview}
+        />
+      ) : null}
       {queuedMessage && (
         <QueuedBubble
           message={queuedMessage}
@@ -280,7 +331,7 @@ export function ChatTab({
         onEdit={onOpenSkillsSettings ?? (() => {})}
       />
       <Composer
-        disabled={!!activeThread && (isAssistantPending(activeThread) || !!pendingElicit)}
+        disabled={!!activeThread && (isAssistantPending(activeThread) || !!pendingElicit || !!pendingElicitPreview)}
         hasQueued={!!queuedMessage}
         onSend={onSend}
         onStop={!!activeThread && isAssistantPending(activeThread) ? onStop : undefined}
@@ -1079,7 +1130,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { name: "/plan", description: "Plan the change before editing — files, diffs, visual goal", kind: "prompt", prompt: "Before doing it, write me a plan: list the files you'll touch, the changes per file, and the visual goal. Don't edit yet." },
   { name: "/diff", description: "Summarize the most recent edits this turn made", kind: "prompt", prompt: "Summarize the most recent edits — list each file changed and the gist of what changed." },
   { name: "/screenshot", description: "Take a fresh screenshot of the active page", kind: "prompt", prompt: "Take a fresh screenshot of the active page so you can see the current state." },
-  { name: "/export", description: "Export the selected element — picks PNG / JPEG / OGraf", kind: "prompt", prompt: "Use the export skill on the currently selected element. If the format isn't obvious from what I've said, ask me with a single mcp__ask-user__ask_user enum question whether I want PNG (transparent), JPEG (smaller), or OGraf (Resolve 21+). Otherwise just call the right capability and tell me what you saved." },
+  { name: "/export", description: "Export the selected element — picks PNG / JPEG / OGraf", kind: "prompt", prompt: "Use the export skill on the currently selected element. If the format isn't obvious from what I've said, ask me with mcp__ask-user__ask_user — pass { title: 'Quick question about the export', questions: [{ id: 'format', kind: 'enum', title: 'Which format?', options: ['PNG (transparent)', 'JPEG (smaller)', 'OGraf (Resolve 21+)'] }] }. Otherwise just call the right capability and tell me what you saved." },
   { name: "/explain", description: "Walk through what's currently on the active page", kind: "prompt", prompt: "Walk me through what's currently on the active page — components, layout decisions, design choices." },
   { name: "/refactor", description: "Refactor the active component without changing visuals", kind: "prompt", prompt: "Refactor the active component for cleaner structure without changing the visual output." },
   { name: "/test", description: "Suggest a small test for the most recent change", kind: "prompt", prompt: "Suggest a small test or visual sanity check for the most recent change." },
@@ -1509,6 +1560,16 @@ function Bubble({
           const a = parseArtifact(t.result);
           return a ? <ArtifactCard key={`art-${i}`} artifact={a} /> : null;
         })}
+        {/* Todo updates render as a dedicated diff-aware card —
+         *  surfaced above the regular tool chips so the list is
+         *  always visible at the top of the bubble's tool block.
+         *  ToolFooter (below) skips todo tools to avoid duplication. */}
+        {m.tools.map((t, ti) => {
+          const todos = extractTodos(t);
+          if (!todos) return null;
+          const prev = previousTodosSnapshot(messages, index, ti);
+          return <TodoUpdateCard key={`todo-${ti}`} todos={todos} prevTodos={prev} />;
+        })}
         {/* Tool chips: collapsed-by-default footer when there are >2
          *  calls AFTER the turn finishes; while pending we always
          *  expand so the user sees chips appearing live as the model
@@ -1667,16 +1728,22 @@ function basename(path: string): string {
 function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean }) {
   const [open, setOpen] = useState(false);
   if (tools.length === 0) return null;
+  // Group adjacent same-verb tools so a burst of e.g. three Read calls
+  // renders as "Reading ×3 ▾" instead of three discrete chips. The
+  // grouping is per-verb (kindOf-based), bounded at the chronological
+  // run — non-adjacent same-verb tools stay apart so the chat reflects
+  // the order the model actually emitted them.
+  const groups = groupConsecutiveByVerb(tools);
   // Pending OR few tools: always expanded.
-  const expanded = pending || tools.length <= 2 || open;
   if (pending || tools.length <= 2) {
     return (
       <div className={s.tools} data-compact={tools.length <= 2 ? "true" : "false"}>
-        {tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+        {groups.map((g, i) => <ToolChipGroup key={i} group={g} />)}
       </div>
     );
   }
   // Done + 3+ tools: collapsible summary footer.
+  const expanded = open;
   const fileSet = new Set<string>();
   for (const t of tools) {
     const m = (t.label || "").match(/·\s+(.+)/);
@@ -1700,9 +1767,188 @@ function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean })
       </button>
       {expanded && (
         <div className={s.tools} data-compact="false">
-          {tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+          {groups.map((g, i) => <ToolChipGroup key={i} group={g} />)}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Collapse adjacent tools sharing the same verb (per `verbOf`). A
+ *  three-Read burst becomes one group of size 3; a Read-Edit-Read
+ *  sequence stays as three separate groups so order is preserved. */
+type ToolGroup = { verb: string; kind: ToolKind; tools: ToolCall[] };
+function groupConsecutiveByVerb(tools: ToolCall[]): ToolGroup[] {
+  const out: ToolGroup[] = [];
+  for (const t of tools) {
+    const v = verbOf(t.name);
+    const k = kindOf(t.name);
+    const last = out[out.length - 1];
+    if (last && last.verb === v && last.kind === k) {
+      last.tools.push(t);
+    } else {
+      out.push({ verb: v, kind: k, tools: [t] });
+    }
+  }
+  return out;
+}
+
+/** Render one group: single-tool groups behave exactly like the
+ *  previous per-tool ToolChip; multi-tool groups collapse into a
+ *  count-merged header ("Writing ×3") that expands to show children. */
+function ToolChipGroup({ group }: { group: ToolGroup }) {
+  const [open, setOpen] = useState(false);
+  // Todo-writing tools render as a dedicated TodoUpdateCard at the
+  // Bubble level (it has access to message history for delta diffing
+  // against the prior turn's snapshot). Skip them here so they're
+  // not double-rendered.
+  if (group.tools.length === 1) {
+    const t = group.tools[0];
+    if (extractTodos(t)) return null;
+    return <ToolChip tool={t} />;
+  }
+  const anyError = group.tools.some((t) => t.isError);
+  return (
+    <div className={`${s.toolGroup} ${open ? s.toolGroupOpen : ""}`} data-kind={group.kind} data-error={anyError ? "true" : undefined}>
+      <button
+        type="button"
+        className={s.toolGroupHeader}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className={s.toolGroupLabel}>{group.verb} ×{group.tools.length}</span>
+        <span className={s.toolGroupChev} aria-hidden="true">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className={s.toolGroupChildren}>
+          {group.tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Extract the todos array from a TodoWrite/update_todos tool call's
+ *  `input`. The Claude Code SDK sends `{ todos: [{ content, status,
+ *  activeForm }, ...] }`. Returns null for non-todo tools or when the
+ *  shape isn't recognized. */
+type TodoItem = { content: string; status: "pending" | "in_progress" | "completed"; activeForm?: string };
+function extractTodos(tool: ToolCall): TodoItem[] | null {
+  const norm = tool.name.replace(/^mcp__[^_]+__/, "").toLowerCase();
+  if (norm !== "todowrite" && norm !== "update_todos") return null;
+  const todos = (tool.input as { todos?: unknown } | undefined)?.todos;
+  if (!Array.isArray(todos)) return null;
+  return todos
+    .map((raw): TodoItem | null => {
+      if (!raw || typeof raw !== "object") return null;
+      const r = raw as { content?: unknown; status?: unknown; activeForm?: unknown };
+      if (typeof r.content !== "string") return null;
+      const status = r.status === "in_progress" || r.status === "completed" ? r.status : "pending";
+      return {
+        content: r.content,
+        status,
+        activeForm: typeof r.activeForm === "string" ? r.activeForm : undefined,
+      };
+    })
+    .filter((x): x is TodoItem => x !== null);
+}
+
+/** Walk back through `messages` (from `beforeIdx-1` down to 0) to
+ *  find the most recent todo-writing tool call BEFORE the one at
+ *  `messages[beforeIdx].tools[beforeToolIdx]`, and return its
+ *  `todos[]` snapshot. Empty array if none found.
+ *
+ *  Includes earlier todo tool calls within the SAME message (i.e.
+ *  the model called update_todos twice in one assistant turn) — the
+ *  snapshot is whatever was in the immediately preceding call. */
+function previousTodosSnapshot(
+  messages: ChatMessage[],
+  beforeIdx: number,
+  beforeToolIdx: number,
+): TodoItem[] {
+  // First, scan earlier tool calls in the SAME message.
+  const here = messages[beforeIdx];
+  if (here?.role === "assistant") {
+    for (let ti = beforeToolIdx - 1; ti >= 0; ti--) {
+      const todos = extractTodos(here.tools[ti]);
+      if (todos) return todos;
+    }
+  }
+  // Then earlier messages, walking back.
+  for (let mi = beforeIdx - 1; mi >= 0; mi--) {
+    const m = messages[mi];
+    if (m.role !== "assistant") continue;
+    for (let ti = m.tools.length - 1; ti >= 0; ti--) {
+      const todos = extractTodos(m.tools[ti]);
+      if (todos) return todos;
+    }
+  }
+  return [];
+}
+
+/** Diff two todo snapshots by `content` text identity. Items present
+ *  in `current` but not `prev` are ADDED; items in `prev` but not
+ *  `current` are REMOVED; items in both with a status change are
+ *  UPDATED; otherwise UNCHANGED. The order in the returned list
+ *  matches `current`, with REMOVED items inserted at the end so the
+ *  user sees the new state with the removals as a footnote. */
+type TodoDeltaKind = "added" | "removed" | "updated" | "unchanged";
+type TodoDeltaItem = TodoItem & { delta: TodoDeltaKind; prevStatus?: TodoItem["status"] };
+function computeTodoDelta(current: TodoItem[], prev: TodoItem[]): TodoDeltaItem[] {
+  const prevByContent = new Map(prev.map((t) => [t.content, t]));
+  const currentContents = new Set(current.map((t) => t.content));
+  const out: TodoDeltaItem[] = current.map((t) => {
+    const prior = prevByContent.get(t.content);
+    if (!prior) return { ...t, delta: "added" };
+    if (prior.status !== t.status) return { ...t, delta: "updated", prevStatus: prior.status };
+    return { ...t, delta: "unchanged" };
+  });
+  for (const p of prev) {
+    if (!currentContents.has(p.content)) out.push({ ...p, delta: "removed" });
+  }
+  return out;
+}
+
+/** Render the agent's just-pushed todo list with delta markers
+ *  computed against the most recent prior snapshot. "+" = added
+ *  this turn, "Δ" = status changed, "−" = removed, no marker =
+ *  carried forward. Mirrors Claude Design's "Updated todos"
+ *  framing: every visible item is part of THIS update. */
+function TodoUpdateCard({ todos, prevTodos }: { todos: TodoItem[]; prevTodos: TodoItem[] }) {
+  if (todos.length === 0 && prevTodos.length === 0) return null;
+  const items = computeTodoDelta(todos, prevTodos);
+  const inProgress = todos.find((t) => t.status === "in_progress");
+  const addedCount = items.filter((i) => i.delta === "added").length;
+  const updatedCount = items.filter((i) => i.delta === "updated").length;
+  const removedCount = items.filter((i) => i.delta === "removed").length;
+  const headline = inProgress
+    ? `Updated todos · ${inProgress.activeForm ?? inProgress.content}`
+    : addedCount + updatedCount + removedCount === 0
+      ? `Todos · ${todos.length} item${todos.length === 1 ? "" : "s"}`
+      : `Updated todos · ${[
+          addedCount && `+${addedCount}`,
+          updatedCount && `Δ${updatedCount}`,
+          removedCount && `−${removedCount}`,
+        ].filter(Boolean).join(" ")}`;
+  return (
+    <div className={s.todoCard}>
+      <div className={s.todoCardHeader}>
+        <span className={s.todoCardIcon} aria-hidden>☰</span>
+        <span className={s.todoCardLabel}>{headline}</span>
+      </div>
+      <ul className={s.todoList}>
+        {items.map((it, i) => (
+          <li key={i} className={s.todoItem} data-status={it.status} data-delta={it.delta}>
+            <span className={s.todoMark} aria-hidden>
+              {it.delta === "added" ? "+" : it.delta === "removed" ? "−" : it.delta === "updated" ? "Δ" : " "}
+            </span>
+            <span className={s.todoStatus} aria-label={it.status}>
+              {it.status === "completed" ? "✓" : it.status === "in_progress" ? "→" : "○"}
+            </span>
+            <span className={s.todoContent}>{it.content}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1715,24 +1961,36 @@ function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean })
  *  by the parent's m.content check). */
 function LiveStatus({ tools, since }: { tools: ToolCall[]; since?: number }) {
   const last = tools.length > 0 ? tools[tools.length - 1] : null;
+  // Detect "agent is paused waiting for the user to fill an ask_user
+  // form" from the tool shape: a pending `ask_user` tool_use with no
+  // result yet. Swap the verb to a human-readable waiting copy and
+  // hide the elapsed timer — a 5-minute form-fill shouldn't read as
+  // "Thinking… 5m" when the agent is in fact idle. Continue.dev's
+  // pattern (replace streaming indicator with a static "awaiting input"
+  // badge) was the inspiration here.
+  const isWaitingForUser = !!last
+    && (last.name === "mcp__ask-user__ask_user" || last.name === "ask_user")
+    && !last.result;
   // Derive verb from the tool's semantic kind so this preview stays
   // aligned with the chip color below it (single source of truth in
   // toolKind.ts). The tool's label still drives the file/target text.
   let verb = "Working";
   let target = "";
-  if (last) {
-    verb = KIND_VERB[kindOf(last.name)];
+  if (last && !isWaitingForUser) {
+    verb = verbOf(last.name);
     const label = last.label || "";
     const m = label.match(/^[^·]+·\s*(.+)$/);
     target = m ? m[1].trim() : "";
   }
   return (
-    <div className={s.liveStatus}>
-      <StreamingDots />
+    <div className={s.liveStatus} data-waiting={isWaitingForUser ? "true" : undefined}>
+      {!isWaitingForUser && <StreamingDots />}
       <span className={s.liveStatusLabel}>
-        {target ? `${verb} ${target}…` : "Thinking…"}
+        {isWaitingForUser
+          ? "Waiting for your answer"
+          : (target ? `${verb} ${target}…` : "Thinking…")}
       </span>
-      {since !== undefined && <ElapsedSince since={since} />}
+      {since !== undefined && !isWaitingForUser && <ElapsedSince since={since} />}
     </div>
   );
 }

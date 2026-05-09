@@ -544,6 +544,13 @@
   color: var(--ink-60);
   font-style: italic;
 }
+/* When the agent is paused on an `ask_user` form, swap to a warmer,
+ * un-animated label so the bubble visibly registers "your move" rather
+ * than "still working" — the elapsed timer is hidden in JSX too. */
+.liveStatus[data-waiting="true"] {
+  color: var(--brand, #d97757);
+  font-style: normal;
+}
 .liveStatusLabel {
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -681,6 +688,129 @@
 .toolChipWrap.toolChipOpen {
   flex-basis: 100%;
 }
+/* Group container for adjacent same-verb tool calls. The header looks
+ * like a single ToolChip ("Writing ×3 ▾") but expanding it reveals
+ * the per-call children stacked underneath. Borrows the kind-tinting
+ * variables from .toolChip so a Reading group reads as the same color
+ * as its individual chips. */
+.toolGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.toolGroupHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  background: var(--kind-other-bg, var(--brand-bg));
+  border: 1px solid var(--kind-other-border, var(--brand-border));
+  color: var(--kind-other-fg, var(--brand-fg));
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  appearance: none;
+  text-align: left;
+}
+.toolGroup[data-kind="read"]    > .toolGroupHeader { background: var(--kind-read-bg);    border-color: var(--kind-read-border);    color: var(--kind-read-fg); }
+.toolGroup[data-kind="edit"]    > .toolGroupHeader { background: var(--kind-edit-bg);    border-color: var(--kind-edit-border);    color: var(--kind-edit-fg); }
+.toolGroup[data-kind="execute"] > .toolGroupHeader { background: var(--kind-execute-bg); border-color: var(--kind-execute-border); color: var(--kind-execute-fg); }
+.toolGroup[data-kind="fetch"]   > .toolGroupHeader { background: var(--kind-fetch-bg);   border-color: var(--kind-fetch-border);   color: var(--kind-fetch-fg); }
+.toolGroup[data-kind="search"]  > .toolGroupHeader { background: var(--kind-search-bg);  border-color: var(--kind-search-border);  color: var(--kind-search-fg); }
+.toolGroup[data-error="true"] > .toolGroupHeader {
+  background: var(--kind-error-bg, #fee);
+  border-color: var(--kind-error-border, #f99);
+  color: var(--kind-error-fg, #c33);
+}
+.toolGroupLabel { white-space: nowrap; }
+.toolGroupChev { opacity: 0.6; }
+.toolGroupChildren {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 2px solid var(--ink-10);
+  margin-left: 8px;
+}
+
+/* TodoWrite/update_todos render as a dedicated card so the list
+ * actually shows up in chat instead of being a cryptic "Updating
+ * todos" chip. The "+" prefix on each row mirrors Claude Design's
+ * "Updated todos" framing — every visible entry is part of THIS
+ * push. (A future delta diff against the previous turn's list could
+ * upgrade "+" → "+/Δ/-" semantics.) */
+.todoCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--ink-10);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.todoCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--ink-70);
+}
+.todoCardIcon { font-size: 11px; color: var(--ink-50); }
+.todoCardLabel { font-size: 12px; }
+.todoList {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.todoItem {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.todoItem[data-status="completed"] .todoContent {
+  text-decoration: line-through;
+  color: var(--ink-60);
+}
+.todoItem[data-status="in_progress"] .todoContent {
+  font-weight: 500;
+  color: var(--ink);
+}
+.todoMark {
+  color: var(--brand-strong);
+  font-weight: 600;
+  flex-shrink: 0;
+  width: 10px;
+}
+/* Color the delta marker by kind so the eye can scan the list and
+ * spot what's new/removed/changed at a glance. Carried-forward
+ * items show a blank gutter — matches Claude Design's pattern of
+ * ONLY drawing attention to what changed this turn. */
+.todoItem[data-delta="added"]   .todoMark { color: var(--brand-strong); }
+.todoItem[data-delta="updated"] .todoMark { color: var(--ink-60); }
+.todoItem[data-delta="removed"] .todoMark { color: var(--ink-50); }
+.todoItem[data-delta="removed"] .todoContent {
+  color: var(--ink-50);
+  text-decoration: line-through;
+}
+.todoItem[data-delta="unchanged"] {
+  opacity: 0.6;
+}
+.todoStatus {
+  font-size: 11px;
+  color: var(--ink-50);
+  flex-shrink: 0;
+  width: 12px;
+}
+.todoContent { color: var(--ink); }
+
 .toolChip {
   display: flex;
   justify-content: space-between;
@@ -1233,11 +1363,28 @@
   border-radius: 10px;
   box-shadow: 0 1px 0 var(--ink-02), 0 4px 14px var(--brand-soft);
 }
+/* Tab variant: a deliberate-feeling form on the warm-cream tab body.
+ * No card chrome at all (the surrounding warm bg already frames it);
+ * the title's serif italic does the gravitas work; sections breathe
+ * via vertical rhythm rather than borders. */
+.elicitCard[data-variant="tab"] {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
 .elicitHeader {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+.elicitCard[data-variant="tab"] .elicitHeader {
+  margin-bottom: 36px;
+  gap: 12px;
+  align-items: baseline;
 }
 .elicitDot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -1245,38 +1392,208 @@
   box-shadow: 0 0 0 3px var(--brand-border);
   flex-shrink: 0;
 }
+.elicitCard[data-variant="tab"] .elicitDot {
+  width: 8px; height: 8px;
+  align-self: center;
+  margin-bottom: 4px;
+}
 .elicitTitle {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-85);
   line-height: 1.35;
 }
+.elicitCard[data-variant="tab"] .elicitTitle {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 30px;
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+}
 .elicitBody {
   margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
-.elicitOptions {
+.elicitCard[data-variant="tab"] .elicitBody {
+  gap: 36px;
+  margin-bottom: 0;
+}
+
+/* Per-question section inside a multi-question form. */
+.elicitSection {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.elicitOption {
+.elicitSectionTitle {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink);
+}
+.elicitCard[data-variant="tab"] .elicitSection {
+  gap: 10px;
+}
+.elicitCard[data-variant="tab"] .elicitSectionTitle {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin-bottom: 0;
+}
+.elicitSectionSubtitle {
+  font-size: 12px;
+  color: var(--ink-60);
+  margin-top: -2px;
+  margin-bottom: 4px;
+}
+.elicitCard[data-variant="tab"] .elicitSectionSubtitle {
+  font-size: 13px;
+  color: var(--ink-55);
+  margin-top: -4px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+/* Options flow as horizontal pills that wrap onto multiple rows.
+ * Matches the canvas-style question pattern (Claude Design): chips
+ * are scannable left-to-right, the native checkbox/radio is hidden
+ * (the chip's filled state IS the affordance), and rows wrap
+ * naturally on narrow viewports without any media-query work. */
+.elicitOptions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+}
+.elicitOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 6px 12px;
   border: 1px solid var(--ink-10);
-  border-radius: 6px;
+  border-radius: 999px;
   background: var(--surface);
   font-size: 13px;
+  line-height: 1.2;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
+  user-select: none;
+  white-space: nowrap;
 }
 .elicitOption:hover { background: var(--surface-4); }
 .elicitOptionOn {
   background: var(--brand-bg);
   border-color: var(--brand-strong);
+  color: var(--brand-strong);
+  font-weight: 500;
 }
-.elicitOption input { accent-color: var(--brand); }
+/* Visually hide the native input but keep it focusable + screen-
+ * reader accessible. The chip's `data-on` (via parent selector
+ * `.elicitOptionOn`) is the visible-state authority. */
+.elicitOption input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* When focused via keyboard, surface a focus ring on the chip
+ * itself since the input is visually-hidden. */
+.elicitOption:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+/* Tab variant chips: softer, borderless pills on the cream tab body.
+ * Resting state is a slightly off-white that contrasts with the warm
+ * background; selected state fills with brand accent. The lack of a
+ * 1px border (vs the inline variant) makes them feel less like form
+ * fields and more like considered design tokens. */
+.elicitCard[data-variant="tab"] .elicitOption {
+  padding: 8px 14px;
+  font-size: 13.5px;
+  background: var(--surface);
+  border-color: transparent;
+  box-shadow: 0 1px 2px var(--ink-05, rgba(15, 12, 8, 0.04));
+  transition: background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+}
+.elicitCard[data-variant="tab"] .elicitOption:hover {
+  background: var(--brand-soft);
+  box-shadow: 0 1px 3px var(--ink-08);
+}
+.elicitCard[data-variant="tab"] .elicitOptionOn {
+  background: var(--brand-bg);
+  border-color: var(--brand-border);
+  color: var(--brand-fg);
+  box-shadow: 0 1px 2px var(--brand-soft);
+}
+/* Decide for me / Explore a few / Other are escape hatches — make
+ * them feel slightly secondary so the eye lands on the canonical
+ * options first. Italic + dimmer color marks them as auxiliary
+ * without hiding them. */
+.elicitCard[data-variant="tab"] .elicitOption[data-escape="true"] {
+  font-style: italic;
+  color: var(--ink-55);
+  background: transparent;
+  box-shadow: none;
+}
+.elicitCard[data-variant="tab"] .elicitOption[data-escape="true"]:hover {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+.elicitCard[data-variant="tab"] .elicitOption[data-escape="true"].elicitOptionOn {
+  font-style: normal;
+  color: var(--brand-fg);
+  background: var(--brand-bg);
+}
+
+/* SVG-options grid — wrap-grid of small visual cards. The inline SVG
+ * sits in a fixed 80x56 frame so cards line up cleanly regardless of
+ * the agent's drawing size. */
+.elicitSvgGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+.elicitSvgCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1px solid var(--ink-10);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.elicitSvgCard:hover { background: var(--surface-4); }
+.elicitSvgCardOn {
+  background: var(--brand-bg);
+  border-color: var(--brand-strong);
+}
+.elicitSvgInner {
+  width: 80px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+.elicitSvgInner > svg { max-width: 100%; max-height: 100%; }
+.elicitSvgLabel {
+  font-size: 11.5px;
+  color: var(--ink-70);
+  text-align: center;
+}
 .elicitInput, .elicitTextarea {
   width: 100%;
   border: 1px solid var(--ink-15);
@@ -1354,6 +1671,105 @@
   gap: 8px;
 }
 .elicitActionsSpacer { flex: 1; }
+/* Tab variant: stick the action bar to the bottom of the visible
+ * scroll viewport so Continue is always reachable on long forms.
+ * The translucent surface backdrop keeps content underneath
+ * readable through the bar instead of an opaque cut. */
+.elicitCard[data-variant="tab"] .elicitActions {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(to top, var(--surface) 75%, transparent);
+  margin: 0 -24px;
+  padding: 16px 24px;
+  z-index: 2;
+}
+
+/* Compact link card shown in the chat sidebar when the form has been
+ * moved to the Questions canvas tab. Click → focuses the tab. Mirrors
+ * the size of a regular tool-call chip so the chat scroll stays
+ * visually consistent. */
+.elicitLinkCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: var(--brand-bg);
+  border: 1px solid var(--brand-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  margin: 6px 0;
+  transition: background 0.12s ease;
+}
+.elicitLinkCard:hover { background: var(--brand-soft); }
+.elicitLinkIcon {
+  font-size: 16px;
+  color: var(--brand-strong);
+  flex-shrink: 0;
+}
+.elicitLinkBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.elicitLinkTitle {
+  font-weight: 600;
+  color: var(--ink);
+}
+.elicitLinkHint {
+  font-size: 11.5px;
+  color: var(--ink-60);
+}
+
+.elicitGenerating {
+  font-size: 11.5px;
+  color: var(--ink-50);
+  font-style: italic;
+}
+.elicitMissingHint {
+  font-size: 11.5px;
+  color: var(--ink-60);
+}
+
+/* 22×22 paperclip button anchored to the bottom-right corner of a
+ * freeform textarea. Triggers the per-question file picker — same
+ * upload path as paste/drop, just visible. Mirrors the affordance
+ * Claude Design exposes on every freeform question. */
+.elicitTextareaAttach {
+  position: absolute;
+  right: 8px;
+  bottom: 24px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--ink-15);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-60);
+  padding: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.elicitTextareaAttach:hover { background: var(--surface-4); color: var(--brand); }
+.elicitTextareaAttach:disabled { opacity: 0.5; cursor: not-allowed; }
+.elicitTextareaWrap { position: relative; }
+/* Subtle visual hint that the form is still in preview-mode (the
+ * model is mid-write); the card pulses gently and we soften the
+ * border so it doesn't compete with the live action buttons. */
+.elicitCard[data-preview="true"] {
+  border-color: var(--ink-15);
+  animation: elicit-preview-pulse 2.4s ease-in-out infinite;
+}
+@keyframes elicit-preview-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--brand-soft, rgba(217, 119, 87, 0.0)); }
+  50% { box-shadow: 0 0 0 3px var(--brand-soft, rgba(217, 119, 87, 0.18)); }
+}
 .elicitTextToggle {
   font: inherit;
   font-size: 11.5px;
@@ -1368,6 +1784,104 @@
 }
 .elicitTextToggle:hover { color: var(--brand); text-decoration-color: var(--brand); }
 .elicitTextToggle:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Defer ("Decide for me") toggle below a NumberInput. Same visual
+ * treatment as the Other toggle so the affordance set looks unified. */
+.elicitDeferToggle {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-50);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-20);
+  text-underline-offset: 2px;
+  align-self: flex-start;
+}
+.elicitDeferToggle:hover { color: var(--brand); text-decoration-color: var(--brand); }
+.elicitNumberRow[data-deferred="true"] {
+  opacity: 0.5;
+}
+
+/* Sliding-switch boolean. Replaces the previous Yes/No radio pair
+ * with a single tap target the user toggles between two states.
+ * "Unset" (no value picked yet) shows a centered greyed thumb so
+ * the user knows the question still needs an answer. "Decide for
+ * me" surfaces as a separate text-link below to keep the switch
+ * semantically binary. */
+.elicitBoolean {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.elicitSwitch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+.elicitSwitchTrack {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--ink-15);
+  border: 1px solid var(--ink-15);
+  transition: background 0.18s ease, border-color 0.18s ease;
+  flex-shrink: 0;
+}
+.elicitSwitchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: left 0.18s ease, background 0.18s ease;
+}
+/* Yes — track tinted brand, thumb at right. */
+.elicitSwitch[data-state="yes"] .elicitSwitchTrack {
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+}
+.elicitSwitch[data-state="yes"] .elicitSwitchThumb {
+  left: 24px;
+}
+/* No — track neutral, thumb at left. */
+.elicitSwitch[data-state="no"] .elicitSwitchTrack {
+  background: var(--ink-20);
+  border-color: var(--ink-20);
+}
+/* Unset — thumb centered, dimmed; visual hint that the question is
+ * unanswered. Hover slides toward Yes since that's the default
+ * commit on click. */
+.elicitSwitch[data-state="unset"] .elicitSwitchTrack {
+  background: var(--ink-10);
+  border-color: var(--ink-15);
+  border-style: dashed;
+}
+.elicitSwitch[data-state="unset"] .elicitSwitchThumb {
+  left: 13px;
+  background: var(--ink-15);
+}
+.elicitSwitch[data-state="defer"] {
+  opacity: 0.55;
+}
+.elicitSwitchLabel {
+  font-size: 13px;
+  font-weight: 500;
+}
 .elicitBtn {
   font: inherit;
   font-size: 12.5px;
