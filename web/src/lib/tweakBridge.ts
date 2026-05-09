@@ -90,11 +90,13 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
     // route changes (a route change usually swaps the iframe src).
   }, [activeFile, iframeRef]);
 
-  // Window-level message listener. The iframe is same-origin so we
-  // could do `event.source === ifr.contentWindow` for tighter scoping,
-  // but the message types are namespaced enough that we can accept all.
+  // Window-level message listener. Validates origin and source window so
+  // only the project iframe (same-origin) can trigger tweak persistence.
   useEffect(() => {
     const onMsg = async (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const w = iframeRef.current?.contentWindow;
+      if (e.source !== w) return;
       const data = e.data as { type?: string; edits?: Record<string, unknown> } | undefined;
       if (!data || typeof data.type !== "string") return;
 
@@ -142,7 +144,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
   const sendToIframe = useCallback((type: string) => {
     const w = iframeRef.current?.contentWindow;
     if (!w) return;
-    try { w.postMessage({ type }, "*"); } catch { /* ignore */ }
+    try { w.postMessage({ type }, window.location.origin); } catch { /* ignore */ }
   }, [iframeRef]);
 
   // Re-broadcast the current theme to the iframe whenever the host's
@@ -199,5 +201,5 @@ function sendThemeToIframe(iframeRef: React.RefObject<HTMLIFrameElement | null>)
     surface: read("--surface"),
     brand: read("--brand"),
   };
-  try { w.postMessage({ type: "__dc_set_theme", tokens }, "*"); } catch { /* ignore */ }
+  try { w.postMessage({ type: "__dc_set_theme", tokens }, window.location.origin); } catch { /* ignore */ }
 }

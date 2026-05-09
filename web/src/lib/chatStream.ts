@@ -363,6 +363,29 @@ export async function resumeStream(streamId: string, listeners: Listener[]): Pro
           } catch { /* ignore */ }
         }
       });
+    } else {
+      // Stream is in-flight — replay accumulated state so the new listeners
+      // can rebuild the full message instead of seeing only deltas from
+      // this point forward. Dispatched via microtask so subscribers observe
+      // the same async shape they would for a server-replay flow.
+      const s = existing.state;
+      queueMicrotask(() => {
+        for (const l of listeners) {
+          if (!existing.listeners.has(l)) continue;
+          try {
+            if (s.turnId) l({ type: "turnId", turnId: s.turnId });
+            if (s.thinking) l({ type: "thinking", chunk: s.thinking });
+            if (s.text) l({ type: "text", chunk: s.text });
+            for (const t of s.tools) l({ type: "tool", tool: t });
+            for (const t of s.tools) {
+              if (t.result != null) l({ type: "toolResult", id: t.id ?? "", content: t.result, isError: t.isError });
+            }
+            if (s.elicit) l({ type: "elicit", request: s.elicit });
+            if (s.usage) l({ type: "usage", usage: s.usage });
+            if (s.error) l({ type: "error", message: s.error });
+          } catch { /* ignore */ }
+        }
+      });
     }
     return true;
   }

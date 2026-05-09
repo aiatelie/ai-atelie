@@ -81,9 +81,16 @@ async function fetchFromServer(projectId: string): Promise<void> {
           threads: Array.isArray(data?.threads) ? (data.threads as ChatThread[]) : [],
           activeId: typeof data?.activeId === "string" ? data.activeId : null,
         };
-        // Only swap cache + emit when content actually changed. Otherwise
-        // our own PATCH → SSE echo → setState → save loop runs forever.
-        if (JSON.stringify(next) !== JSON.stringify(c.archive)) {
+        // Guard against the concurrent-save race: if saveThreads stashed
+        // user-created threads in the cache while we were loading and the
+        // server returns a different version, keep the local data —
+        // it's newer. Same intent as the 404-path guard above.
+        if (
+          c.archive.threads.length > 0 &&
+          JSON.stringify(c.archive) !== JSON.stringify(next)
+        ) {
+          schedulePush(projectId);
+        } else if (JSON.stringify(next) !== JSON.stringify(c.archive)) {
           c.archive = next;
           changed = true;
         }

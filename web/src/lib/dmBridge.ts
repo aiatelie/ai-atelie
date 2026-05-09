@@ -54,6 +54,7 @@ export class DmBridge {
     this.win = iframe.contentWindow;
     this.ready = new Promise<void>((resolve) => { this.resolveReady = resolve; });
     window.addEventListener("message", this.boundOnMsg);
+    if (this.win && (this.win as any).__DM_INJECTED__) this.resolveReady();
   }
 
   /** Idempotently inject inject-script.js into the iframe doc. */
@@ -97,7 +98,7 @@ export class DmBridge {
 
   send(cmd: DmOutbound) {
     if (!this.win) return;
-    try { this.win.postMessage({ __DM_CMD__: cmd }, "*"); } catch { /* ignore */ }
+    try { this.win.postMessage({ __DM_CMD__: cmd }, window.location.origin); } catch { /* ignore */ }
   }
 
   on(listener: Listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -109,7 +110,7 @@ export class DmBridge {
   }
 
   private onMsg(e: MessageEvent) {
-    if (!this.win || e.source !== this.win) return;
+    if (!this.win || e.source !== this.win || e.origin !== window.location.origin) return;
     const data = e.data as { __DM_MSG__?: DmInbound } | undefined;
     if (!data || !data.__DM_MSG__) return;
     const msg = data.__DM_MSG__;
