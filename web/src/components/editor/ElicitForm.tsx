@@ -26,8 +26,11 @@ type Schema = Record<string, unknown> | undefined;
 
 type Props = {
   request: ElicitRequest;
-  /** Called once the user submits / declines / cancels. */
-  onResolved: () => void;
+  /** Called once the user submits / declines / cancels.
+   *  Receives an echo string to display in chat as a "You" message:
+   *  - accept → formatted list of answers
+   *  - decline/cancel → null (caller may show a "skipped" message) */
+  onResolved: (echoText: string | null) => void;
 };
 
 export function ElicitForm({ request, onResolved }: Props) {
@@ -89,6 +92,23 @@ export function ElicitForm({ request, onResolved }: Props) {
     }
   };
 
+  /** Build a human-readable echo string for the answer-echo feature.
+   *  Returns null for non-accept actions (decline / cancel). */
+  const buildEchoText = (action: "accept" | "decline" | "cancel"): string | null => {
+    if (action !== "accept") return null;
+    const question = request.message;
+    const answer = buildAnswer();
+    // Format as a labelled line so the chat shows "question: answer".
+    const label = question.replace(/:?\s*$/, "");
+    if (Array.isArray(answer)) {
+      return `Questions answered:\n- ${label}: ${answer.join(", ")}`;
+    }
+    if (typeof answer === "boolean") {
+      return `Questions answered:\n- ${label}: ${answer ? "Yes" : "No"}`;
+    }
+    return `Questions answered:\n- ${label}: ${String(answer)}`;
+  };
+
   const send = async (action: "accept" | "decline" | "cancel") => {
     if (submitting) return;
     setSubmitting(true);
@@ -110,7 +130,7 @@ export function ElicitForm({ request, onResolved }: Props) {
         setSubmitting(false);
         return;
       }
-      onResolved();
+      onResolved(buildEchoText(action));
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setSubmitting(false);

@@ -554,7 +554,7 @@ export default function Onboard() {
             <ElicitForm
               key={pendingElicit.request.id}
               request={pendingElicit.request}
-              onResolved={() => setPendingElicit(null)}
+              onResolved={(_echo) => setPendingElicit(null)}
             />
           )}
 

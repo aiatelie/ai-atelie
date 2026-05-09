@@ -91,9 +91,18 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (!options?.length) {
       return errResult("ask_user: kind='enum' requires non-empty `options`");
     }
+    // For multi-select, always inject universal escape hatches so the user
+    // can delegate the decision back to the model or ask for variations.
+    let opts = options;
+    if (multi) {
+      const ESCAPE_HATCHES = ["Decide for me", "Explore a few options"];
+      const existing = new Set(opts);
+      const missing = ESCAPE_HATCHES.filter((h) => !existing.has(h));
+      if (missing.length > 0) opts = [...opts, ...missing];
+    }
     answerSchema = multi
-      ? { type: "array", items: { type: "string", enum: options }, title: "Pick one or more" }
-      : { type: "string", enum: options, title: "Pick one" };
+      ? { type: "array", items: { type: "string", enum: opts }, title: "Pick one or more" }
+      : { type: "string", enum: opts, title: "Pick one" };
   } else if (kind === "number") {
     answerSchema = {
       type: "number",

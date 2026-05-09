@@ -1188,6 +1188,17 @@ export default function Editor() {
   })();
   const isBlocked = lastIsPending || !!pendingElicit;
 
+  // True while the model has called ask_user (the tool chip is visible)
+  // but the form schema hasn't arrived from the SSE yet. We show a
+  // "Generating questions…" pill in the sidebar so the user knows to wait.
+  const elicitBuilding = lastIsPending && !pendingElicit && (() => {
+    const last = activeThread?.messages[activeThread.messages.length - 1];
+    if (!last || last.role !== "assistant") return false;
+    return last.tools.some(
+      (t) => (t.name === "ask_user" || t.name.endsWith("__ask_user")) && t.result === undefined,
+    );
+  })();
+
   // Rotating canvas-busy label. Pick a fresh phrase when a run starts,
   // swap to a new one every ~5s while it's still going. Keeps the pill
   // playful on long turns instead of staring at the same line.
@@ -2308,7 +2319,25 @@ export default function Editor() {
           } : undefined}
           chatTabSwitchKey={chatTabSwitchKey}
           pendingElicit={pendingElicit?.request ?? null}
-          onElicitResolved={() => setPendingElicit(null)}
+          elicitBuilding={elicitBuilding}
+          onElicitResolved={(echoText) => {
+            // Inject a synthetic "You" message so the user can scroll
+            // back and see exactly what they told the agent.
+            if (pendingElicit) {
+              const echo = echoText ?? "Skipped all questions — proceed with your best judgment.";
+              setThreads((prev) => prev.map((t) => {
+                if (t.id !== pendingElicit.threadId) return t;
+                const echoMsg: ChatMessage = {
+                  role: "user",
+                  content: echo,
+                  ts: Date.now(),
+                  hidden: false,
+                };
+                return { ...t, messages: [...t.messages, echoMsg] };
+              }));
+            }
+            setPendingElicit(null);
+          }}
           onStop={() => {
             // Abort the in-flight stream — server's req.on("close")
             // aborts the SDK query and cancels any pending elicitation.

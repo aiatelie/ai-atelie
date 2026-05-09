@@ -67,7 +67,10 @@ type Props = {
   ) => void;
   onRestore?: (m: Extract<ChatThread["messages"][number], { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
-  onElicitResolved?: () => void;
+  onElicitResolved?: (echoText: string | null) => void;
+  /** True while the agent has called ask_user but the form schema
+   *  hasn't arrived yet — shows a "Generating questions…" indicator. */
+  elicitBuilding?: boolean;
   onStop?: () => void;
   /** A message held until the active turn drains. Rendered above the
    *  composer as a dimmer "queued" bubble. See route-level queueOrSend. */
@@ -123,7 +126,7 @@ export function LeftPanel(props: Props) {
     projectId,
     threads, activeThread, onNewThread, onSwitchThread, onDeleteThread,
     onRenameThread, onUndo, onRetry, onDeleteMessage, onSend, onRestore,
-    pendingElicit, onElicitResolved, onStop,
+    pendingElicit, onElicitResolved, elicitBuilding, onStop,
     queuedMessage, onCancelQueued,
     activeFile, selectedPinId, onSelectPin, onPromoteComments, onRestoreComment,
     captureRouteScreenshot,
@@ -289,6 +292,7 @@ export function LeftPanel(props: Props) {
           onRestore={onRestore}
           pendingElicit={pendingElicit}
           onElicitResolved={onElicitResolved}
+          elicitBuilding={elicitBuilding}
           onStop={onStop}
           queuedMessage={queuedMessage}
           onCancelQueued={onCancelQueued}

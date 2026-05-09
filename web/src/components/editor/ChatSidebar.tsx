@@ -180,6 +180,7 @@ export function ChatTab({
   onRestore,
   pendingElicit,
   onElicitResolved,
+  elicitBuilding,
   onStop,
   composerContext,
   onClearComposerContext,
@@ -206,7 +207,13 @@ export function ChatTab({
   ) => void;
   onRestore?: (m: Extract<ChatMessage, { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
-  onElicitResolved?: () => void;
+  /** Called when the user submits or dismisses an elicitation form.
+   *  `echoText` is a formatted answer summary to insert as a "You"
+   *  message in the thread, or null if the user cancelled/skipped. */
+  onElicitResolved?: (echoText: string | null) => void;
+  /** True while the agent has called ask_user but the form schema
+   *  hasn't arrived yet — shows a "Generating questions…" indicator. */
+  elicitBuilding?: boolean;
   onStop?: () => void;
   /** Human-readable label of the context the next turn will carry. */
   composerContext?: string;
@@ -262,11 +269,17 @@ export function ChatTab({
           setEditSeed({ text, nonce: Date.now() });
         }}
       />
+      {elicitBuilding && !pendingElicit && (
+        <div className={s.elicitBuilding}>
+          <span className={s.elicitBuildingDot} />
+          Generating questions…
+        </div>
+      )}
       {pendingElicit && (
         <ElicitForm
           key={pendingElicit.id}
           request={pendingElicit}
-          onResolved={onElicitResolved ?? (() => {})}
+          onResolved={onElicitResolved ?? ((_echo) => {})}
         />
       )}
       {queuedMessage && (

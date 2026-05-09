@@ -1386,6 +1386,32 @@
 }
 .elicitPrimary:hover:not(:disabled) { background: var(--brand-strong-fg); }
 
+/* "Generating questions…" status pill — visible between the ask_user
+ * tool chip appearing and the elicitation form schema arriving. */
+.elicitBuilding {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-3);
+  border: 1px solid var(--ink-08);
+  font-size: 12.5px;
+  color: var(--ink-55);
+  font-style: italic;
+}
+.elicitBuildingDot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+  animation: elicit-pulse 1.2s ease-in-out infinite;
+}
+@keyframes elicit-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
 /* ─── Composer (bottom of sidebar) ──────────────────────────── */
 .composer {
   border-top: 1px solid var(--ink-08);
