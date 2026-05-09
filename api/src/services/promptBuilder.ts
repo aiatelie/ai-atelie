@@ -290,6 +290,32 @@ async function buildSandboxPrompt(
     ``,
   );
 
+  // The Tweaks protocol works two ways:
+  //   • Iframe-shipped panel (full skill, see `make-tweakable`)
+  //   • Host-shipped panel — kicks in automatically when the artifact
+  //     just embeds an EDITMODE block without writing any panel JS.
+  // When `make-tweakable` is active, surface a short note nudging the
+  // agent toward the cheap path (CSS variables + EDITMODE block) so
+  // the host panel can render typed controls without any panel code
+  // in the artifact itself.
+  if (activeSkills.includes("make-tweakable")) {
+    lines.push(
+      `### Tweaks protocol (cheap path)`,
+      ``,
+      `Wrap a JSON block of tweakable defaults inside \`/*EDITMODE-BEGIN*/{...}/*EDITMODE-END*/\` markers in the file. Examples:`,
+      ``,
+      "```css",
+      "/*EDITMODE-BEGIN*/{\"primaryColor\":\"#D97757\",\"fontSize\":16,\"heading\":\"Make it your own\"}/*EDITMODE-END*/",
+      "body { background: var(--primaryColor, #D97757); font-size: var(--fontSize, 16px); }",
+      "```",
+      ``,
+      `The host editor's Tweaks sidebar reads this block, renders typed controls (color picker for hex strings, slider for numbers, text input for strings, checkbox for booleans), and writes changes back to source. **You don't need to ship a panel** — just wire each value through a CSS variable named after its key (\`var(--<key>)\`) OR a \`window.__applyTweaks(edits)\` hook that reapplies them on update OR a \`data-tweak-text="<key>"\` attribute on the element whose text content tracks the key. Pick whichever is simplest for the value's role.`,
+      ``,
+      `Only write a custom in-page panel if the user explicitly asks for one or the tweak surface needs UI the host can't render (multi-variant cycling, image picker, etc.) — see the \`make-tweakable\` skill for that path.`,
+      ``,
+    );
+  }
+
   if (p.scopeFile) {
     lines.push(
       `**Scope:** edit ONLY \`${p.scopeFile}\`. The user is previewing this single component on a canvas — don't touch other files.`,

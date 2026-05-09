@@ -46,6 +46,7 @@ const AssetsDialog = lazy(() => import("../components/editor/AssetsDialog").then
 const TemplatesDialog = lazy(() => import("../components/editor/TemplatesDialog").then((m) => ({ default: m.TemplatesDialog })));
 const SettingsDialog = lazy(() => import("../components/editor/SettingsDialog").then((m) => ({ default: m.SettingsDialog })));
 const TweaksPreviewDialog = lazy(() => import("../components/editor/TweaksPreviewDialog").then((m) => ({ default: m.TweaksPreviewDialog })));
+const TweaksPanel = lazy(() => import("../components/editor/TweaksPanel").then((m) => ({ default: m.TweaksPanel })));
 const QuickSwitcher = lazy(() => import("../components/editor/QuickSwitcher").then((m) => ({ default: m.QuickSwitcher })));
 const KeyboardShortcutsModal = lazy(() => import("../components/editor/KeyboardShortcutsModal").then((m) => ({ default: m.KeyboardShortcutsModal })));
 const DrawOverlay = lazy(() => import("../components/editor/DrawOverlay").then((m) => ({ default: m.DrawOverlay })));
@@ -2889,6 +2890,21 @@ export default function Editor() {
               setSelectionList([]);
             }}
           />
+          </Suspense>
+        )}
+        {/* Host-side Tweaks panel — shown when the iframe's auto-bridge
+            announced __edit_mode_available with a `defaults` payload AND
+            the user toggled "Edit live" on. Sits in the same right-rail
+            slot as the Inspector. Each input drives applyEdits, which
+            posts __edit_mode_set_keys to the iframe (live preview) and
+            POSTs /api/projects/:id/tweak (persistence). */}
+        {tweakBridge.editing && tweakBridge.defaults && (
+          <Suspense fallback={null}>
+            <TweaksPanel
+              bridge={tweakBridge}
+              activeFile={activeTab.route}
+              onClose={() => tweakBridge.deactivate()}
+            />
           </Suspense>
         )}
         </>)}

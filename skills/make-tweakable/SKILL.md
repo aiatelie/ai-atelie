@@ -45,3 +45,13 @@ The block between the markers **must be valid JSON** (double-quoted keys and str
 - If the user asks for multiple variants of a single element within a largher design, use this to allow cycling thru the options.
 - If the user does not ask for any tweaks, add a couple anyway by default; be creative and try to expose the user to interesting possibilities.
 - Add `data-cc-no-inspect="true"` to the panel root and the FAB so the editor's inspector skips them.
+- **Set `window.__editModeOwned = true`** at the top of your panel script so the host's auto-bridge backs off. Without it, the host renders its own typed Tweaks sidebar from your EDITMODE block in addition to your panel — both work, but it's noisy.
+
+## Cheap path: no panel, just an EDITMODE block
+
+If your tweak surface is small (≤6 keys, all primitives) and you don't need bespoke UI, **skip writing a panel entirely**. Just embed the EDITMODE block and wire each key through one of:
+- a CSS variable named after the key — `var(--<key>)` — and set values via `--<key>: ...` on `:root`
+- a `window.__applyTweaks(edits)` function that re-renders with the new values
+- a `data-tweak-text="<key>"` attribute on an element whose text content tracks the key, or `data-tweak-attr="<key>:<attrName>"` for arbitrary attributes
+
+The host's auto-bridge (`/tweaks-bridge.js`, injected into every preview HTML) reads the EDITMODE block, posts `__edit_mode_available` with `{ defaults }` to the parent, and applies any incoming `__edit_mode_set_keys` through those three layers. The host then renders typed controls — color pickers for `#hex` strings, sliders for numbers, toggles for booleans, text inputs for strings — without any panel code on your side.

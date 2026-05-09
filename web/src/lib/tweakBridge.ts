@@ -2,7 +2,15 @@
  * + iframe self-description for canvas-aware UI choices.
  *
  * Listens for postMessage events from the project iframe:
- *   { type: '__edit_mode_available' }    → page can be tweaked; enable toggle
+ *   { type: '__edit_mode_available', defaults? } → page can be tweaked.
+ *                                          Enable toggle. If `defaults` is
+ *                                          present (auto-bridge case), the
+ *                                          host can render its own typed
+ *                                          Tweaks sidebar from those keys.
+ *                                          When absent (legacy: iframe
+ *                                          ships its own panel), the host
+ *                                          only flips the toggle and lets
+ *                                          the iframe own the UI.
  *   { type: '__edit_mode_set_keys', edits } → user moved a knob; persist
  *   { type: '__edit_mode_dismissed' }    → iframe closed its panel itself
  *   { type: '__page_is_canvas' }         → page is a workshop (DesignCanvas):
@@ -12,6 +20,9 @@
  * Sends to the iframe in response to the toolbar toggle:
  *   { type: '__activate_edit_mode' }     → show the in-page Tweaks panel
  *   { type: '__deactivate_edit_mode' }   → hide it
+ *   { type: '__edit_mode_set_keys', edits } → push host-panel knob changes
+ *                                          into the iframe so it can apply
+ *                                          them live (CSS vars, hooks, etc).
  *
  * Sends to canvas-mode iframes only:
  *   { type: '__dc_set_theme', tokens }   → push current theme tokens so the
@@ -23,15 +34,22 @@
  *                                          `<html data-theme>` attribute.
  *                                          See `mcp/CANVAS_PROTOCOL.md`.
  *
- * On `__edit_mode_set_keys`, POSTs `/api/projects/:id/tweak` which
- * rewrites the EDITMODE-marked JSON block in the active route's source
- * file. The iframe will reload via vite HMR with the new defaults.
+ * On `__edit_mode_set_keys` (either direction), POSTs
+ * `/api/projects/:id/tweak` which rewrites the EDITMODE-marked JSON
+ * block in the active route's source file. The iframe will reload via
+ * vite HMR with the new defaults.
  *
- * `available` and `isCanvas` reset every time the iframe navigates /
- * reloads (the new page must re-announce). We hook this on `load` events.
+ * `available`, `defaults`, and `isCanvas` reset every time the iframe
+ * navigates / reloads (the new page must re-announce). We hook this on
+ * `load` events.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
+/** Plain values you'd find in an EDITMODE block — the JSON the host
+ *  panel knows how to render typed controls for. */
+export type TweakValue = string | number | boolean;
+export type TweakDefaults = Record<string, TweakValue>;
 
 export type TweakBridge = {
   /** True when the current iframe page declared __edit_mode_available. */
@@ -42,6 +60,16 @@ export type TweakBridge = {
    *  it's a workshop (DesignCanvas) that owns its own viewport. The
    *  editor uses this to suppress device-frame display mode. */
   isCanvas: boolean;
+  /** Defaults parsed from the EDITMODE-marked block, when the iframe's
+   *  auto-bridge included them in __edit_mode_available. The host
+   *  Tweaks sidebar uses this to render typed controls per key. Null
+   *  when the iframe is the legacy kind that ships its own panel and
+   *  doesn't expose its values to the host. */
+  defaults: TweakDefaults | null;
+  /** Push a partial edit to the iframe AND persist it via /tweak. Used
+   *  by the host-side Tweaks panel; the iframe applies edits live via
+   *  CSS variables / data-tweak hooks / window.__applyTweaks. */
+  applyEdits: (edits: TweakDefaults) => void;
   /** Toggle live-tweak mode. Posts __activate / __deactivate to iframe. */
   toggle: () => void;
   /** Force a deactivation (e.g. on tab change). */
@@ -61,6 +89,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
   const [available, setAvailable] = useState(false);
   const [editing, setEditing] = useState(false);
   const [isCanvas, setIsCanvas] = useState(false);
+  const [defaults, setDefaults] = useState<TweakDefaults | null>(null);
 
   // Track latest activeFile in a ref so the message handler always picks
   // the current route, not whatever it was when the listener was attached.
@@ -79,6 +108,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
       setAvailable(false);
       setEditing(false);
       setIsCanvas(false);
+      setDefaults(null);
     };
     ifr.addEventListener("load", onLoad);
     return () => ifr.removeEventListener("load", onLoad);
@@ -95,11 +125,26 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
   // but the message types are namespaced enough that we can accept all.
   useEffect(() => {
     const onMsg = async (e: MessageEvent) => {
-      const data = e.data as { type?: string; edits?: Record<string, unknown> } | undefined;
+      const data = e.data as
+        | { type?: string; edits?: Record<string, unknown>; defaults?: Record<string, unknown> }
+        | undefined;
       if (!data || typeof data.type !== "string") return;
 
       if (data.type === "__edit_mode_available") {
         setAvailable(true);
+        // The auto-bridge variant carries the parsed EDITMODE block as
+        // `defaults`. Legacy iframe-shipped panels omit it; we fall
+        // back to null and the host renders nothing of its own.
+        const d = data.defaults;
+        if (d && typeof d === "object" && !Array.isArray(d)) {
+          const filtered: TweakDefaults = {};
+          for (const [k, v] of Object.entries(d)) {
+            if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+              filtered[k] = v;
+            }
+          }
+          if (Object.keys(filtered).length > 0) setDefaults(filtered);
+        }
         return;
       }
       if (data.type === "__edit_mode_dismissed") {
@@ -117,22 +162,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
       if (data.type === "__edit_mode_set_keys") {
         const edits = data.edits;
         if (!edits || typeof edits !== "object") return;
-        const file = activeFileRef.current;
-        const id = projectIdRef.current;
-        if (!file || !id) return;
-        try {
-          const res = await fetch(`/api/projects/${id}/tweak`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ file, edits }),
-          });
-          if (!res.ok) {
-            const j = await res.json().catch(() => ({}));
-            console.warn("[tweakBridge] tweak rewrite failed:", j);
-          }
-        } catch (err) {
-          console.warn("[tweakBridge] network error:", err);
-        }
+        await persistEdits(projectIdRef.current, activeFileRef.current, edits);
       }
     };
     window.addEventListener("message", onMsg);
@@ -143,6 +173,24 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
     const w = iframeRef.current?.contentWindow;
     if (!w) return;
     try { w.postMessage({ type }, "*"); } catch { /* ignore */ }
+  }, [iframeRef]);
+
+  /** Push partial edits from the host-side Tweaks panel into the iframe
+   *  AND persist them via /api/projects/:id/tweak. Mirrors the path the
+   *  iframe-shipped panel takes when it posts __edit_mode_set_keys to
+   *  the parent — same code path, just driven from the other side. */
+  const applyEdits = useCallback((edits: TweakDefaults) => {
+    if (!edits || typeof edits !== "object") return;
+    // Merge into the host's known defaults so the panel inputs reflect
+    // the new value immediately (the iframe's `__applyTweaks` hook /
+    // CSS variables are async-ish from the host's perspective).
+    setDefaults((prev) => (prev ? { ...prev, ...edits } : { ...edits }));
+    const w = iframeRef.current?.contentWindow;
+    if (w) {
+      try { w.postMessage({ type: "__edit_mode_set_keys", edits }, "*"); } catch { /* ignore */ }
+    }
+    // Fire-and-forget — failures land in console.warn via persistEdits.
+    void persistEdits(projectIdRef.current, activeFileRef.current, edits);
   }, [iframeRef]);
 
   // Re-broadcast the current theme to the iframe whenever the host's
@@ -170,7 +218,32 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
     sendToIframe("__deactivate_edit_mode");
   }, [sendToIframe]);
 
-  return { available, editing, isCanvas, toggle, deactivate };
+  return { available, editing, isCanvas, defaults, applyEdits, toggle, deactivate };
+}
+
+/** POST partial edits to /api/projects/:id/tweak so the EDITMODE-marked
+ *  block on disk picks up the change. Shared between the iframe-driven
+ *  message handler and the host-side panel's applyEdits callback so
+ *  there's exactly one place that knows the URL shape. */
+async function persistEdits(
+  projectId: string,
+  file: string,
+  edits: Record<string, unknown>,
+): Promise<void> {
+  if (!projectId || !file) return;
+  try {
+    const res = await fetch(`/api/projects/${projectId}/tweak`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ file, edits }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      console.warn("[tweakBridge] tweak rewrite failed:", j);
+    }
+  } catch (err) {
+    console.warn("[tweakBridge] network error:", err);
+  }
 }
 
 /** Snapshot the host's current theme tokens and post them to a canvas

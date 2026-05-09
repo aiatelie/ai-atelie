@@ -58,6 +58,12 @@ export type { ProjectManifest };
 /* ─── Reload-script injection (HTML responses get this appended) ─── */
 
 function injectReloadClient(html: string, id: string): string {
+  // The SSE-driven reload listener wired into every HTML response, plus
+  // the auto-tweaks bridge. Both run inside the iframe and both want
+  // their script tag right before </body> so the rest of the page (and
+  // any inline scripts that read EDITMODE blocks) has finished parsing.
+  // tweaks-bridge.js is served from the SPA's /public so the iframe (same
+  // origin via the Vite proxy / API at /p/<id>) can fetch it directly.
   const snippet = `
 <script>(function(){try{
   var K="__cc_scroll";
@@ -77,6 +83,7 @@ function injectReloadClient(html: string, id: string): string {
     location.reload();
   };
 }catch(e){}})();</script>
+<script src="/tweaks-bridge.js" defer></script>
 `;
   if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, snippet + "</body>");
   return html + snippet;
