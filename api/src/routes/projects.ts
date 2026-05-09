@@ -262,31 +262,53 @@ function newProjectId(): string {
 /** Allowlist-validate the new-project form's type payload. Returns
  *  undefined when nothing usable came in — the manifest then omits the
  *  `projectType` field entirely (additive shape). Drops unknown values
- *  silently rather than rejecting the request, so older clients that
- *  POST without these fields keep working. */
+ *  with a logged warning rather than silently, so misconfiguration is
+ *  visible in the server log. Older clients that POST without these
+ *  fields keep working (undefined = omit from manifest). */
+const SAFE_ID_RE = /^[A-Za-z0-9_-]+$/;
+const ID_MAX_LEN = 64;
+
 function sanitizeProjectType(raw: unknown): ProjectTypeContext | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const r = raw as Record<string, unknown>;
   const kind = r.kind;
   if (kind !== "prototype" && kind !== "slide_deck" && kind !== "template" && kind !== "other") {
+    if (kind !== undefined) {
+      console.warn(`[sanitizeProjectType] unknown kind dropped: ${JSON.stringify(kind)}`);
+    }
     return undefined;
   }
   const out: ProjectTypeContext = { kind };
   if (kind === "prototype") {
     if (r.prototypeFidelity === "wireframe" || r.prototypeFidelity === "high_fidelity") {
       out.prototypeFidelity = r.prototypeFidelity;
+    } else if (r.prototypeFidelity !== undefined) {
+      console.warn(`[sanitizeProjectType] unknown prototypeFidelity dropped: ${JSON.stringify(r.prototypeFidelity)}`);
     }
   } else if (kind === "slide_deck") {
     if (r.slideStyle === "speaker_notes" || r.slideStyle === "less_text") {
       out.slideStyle = r.slideStyle;
+    } else if (r.slideStyle !== undefined) {
+      console.warn(`[sanitizeProjectType] unknown slideStyle dropped: ${JSON.stringify(r.slideStyle)}`);
     }
   } else if (kind === "template") {
-    if (typeof r.templateId === "string" && r.templateId.length > 0 && r.templateId.length < 200) {
+    if (
+      typeof r.templateId === "string" &&
+      r.templateId.length > 0 &&
+      r.templateId.length <= ID_MAX_LEN &&
+      SAFE_ID_RE.test(r.templateId)
+    ) {
       out.templateId = r.templateId;
+    } else if (r.templateId !== undefined) {
+      console.warn(`[sanitizeProjectType] templateId dropped (failed length/charset check): ${JSON.stringify(r.templateId)}`);
     }
   }
-  if (typeof r.designSystem === "string" && r.designSystem.length > 0 && r.designSystem.length < 200) {
-    out.designSystem = r.designSystem;
+  if (typeof r.designSystem === "string" && r.designSystem.length > 0) {
+    if (r.designSystem.length <= ID_MAX_LEN && SAFE_ID_RE.test(r.designSystem)) {
+      out.designSystem = r.designSystem;
+    } else {
+      console.warn(`[sanitizeProjectType] designSystem dropped (failed length/charset check): ${JSON.stringify(r.designSystem)}`);
+    }
   }
   return out;
 }

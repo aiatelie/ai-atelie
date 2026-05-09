@@ -34,6 +34,22 @@ import { useEffect, useMemo, useState } from "react";
 import s from "./projects.module.css";
 import type { ProjectTypePayload } from "../../lib/projects";
 
+type DesignSystemSummary = { id: string; name: string; published: boolean };
+
+/** Fetch the workspace's design systems from the API. Returns an empty array
+ *  when the API is unavailable (e.g. before PR #103 lands) so the picker
+ *  degrades to "None only" rather than erroring. */
+async function fetchDesignSystems(): Promise<DesignSystemSummary[]> {
+  try {
+    const r = await fetch("/api/design-systems");
+    if (!r.ok) return [];
+    const list = await r.json();
+    return Array.isArray(list) ? list as DesignSystemSummary[] : [];
+  } catch {
+    return [];
+  }
+}
+
 type CatalogEntry = {
   name: string;
   display: string;
@@ -96,14 +112,18 @@ export function NewProjectForm({ onSubmit }: Props) {
   // elsewhere in the app.
   const [prototypeFidelity, setPrototypeFidelity] = useState<PrototypeFidelity>("high_fidelity");
   const [slideStyle, setSlideStyle] = useState<SlideStyle>("speaker_notes");
-  // Templates list is empty today (the `From template` tab renders a
-  // "No templates yet" placeholder). Keeping the state hook in place so
-  // the eventual radio list can wire `setTemplateId` without re-shaping
-  // submit() — `void` shuts the unused-var rule up while leaving the
-  // setter visible at the call site for the future feature.
-  const [templateId, setTemplateId] = useState<string>("");
-  void setTemplateId;
+  // templateId is always "" today — no templates exist yet. canSubmit
+  // blocks submission while the template tab is active and templateId is
+  // empty, so the "Coming soon" tab body is the honest state.
+  const templateId = "";
   const [designSystem, setDesignSystem] = useState<string>("none");
+
+  // Design-system list: fetched from /api/design-systems on mount.
+  // Falls back to [] gracefully when the API is not yet available.
+  const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
+  useEffect(() => {
+    void fetchDesignSystems().then(setDesignSystems);
+  }, []);
 
   // Catalog is loaded once on mount from /api/skills/catalog so this
   // form stays in sync with the skill catalog without hardcoding names.
@@ -173,10 +193,12 @@ export function NewProjectForm({ onSubmit }: Props) {
     else setActiveSet(new Set(aesthetic.map((e) => e.name)));
   };
 
+  // Template tab is currently non-functional (no templates exist);
+  // canSubmit blocks the button. Label it "Coming soon" to be honest.
   const ctaLabel = submitting
     ? "Creating…"
     : tab === "template"
-      ? "Create from template"
+      ? "Coming soon"
       : "Create";
 
   return (
@@ -228,7 +250,12 @@ export function NewProjectForm({ onSubmit }: Props) {
         onChange={(e) => setDesignSystem(e.target.value)}
         disabled={submitting}
       >
-        <option value="none">None</option>
+        <option value="none">None — generic visual defaults</option>
+        {designSystems.map((ds) => (
+          <option key={ds.id} value={ds.id}>
+            {ds.name}{ds.published ? "" : " (draft)"}
+          </option>
+        ))}
       </select>
 
       {/* Tab-specific area */}
@@ -313,15 +340,13 @@ export function NewProjectForm({ onSubmit }: Props) {
       {tab === "template" && (
         <div className={s.tabPane} role="tabpanel" aria-label="Template options">
           <div className={s.tabPaneLabel}>Template</div>
-          <div className={s.templateEmpty}>No templates yet.</div>
-          <a
-            className={s.helperLink}
-            href="https://github.com/anthropics/claude-code"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            How to create a template →
-          </a>
+          <div className={s.templateEmpty}>
+            Templates are coming soon. For now, start with a blank project and
+            describe what you want to build — the AI will scaffold from there.
+          </div>
+          <div className={s.helperLink} aria-hidden="true" style={{ color: "var(--ink-40, #aaa)", fontSize: "12px", marginTop: 4 }}>
+            Switch to Prototype or Other to create a project.
+          </div>
         </div>
       )}
 

@@ -4,12 +4,14 @@
  * Four pill buttons, each with a tinted circular icon, that wire into
  * the existing context-attach flows:
  *
- *   • Design System    → seeds @design-system into the composer so the
- *                        AI links the project's design system on the
- *                        next turn.
+ *   • Design System    → if a DS is bound to this project, appends the
+ *                        DS name to the composer so the agent can reference
+ *                        it; if no DS is bound, shows a hint pointing to
+ *                        the Design Systems tab on the home page.
  *   • Add screenshot   → opens the composer's image file-picker.
- *   • Attach codebase  → seeds @codebase into the composer; the agent
- *                        treats that mention as "explore my repo".
+ *   • Attach codebase  → opens the composer's file-picker (same flow as
+ *                        dropping files on the composer — the user picks
+ *                        the files they want to attach).
  *   • Drag in a Figma  → click → toast/tooltip explaining drag-drop
  *     file                isn't an action; we can't pick a file via
  *                        click in the browser, the user has to drag
@@ -25,7 +27,7 @@
  * hosts Composer with no plumbing changes.
  */
 
-import { useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import s from "./startWithContext.module.css";
 
 type ActionKey = "design-system" | "screenshot" | "codebase" | "figma";
@@ -100,7 +102,30 @@ function dispatchOpenFiles() {
   window.dispatchEvent(new CustomEvent("cc-composer-open-files"));
 }
 
-export function StartWithContextCard() {
+/** Manifest shape — only the fields we need here. */
+type ManifestSnippet = {
+  projectType?: { designSystem?: string };
+};
+
+export function StartWithContextCard({ projectId }: { projectId?: string }) {
+  // Fetch a lightweight slice of the project manifest so we can check
+  // whether a design system is bound. Only fetched once on mount; stale
+  // data is fine here — the DS binding doesn't change during a session.
+  const [boundDs, setBoundDs] = useState<string | null>(null);
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    fetch(`/api/projects/${encodeURIComponent(projectId)}/manifest`)
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((m: ManifestSnippet) => {
+        if (cancelled) return;
+        const ds = m?.projectType?.designSystem;
+        setBoundDs(ds && ds !== "none" ? ds : null);
+      })
+      .catch(() => { /* offline — silently omit; the pill still works */ });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
   // Figma row toggles a small inline hint instead of doing nothing —
   // there's no browser API to "open" a Figma drag, so we tell the user
   // what to do. Auto-clears on the next click of any button.
@@ -109,7 +134,15 @@ export function StartWithContextCard() {
   const onAction = (key: ActionKey) => {
     setHint(null);
     if (key === "design-system") {
-      dispatchAppend("@design-system");
+      if (boundDs) {
+        // A DS is bound — seed its name into the composer so the agent
+        // knows to reference it explicitly on this turn.
+        dispatchAppend(`Using design system: ${boundDs}.`);
+      } else {
+        // No DS bound — tell the user how to create one instead of
+        // dispatching an @design-system token the agent won't recognise.
+        setHint("No design system bound. Go to the home page → Design systems tab to create one, then bind it when creating a new project.");
+      }
       return;
     }
     if (key === "screenshot") {
@@ -117,7 +150,10 @@ export function StartWithContextCard() {
       return;
     }
     if (key === "codebase") {
-      dispatchAppend("@codebase");
+      // Wire to the existing file-attach flow — same event the screenshot
+      // pill uses. The user picks the files they want to attach (images,
+      // text files, zips, etc.).
+      dispatchOpenFiles();
       return;
     }
     if (key === "figma") {

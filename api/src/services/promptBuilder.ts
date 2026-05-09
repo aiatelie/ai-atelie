@@ -122,6 +122,48 @@ const DEFAULT_ACTIVE_SKILLS = ["frontend-design"];
  *  agent at the file so it can read more if needed. */
 const DESIGN_MD_MAX_BYTES = 16 * 1024;
 
+/** Build a human-readable project-type preamble from `manifest.projectType`.
+ *  Returns an empty string when the manifest has no `projectType` field so
+ *  older manifests are handled silently. The preamble is prepended to the
+ *  system prompt so the agent knows what kind of artefact the user is making
+ *  before reading any other context. */
+function buildProjectTypePreamble(manifest: unknown): string {
+  const m = manifest as { projectType?: {
+    kind?: string;
+    prototypeFidelity?: string;
+    slideStyle?: string;
+    templateId?: string;
+    designSystem?: string;
+  } } | null;
+  const pt = m?.projectType;
+  if (!pt?.kind) return "";
+
+  const lines: string[] = [];
+  if (pt.kind === "prototype") {
+    const fidelity = pt.prototypeFidelity === "wireframe"
+      ? "wireframe (low-fidelity greyscale layout, structure-first, no polished color or typography)"
+      : "high-fidelity (real type, color, components — production-grade visuals)";
+    lines.push(`[Project type] This project is a **prototype** — fidelity: ${fidelity}.`);
+    lines.push(`Keep every design decision appropriate to that fidelity. Do not add polish that contradicts it.`);
+  } else if (pt.kind === "slide_deck") {
+    const styleNote = pt.slideStyle === "less_text"
+      ? "Less text on slides — big visuals and short statements, no walls of bullets."
+      : "Use speaker notes — slides stay visually clean; detailed content rides in the speaker-notes section.";
+    lines.push(`[Project type] This project is a **slide deck**.`);
+    lines.push(styleNote);
+  } else if (pt.kind === "template") {
+    const tid = pt.templateId ?? "";
+    lines.push(`[Project type] This project was created **from a template**${tid ? ` (template id: \`${tid}\`)` : ""}.`);
+    lines.push(`Start from the template structure and extend it; don't re-scaffold from scratch.`);
+  } else {
+    lines.push(`[Project type] This project is of **general / other** type — no specific format constraints.`);
+  }
+  if (pt.designSystem && pt.designSystem !== "none") {
+    lines.push(`[Design system] Bound design system: \`${pt.designSystem}\`. Honour its tokens and component conventions.`);
+  }
+  return lines.join("\n");
+}
+
 /** Extract `design.active_skills` from a manifest, falling back to the
  *  default if missing or malformed. Defensive — the manifest is read as
  *  `unknown` and may predate the schema field. */
@@ -234,7 +276,13 @@ async function buildSandboxPrompt(
 ): Promise<string> {
   const manifest = p.projectId ? await readProjectManifest(p.projectId) : null;
   const html = p.outerHtml ? p.outerHtml.slice(0, 1200) : "";
+
+  // Project-type preamble: injected at the very top so it frames every
+  // decision in the turn. Empty string for manifests without projectType.
+  const projectTypePreamble = buildProjectTypePreamble(manifest);
+
   const lines: string[] = [
+    ...(projectTypePreamble ? [projectTypePreamble, ``] : []),
     PERSONA_AND_CADENCE,
     ``,
     `## This turn`,

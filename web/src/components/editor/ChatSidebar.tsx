@@ -292,7 +292,7 @@ export function ChatTab({
         projectId={projectId}
         onEdit={onOpenSkillsSettings ?? (() => {})}
       />
-      {showStartWithContext && <StartWithContextCard />}
+      {showStartWithContext && <StartWithContextCard projectId={projectId} />}
       <Composer
         disabled={!!activeThread && (isAssistantPending(activeThread) || !!pendingElicit)}
         hasQueued={!!queuedMessage}
