@@ -12,6 +12,7 @@ import { streamSSE } from "hono/streaming";
 import { randomUUID } from "node:crypto";
 import { pickAdapter } from "../agents/registry.ts";
 import { applySnapshot, deleteSnapshot, diffSnapshot, getSnapshot, recordSnapshot } from "../services/snapshots.ts";
+import { runVerifier } from "../services/verifier.ts";
 import {
   activeRuns,
   appendBufferedEvent,
@@ -231,6 +232,29 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
     try {
       await runAgent(payload, send, abortController.signal, baseUrl, requestStreamId);
       agentDone = true;
+      // Background QA: awaited verifier subagent. Cheap haiku call diffs
+      // the snapshot we recorded pre-turn, reads the modified + added
+      // files, asks for a one-shot syntax/imports/empty-files sanity
+      // check, and only injects a `[Verifier] ⚠ …` text event into the
+      // chat thread when it finds something real. Silent on pass.
+      //
+      // We await the result (with an internal 8s timeout inside
+      // runVerifier) BEFORE sending `status: done` so findings land in
+      // the live tab rather than the post-close ring buffer.
+      //
+      // Does NOT run when the turn was aborted or timed out — half-written
+      // state isn't a useful QA target.
+      if (!abortController.signal.aborted) {
+        const snap = await getSnapshot(turnId);
+        if (snap) {
+          await runVerifier({
+            snapshot: snap,
+            projectId: payload.projectId ?? null,
+            send,
+            abortSignal: abortController.signal,
+          });
+        }
+      }
       // After the agent loop returns: if we were aborted server-side
       // (NOT a normal client disconnect), surface a clear error so the
       // user sees what happened instead of a misleading "Made N tool

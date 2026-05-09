@@ -15,8 +15,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFsDriver } from "../storage/fs-driver.ts";
-import { rebindRepos } from "../storage/repos/index.ts";
-import { applySnapshot, deleteSnapshot, getSnapshot, recordSnapshot } from "./snapshots.ts";
+import { getRepos, rebindRepos } from "../storage/repos/index.ts";
+import { applySnapshot, deleteSnapshot, diffSnapshot, getSnapshot, recordSnapshot } from "./snapshots.ts";
 
 const tmpDirs: string[] = [];
 afterAll(() => {
@@ -113,6 +113,49 @@ describe("snapshots", () => {
 
     await deleteSnapshot(turnId);
     expect(await getSnapshot(turnId)).toBeNull();
+  });
+
+  it("diffSnapshot reports added files (brand-new paths not in pre-turn snapshot)", async () => {
+    const driver = freshDriver();
+    rebindRepos(driver);
+    await driver.createProject("p_demo");
+    await driver.project("p_demo").files.write("index.html", "<h1>v1</h1>");
+
+    const turnId = "55555555-5555-4555-8555-555555555555";
+    const snap = await recordSnapshot(turnId, "p_demo");
+    expect(snap).not.toBeNull();
+
+    // Simulate agent writing a brand-new file that didn't exist at snapshot time.
+    await driver.project("p_demo").files.write("Banner.jsx", "export default () => null;");
+    // Also modify the existing file so we get a modified entry too.
+    await driver.project("p_demo").files.write("index.html", "<h1>v2</h1>");
+
+    if (!snap) throw new Error("expected snap");
+    const diff = await diffSnapshot(snap);
+    expect(diff.modified).toContain("index.html");
+    expect(diff.added).toContain("Banner.jsx");
+    expect(diff.deleted).toHaveLength(0);
+  });
+
+  it("diffSnapshot reports deleted files", async () => {
+    const driver = freshDriver();
+    rebindRepos(driver);
+    await driver.createProject("p_demo");
+    await driver.project("p_demo").files.write("index.html", "<h1>v1</h1>");
+    await driver.project("p_demo").files.write("style.css", ".a{color:red}");
+
+    const turnId = "66666666-6666-4666-8666-666666666666";
+    const snap = await recordSnapshot(turnId, "p_demo");
+    expect(snap).not.toBeNull();
+
+    // Simulate agent deleting style.css — use the repos layer so diffSnapshot's
+    // readText call sees the deletion through the same storage path.
+    await getRepos().projectFiles.delete("p_demo", "style.css");
+
+    if (!snap) throw new Error("expected snap");
+    const diff = await diffSnapshot(snap);
+    expect(diff.deleted).toContain("style.css");
+    expect(diff.added).toHaveLength(0);
   });
 
   it("LRU prunes oldest snapshot when cap is exceeded (uses a smaller cap via direct shared writes)", async () => {
