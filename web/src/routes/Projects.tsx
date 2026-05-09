@@ -146,30 +146,38 @@ export default function Projects() {
               </button>
             </nav>
             <div className={s.toolbar}>
-              <input
-                type="search"
-                className={s.searchInput}
-                placeholder="Search projects…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                data-testid="project-search"
-                aria-label="Search projects"
-              />
-              <select
-                className={s.sortSelect}
-                value={sort}
-                onChange={(e) => {
-                  const v = e.target.value as SortKey;
-                  setSort(v);
-                  writeSortPref(v);
-                }}
-                data-testid="project-sort"
-                aria-label="Sort projects"
-              >
-                <option value="recently-used">Recently used</option>
-                <option value="recently-created">Recently created</option>
-                <option value="name">Name</option>
-              </select>
+              <div className={s.searchWrap}>
+                <svg className={s.searchIcon} width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="6.5" cy="6.5" r="4.5" />
+                  <line x1="10.5" y1="10.5" x2="14" y2="14" />
+                </svg>
+                <input
+                  type="search"
+                  className={s.searchInput}
+                  placeholder="Search projects…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  data-testid="project-search"
+                  aria-label="Search projects"
+                />
+              </div>
+              <div className={s.sortWrap}>
+                <select
+                  className={s.sortSelect}
+                  value={sort}
+                  onChange={(e) => {
+                    const v = e.target.value as SortKey;
+                    setSort(v);
+                    writeSortPref(v);
+                  }}
+                  data-testid="project-sort"
+                  aria-label="Sort projects"
+                >
+                  <option value="recently-used">Recently used</option>
+                  <option value="recently-created">Recently created</option>
+                  <option value="name">Name</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -260,9 +268,18 @@ function EmptyState() {
 
 function NoSearchResults({ query }: { query: string }) {
   return (
-    <p className={s.noResults}>
-      No projects match &ldquo;{query}&rdquo;. Try a different search.
-    </p>
+    <div className={s.noResults}>
+      <span className={s.noResultsIcon} aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="6.5" cy="6.5" r="4.5" />
+          <line x1="10.5" y1="10.5" x2="14" y2="14" />
+          <line x1="5" y1="6.5" x2="8" y2="6.5" />
+        </svg>
+      </span>
+      <p className={s.noResultsText}>
+        No projects match &ldquo;{query}&rdquo;. Try a different search.
+      </p>
+    </div>
   );
 }
 
@@ -336,8 +353,14 @@ function ProjectCard({
           onClick={(e) => { e.stopPropagation(); onFork(); }}
           title="Fork project"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zM12.5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zM8 10.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zM4.25 4v.065A3.501 3.501 0 0 0 7.25 7.43V9.07a3.501 3.501 0 0 0-2.25 3.18V12.5a.75.75 0 0 0 1.5 0v-.25a2 2 0 0 1 4 0v.25a.75.75 0 0 0 1.5 0v-.25a3.501 3.501 0 0 0-2.25-3.18V7.43A3.501 3.501 0 0 0 11.75 4.065V4a.75.75 0 0 0-1.5 0v.065a2 2 0 0 1-1.5 1.868V4.5a.75.75 0 0 0-1.5 0v1.433A2 2 0 0 1 5.75 4.065V4a.75.75 0 0 0-1.5 0z"/>
+          {/* Y-shape branch glyph — clearer "fork" read at 14px than
+              the full octicon which gets muddy at small sizes. */}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="4" cy="3" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="10" cy="3" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="7" cy="11" r="1.5" fill="currentColor" stroke="none" />
+            <path d="M4 4.5 L4 6 Q4 8 7 9.5" />
+            <path d="M10 4.5 L10 6 Q10 8 7 9.5" />
           </svg>
         </button>
         <button
