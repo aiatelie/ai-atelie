@@ -45,10 +45,12 @@ export { ProjectMetaRepo } from "./meta.ts";
 export { ProjectFilesRepo } from "./files.ts";
 export { SharedRepo } from "./shared.ts";
 export type {
+  ProjectDesignSelection,
   ProjectManifest,
   ProjectManifestComponent,
   ProjectManifestPage,
   ProjectSummary,
+  ProjectTypeContext,
   SandboxFileEntry,
   SandboxFileKind,
 } from "./types.ts";

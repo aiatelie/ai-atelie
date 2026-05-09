@@ -25,6 +25,7 @@ import {
   updateProject,
   useProjects,
   type Project,
+  type ProjectTypePayload,
 } from "../lib/projects";
 
 export default function Projects() {
@@ -51,11 +52,16 @@ export default function Projects() {
 
   /** Owns the create flow. The sidebar form calls this and lets any
    *  thrown error bubble up so it can render the inline alert. The
-   *  form also threads through the user's aesthetic-skill picks at
-   *  creation time so the manifest persists their initial intent. */
-  const handleCreate = async (name: string, activeSkills: string[]) => {
+   *  form also threads through the user's aesthetic-skill picks AND
+   *  project-type/design-system answers at creation time so the
+   *  manifest persists their initial intent. */
+  const handleCreate = async (
+    name: string,
+    activeSkills: string[],
+    projectType?: ProjectTypePayload,
+  ) => {
     const trimmed = name.trim() || "Untitled project";
-    const p = await createProject(trimmed, activeSkills);
+    const p = await createProject(trimmed, activeSkills, projectType);
     setActiveProject(p.id);
     // Land directly in the editor. When the project has no real files
     // yet, the editor renders an empty-project chat layout (no canvas,

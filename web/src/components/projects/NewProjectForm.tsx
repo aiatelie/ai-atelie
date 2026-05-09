@@ -1,29 +1,38 @@
 /* NewProjectForm.tsx — sidebar-resident form for spawning a new
- * project. Replaces the old `NewProjectDialog` modal: the form is
- * always visible in the home page's left rail so creating a project
- * never requires opening a separate surface.
+ * project.
  *
- * Submission delegates to the `onSubmit` prop with both the project
- * name and the aesthetic-skill selection. Skill rows live below the
- * name input under a "Design skills" section, visible by default so
- * users see the choice at the moment they're most thoughtful about
- * aesthetic intent. The header doubles as a select-all/none toggle.
- * Selection is fully reversible later via Settings → Skills (no lock
- * after first message).
+ * Submission delegates to the `onSubmit` prop with three pieces of
+ * intent: the project name, the aesthetic-skill selection, and the
+ * project-type payload from the active tab (Prototype / Slide deck /
+ * From template / Other). The agent reads `projectType` on first turn
+ * so intake is grounded in what the user said they were making
+ * instead of asking from zero.
  *
- * The catalog is fetched on every mount from /api/skills/catalog,
- * filtered to kind:"aesthetic" — adding a new aesthetic skill to
- * skills/index.json makes it appear here on the next page load with
- * no code changes. The fetch is the single source of truth; nothing
- * is hardcoded.
+ * Tab anatomy:
  *
- * The form owns its pending + inline-error state, and reports errors
- * as a small `role="alert"` block under the input (no more `alert()`
- * popup).
+ *   ┌─[Prototype][Slide deck][From template][Other]──────────┐
+ *   │ <Project name input>                                    │
+ *   │ <Design System select>                                  │
+ *   │                                                          │
+ *   │ <tab-specific area>                                     │
+ *   │   • Prototype  → Wireframe / High-fidelity buttons      │
+ *   │   • Slide deck → Speaker notes / Less text on slides    │
+ *   │   • Template   → radio list ("No templates yet")        │
+ *   │   • Other      → (nothing extra)                        │
+ *   │                                                          │
+ *   │ <Design skills picker>                                  │
+ *   │ <Create / Create from template>                         │
+ *   └──────────────────────────────────────────────────────────┘
+ *
+ * The skills section + import button stay where they were; the tab
+ * strip is additive on top so existing callers (and tests using
+ * `data-testid="create-project-name"` / `create-project-submit`)
+ * keep working without code changes.
  */
 
 import { useEffect, useMemo, useState } from "react";
 import s from "./projects.module.css";
+import type { ProjectTypePayload } from "../../lib/projects";
 
 type CatalogEntry = {
   name: string;
@@ -54,17 +63,48 @@ function CheckGlyph({ className }: { className?: string }) {
 
 type CatalogResponse = { skills: CatalogEntry[] };
 
+type ProjectKind = ProjectTypePayload["kind"];
+type PrototypeFidelity = NonNullable<ProjectTypePayload["prototypeFidelity"]>;
+type SlideStyle = NonNullable<ProjectTypePayload["slideStyle"]>;
+
 type Props = {
   /** May be async — the form enters a busy state until it resolves.
    *  `activeSkills` is the user's aesthetic-skill picks at creation
-   *  time; pass through to `POST /api/projects/create`. */
-  onSubmit: (name: string, activeSkills: string[]) => Promise<void>;
+   *  time; `projectType` is the tab + tab-specific answers. */
+  onSubmit: (
+    name: string,
+    activeSkills: string[],
+    projectType?: ProjectTypePayload,
+  ) => Promise<void>;
 };
 
+const TABS: Array<{ id: ProjectKind; label: string }> = [
+  { id: "prototype", label: "Prototype" },
+  { id: "slide_deck", label: "Slide deck" },
+  { id: "template", label: "From template" },
+  { id: "other", label: "Other" },
+];
+
 export function NewProjectForm({ onSubmit }: Props) {
+  const [tab, setTab] = useState<ProjectKind>("prototype");
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Per-tab state. Each is independent so flipping tabs doesn't lose
+  // the user's earlier picks — matches how multi-tab pickers work
+  // elsewhere in the app.
+  const [prototypeFidelity, setPrototypeFidelity] = useState<PrototypeFidelity>("high_fidelity");
+  const [slideStyle, setSlideStyle] = useState<SlideStyle>("speaker_notes");
+  // Templates list is empty today (the `From template` tab renders a
+  // "No templates yet" placeholder). Keeping the state hook in place so
+  // the eventual radio list can wire `setTemplateId` without re-shaping
+  // submit() — `void` shuts the unused-var rule up while leaving the
+  // setter visible at the call site for the future feature.
+  const [templateId, setTemplateId] = useState<string>("");
+  void setTemplateId;
+  const [designSystem, setDesignSystem] = useState<string>("none");
+
   // Catalog is loaded once on mount from /api/skills/catalog so this
   // form stays in sync with the skill catalog without hardcoding names.
   // Defaults to all-aesthetic-checked when the catalog arrives.
@@ -94,16 +134,26 @@ export function NewProjectForm({ onSubmit }: Props) {
     });
   };
 
+  const trimmedName = name.trim();
+  const canSubmit = trimmedName.length > 0 && !submitting && (tab !== "template" || templateId.length > 0);
+
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (submitting) return;
+    if (!canSubmit) return;
     setError(null);
     setSubmitting(true);
     try {
       // Preserve catalog order (display order) in the manifest array;
       // priority for name collisions is stable across reloads.
       const ordered = aesthetic.map((e) => e.name).filter((n) => activeSet.has(n));
-      await onSubmit(name, ordered);
+
+      const payload: ProjectTypePayload = { kind: tab };
+      if (tab === "prototype") payload.prototypeFidelity = prototypeFidelity;
+      else if (tab === "slide_deck") payload.slideStyle = slideStyle;
+      else if (tab === "template" && templateId) payload.templateId = templateId;
+      if (designSystem && designSystem !== "none") payload.designSystem = designSystem;
+
+      await onSubmit(name, ordered, payload);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);
@@ -123,9 +173,33 @@ export function NewProjectForm({ onSubmit }: Props) {
     else setActiveSet(new Set(aesthetic.map((e) => e.name)));
   };
 
+  const ctaLabel = submitting
+    ? "Creating…"
+    : tab === "template"
+      ? "Create from template"
+      : "Create";
+
   return (
     <form className={s.formWrap} onSubmit={submit} noValidate>
       <div className={s.formEyebrow}>New project</div>
+
+      <div className={s.tabRow} role="tablist" aria-label="New project type">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            data-active={tab === t.id ? "true" : "false"}
+            data-testid={`new-project-tab-${t.id}`}
+            className={s.tabBtn}
+            onClick={() => setTab(t.id)}
+            disabled={submitting}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       <label htmlFor="new-project-name" className={s.visuallyHidden}>
         Project name
@@ -137,11 +211,119 @@ export function NewProjectForm({ onSubmit }: Props) {
         className={s.formInput}
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="e.g. YouTube banner system"
+        placeholder="Project name"
         disabled={submitting}
         aria-describedby={error ? errorId : undefined}
         aria-invalid={error ? true : undefined}
       />
+
+      <label htmlFor="new-project-design-system" className={s.formLabel}>
+        Design system
+      </label>
+      <select
+        id="new-project-design-system"
+        data-testid="new-project-design-system"
+        className={s.formSelect}
+        value={designSystem}
+        onChange={(e) => setDesignSystem(e.target.value)}
+        disabled={submitting}
+      >
+        <option value="none">None</option>
+      </select>
+
+      {/* Tab-specific area */}
+      {tab === "prototype" && (
+        <div className={s.tabPane} role="tabpanel" aria-label="Prototype options">
+          <div className={s.tabPaneLabel}>Fidelity</div>
+          <div className={s.optionGrid}>
+            <button
+              type="button"
+              className={s.optionBtn}
+              data-active={prototypeFidelity === "wireframe" ? "true" : "false"}
+              data-testid="new-project-fidelity-wireframe"
+              onClick={() => setPrototypeFidelity("wireframe")}
+              disabled={submitting}
+            >
+              <span className={s.optionGlyph} aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                  <line x1="9" y1="9" x2="9" y2="20" />
+                </svg>
+              </span>
+              <span className={s.optionTitle}>Wireframe</span>
+              <span className={s.optionDesc}>Low-fidelity layout, greyscale boxes, structure first.</span>
+            </button>
+            <button
+              type="button"
+              className={s.optionBtn}
+              data-active={prototypeFidelity === "high_fidelity" ? "true" : "false"}
+              data-testid="new-project-fidelity-high"
+              onClick={() => setPrototypeFidelity("high_fidelity")}
+              disabled={submitting}
+            >
+              <span className={s.optionGlyph} aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <circle cx="8" cy="11" r="1.6" />
+                  <path d="M3 17l5-4 4 3 4-2 5 3" />
+                </svg>
+              </span>
+              <span className={s.optionTitle}>High fidelity</span>
+              <span className={s.optionDesc}>Real type, color, components — production-grade visuals.</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === "slide_deck" && (
+        <div className={s.tabPane} role="tabpanel" aria-label="Slide deck options">
+          <div className={s.tabPaneLabel}>Style</div>
+          <label className={s.toggleRow}>
+            <input
+              type="radio"
+              name="slide-style"
+              value="speaker_notes"
+              checked={slideStyle === "speaker_notes"}
+              onChange={() => setSlideStyle("speaker_notes")}
+              disabled={submitting}
+            />
+            <span className={s.toggleBody}>
+              <span className={s.toggleTitle}>Use speaker notes</span>
+              <span className={s.toggleDesc}>Slides stay clean; the deeper detail rides in the speaker notes.</span>
+            </span>
+          </label>
+          <label className={s.toggleRow}>
+            <input
+              type="radio"
+              name="slide-style"
+              value="less_text"
+              checked={slideStyle === "less_text"}
+              onChange={() => setSlideStyle("less_text")}
+              disabled={submitting}
+            />
+            <span className={s.toggleBody}>
+              <span className={s.toggleTitle}>Less text on slides</span>
+              <span className={s.toggleDesc}>Big visuals and short statements, no walls of bullets.</span>
+            </span>
+          </label>
+        </div>
+      )}
+
+      {tab === "template" && (
+        <div className={s.tabPane} role="tabpanel" aria-label="Template options">
+          <div className={s.tabPaneLabel}>Template</div>
+          <div className={s.templateEmpty}>No templates yet.</div>
+          <a
+            className={s.helperLink}
+            href="https://github.com/anthropics/claude-code"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            How to create a template →
+          </a>
+        </div>
+      )}
 
       {error && (
         <div id={errorId} className={s.formError} role="alert">
@@ -200,9 +382,9 @@ export function NewProjectForm({ onSubmit }: Props) {
         type="submit"
         data-testid="create-project-submit"
         className={s.formCreateBtn}
-        disabled={submitting}
+        disabled={!canSubmit}
       >
-        {submitting ? "Creating…" : "Create"}
+        {ctaLabel}
       </button>
 
       <button

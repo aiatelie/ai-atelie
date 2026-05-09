@@ -40,10 +40,10 @@ test("folder-collapse state survives a reload", async ({ page, request }) => {
   // the editor's first-render bounce-to-/projects.
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: /new project/i }).first().click();
-  const nameInput = page.locator("input[placeholder*='YouTube banner']");
+  const nameInput = page.getByTestId("create-project-name");
   await expect(nameInput).toBeVisible();
   await nameInput.fill("Folder state evidence");
-  await page.getByRole("button", { name: /^create$/i }).click();
+  await page.getByTestId("create-project-submit").click();
   await page.waitForURL(/\/editor.*p=p_/, { timeout: 15_000 });
   const url = page.url();
   const match = url.match(/p=(p_[a-z0-9]+)/);

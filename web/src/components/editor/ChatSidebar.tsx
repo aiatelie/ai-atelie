@@ -21,6 +21,7 @@ import { ElicitForm } from "./ElicitForm";
 import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
+import { StartWithContextCard } from "./StartWithContextCard";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
 import { kindOf, KIND_VERB, type ToolKind } from "../../lib/toolKind";
 import { smartLabel } from "../../lib/smartLabel";
@@ -237,6 +238,18 @@ export function ChatTab({
   // index and bump the seed so the Composer drops the original text into
   // its textarea for editing.
   const [editSeed, setEditSeed] = useState<{ text: string; nonce: number } | null>(null);
+  // Show the "Start with context" empty-state card only on a brand-new
+  // thread (zero visible user/assistant turns AND no in-flight elicit
+  // form). Hidden user messages — used by Onboard to ride the intake
+  // brief — don't count, otherwise the card would flash off the moment
+  // the editor mounts and re-flash on every "/new". `pendingElicit`
+  // means the agent is asking a structured question; we don't want a
+  // marketing card stealing focus from that.
+  const visibleMessages = activeThread?.messages.filter(
+    (m) => !(m.role === "user" && m.hidden),
+  ) ?? [];
+  const showStartWithContext =
+    !!activeThread && visibleMessages.length === 0 && !pendingElicit && !queuedMessage;
   return (
     <>
       <ThreadTabs
@@ -279,6 +292,7 @@ export function ChatTab({
         projectId={projectId}
         onEdit={onOpenSkillsSettings ?? (() => {})}
       />
+      {showStartWithContext && <StartWithContextCard />}
       <Composer
         disabled={!!activeThread && (isAssistantPending(activeThread) || !!pendingElicit)}
         hasQueued={!!queuedMessage}
@@ -537,6 +551,31 @@ function Composer({
     };
     window.addEventListener("cc-canvas-attach-error", onAttachError);
     return () => window.removeEventListener("cc-canvas-attach-error", onAttachError);
+  }, []);
+
+  // Start-with-context bridge: the empty-state card dispatches these
+  // events to pull files into / append text to the composer without
+  // having to hold a ref to it. Mirrors the cc-canvas-* family above so
+  // any surface that hosts <Composer> picks them up automatically.
+  useEffect(() => {
+    const onOpenFiles = () => {
+      fileInputRef.current?.click();
+    };
+    const onAppendText = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (!text) return;
+      setText((prev) => {
+        const trimmed = prev.replace(/\s+$/, "");
+        return trimmed ? `${trimmed} ${text}` : text;
+      });
+      requestAnimationFrame(() => ref.current?.focus());
+    };
+    window.addEventListener("cc-composer-open-files", onOpenFiles);
+    window.addEventListener("cc-composer-append-text", onAppendText);
+    return () => {
+      window.removeEventListener("cc-composer-open-files", onOpenFiles);
+      window.removeEventListener("cc-composer-append-text", onAppendText);
+    };
   }, []);
 
   // Auto-resize textarea up to 4 lines.

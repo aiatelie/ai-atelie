@@ -23,7 +23,7 @@ import { randomBytes } from "node:crypto";
 import { ENV } from "../env.ts";
 import { parseAnyDataUrl } from "../services/utils.ts";
 import { broadcastShared } from "../services/sseChannels.ts";
-import { getRepos, type ProjectManifest } from "../storage/repos/index.ts";
+import { getRepos, type ProjectManifest, type ProjectTypeContext } from "../storage/repos/index.ts";
 
 const ID_RE = /^[A-Za-z0-9_-]+$/;
 
@@ -259,6 +259,38 @@ function newProjectId(): string {
   return "p_" + randomBytes(4).toString("hex");
 }
 
+/** Allowlist-validate the new-project form's type payload. Returns
+ *  undefined when nothing usable came in — the manifest then omits the
+ *  `projectType` field entirely (additive shape). Drops unknown values
+ *  silently rather than rejecting the request, so older clients that
+ *  POST without these fields keep working. */
+function sanitizeProjectType(raw: unknown): ProjectTypeContext | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const kind = r.kind;
+  if (kind !== "prototype" && kind !== "slide_deck" && kind !== "template" && kind !== "other") {
+    return undefined;
+  }
+  const out: ProjectTypeContext = { kind };
+  if (kind === "prototype") {
+    if (r.prototypeFidelity === "wireframe" || r.prototypeFidelity === "high_fidelity") {
+      out.prototypeFidelity = r.prototypeFidelity;
+    }
+  } else if (kind === "slide_deck") {
+    if (r.slideStyle === "speaker_notes" || r.slideStyle === "less_text") {
+      out.slideStyle = r.slideStyle;
+    }
+  } else if (kind === "template") {
+    if (typeof r.templateId === "string" && r.templateId.length > 0 && r.templateId.length < 200) {
+      out.templateId = r.templateId;
+    }
+  }
+  if (typeof r.designSystem === "string" && r.designSystem.length > 0 && r.designSystem.length < 200) {
+    out.designSystem = r.designSystem;
+  }
+  return out;
+}
+
 /* ─── Routes ─── */
 
 export const projectsRoutes = new Hono();
@@ -269,7 +301,7 @@ projectsRoutes.get("/api/projects", async (c) => {
 });
 
 projectsRoutes.post("/api/projects/create", async (c) => {
-  let body: { name?: string; id?: string; active_skills?: unknown };
+  let body: { name?: string; id?: string; active_skills?: unknown; project_type?: unknown };
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
   const name = (body.name ?? "Untitled").trim() || "Untitled";
@@ -285,6 +317,11 @@ projectsRoutes.post("/api/projects/create", async (c) => {
       .slice(0, 32);
     if (cleaned.length > 0) activeSkills = cleaned;
   }
+  // Validate project_type at the boundary. Each field is allowlisted
+  // against the discriminated-union shape in `ProjectTypeContext`; any
+  // unknown values are dropped silently rather than rejecting the whole
+  // request, so older clients that omit fields keep working.
+  const projectType = sanitizeProjectType(body.project_type);
   try {
     // Read the canonical DesignCanvas starter so every fresh project lands
     // with pan/zoom + theme + state-persistence wired in from prompt #1.
@@ -303,6 +340,7 @@ projectsRoutes.post("/api/projects/create", async (c) => {
       styleCss: STARTER_CSS.replace(/__NAME__/g, name),
       designCanvas: designCanvas || undefined,
       activeSkills,
+      projectType,
     });
     broadcastShared("projects");
     return c.json({ id, manifest });

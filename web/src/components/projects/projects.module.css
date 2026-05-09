@@ -195,6 +195,203 @@
   outline-offset: 2px;
 }
 
+/* New-project type tabs — sit just under the eyebrow on NewProjectForm.
+ * Four-up segmented control (Prototype / Slide deck / From template /
+ * Other). Active tab paints with the brand accent only on its underline,
+ * keeping the count of brand-coloured surfaces in the sidebar at one. */
+.tabRow {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--ink-08);
+  padding-bottom: 2px;
+  flex-wrap: wrap;
+}
+.tabBtn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
+  padding: 6px 8px;
+  margin-bottom: -3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tabBtn:hover:not([data-active="true"]) {
+  color: var(--ink-92);
+  background: var(--ink-04);
+}
+.tabBtn[data-active="true"] {
+  color: var(--ink-92);
+  font-weight: var(--weight-semi);
+  border-bottom-color: var(--brand);
+}
+.tabBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.tabBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Tab-specific area (Prototype / Slide deck / Template). Sits between
+ * the design-system select and the Design skills section. */
+.tabPane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-md);
+  background: var(--surface-warm);
+}
+.tabPaneLabel {
+  font: var(--weight-semi) var(--text-xs) var(--font-system);
+  color: var(--ink-65);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+/* Prototype: two-up visual button grid (Wireframe / High fidelity). */
+.optionGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.optionBtn {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 12px 12px 14px;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink-92);
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+  min-height: 92px;
+}
+.optionBtn:hover:not([data-active="true"]) {
+  border-color: var(--ink-20);
+  background: var(--ink-04);
+}
+.optionBtn[data-active="true"] {
+  border-color: var(--brand);
+  background: var(--brand-bg);
+  box-shadow: 0 0 0 1px var(--brand-border) inset;
+}
+.optionBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.optionBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.optionGlyph {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-04);
+  color: var(--ink-65);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.optionBtn[data-active="true"] .optionGlyph {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+.optionTitle {
+  font: var(--weight-semi) var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  letter-spacing: -0.005em;
+}
+.optionBtn[data-active="true"] .optionTitle {
+  color: var(--brand-strong-fg);
+}
+.optionDesc {
+  font: var(--weight-regular) var(--text-xs) var(--font-system);
+  color: var(--ink-60);
+  line-height: 1.45;
+}
+
+/* Slide-deck radio rows (Speaker notes / Less text). */
+.toggleRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--ink-08);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.toggleRow:hover { background: var(--ink-04); }
+.toggleRow:has(input:checked) {
+  background: var(--brand-bg);
+  border-color: var(--brand-border);
+}
+.toggleRow input[type="radio"] {
+  margin: 3px 0 0 0;
+  accent-color: var(--brand);
+}
+.toggleBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.toggleTitle {
+  font: var(--weight-semi) var(--text-sm) var(--font-system);
+  color: var(--ink-92);
+}
+.toggleDesc {
+  font: var(--weight-regular) var(--text-xs) var(--font-system);
+  color: var(--ink-60);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+
+/* Template tab — empty state + helper link. */
+.templateEmpty {
+  padding: 14px;
+  border: 1px dashed var(--ink-15);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-65);
+  font: var(--weight-regular) var(--text-sm) var(--font-system);
+  text-align: center;
+}
+.helperLink {
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
+  color: var(--ink-65);
+  text-decoration: none;
+  padding: 4px 2px 0;
+}
+.helperLink:hover { color: var(--ink-92); text-decoration: underline; }
+
+/* Design system select — same visual language as .formInput. */
+.formSelect {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font: var(--text-md) var(--font-system);
+  color: var(--ink-92);
+  outline: none;
+  min-height: 32px;
+  cursor: pointer;
+}
+.formSelect:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-color: var(--ink-15);
+}
+.formSelect:disabled { opacity: 0.6; }
+
 /* Design-skills picker — visible by default on the New Project form so
  * users see the choice on first visit instead of having to discover a
  * collapsible. The list is small (4 entries today) so taking the

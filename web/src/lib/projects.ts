@@ -384,6 +384,18 @@ export async function hydrateProjectFromServer(id: string): Promise<Project | nu
   } catch { return null; }
 }
 
+/** Project type + tab-specific answers from the new-project form.
+ *  Mirrors the server's `ProjectTypeContext` discriminated union — kept
+ *  as a wire-shape type so the form can build it without importing from
+ *  the API package. */
+export type ProjectTypePayload = {
+  kind: "prototype" | "slide_deck" | "template" | "other";
+  prototypeFidelity?: "wireframe" | "high_fidelity";
+  slideStyle?: "speaker_notes" | "less_text";
+  templateId?: string;
+  designSystem?: string;
+};
+
 /** Create a sandbox project. The server scaffolds the directory and
  *  returns the manifest; we add the merged Project to the cache.
  *
@@ -393,13 +405,18 @@ export async function hydrateProjectFromServer(id: string): Promise<Project | nu
  *  newly-created project out of cache. Without this guard the CUJ
  *  bounces a fresh-browser test off into the demo project's editor
  *  because mergeServerWithLocal drops local-only projects. */
-export async function createProject(name: string, activeSkills?: string[]): Promise<Project> {
+export async function createProject(
+  name: string,
+  activeSkills?: string[],
+  projectType?: ProjectTypePayload,
+): Promise<Project> {
   // activeSkills is optional — when omitted, the API picks a sensible
   // default (all aesthetic skills checked). When the user makes an
   // explicit choice in NewProjectForm, we pass it through so the
   // manifest captures their initial intent.
-  const body: { name: string; active_skills?: string[] } = { name };
+  const body: { name: string; active_skills?: string[]; project_type?: ProjectTypePayload } = { name };
   if (activeSkills) body.active_skills = activeSkills;
+  if (projectType) body.project_type = projectType;
   const r = await fetch("/api/projects/create", {
     method: "POST",
     headers: { "content-type": "application/json" },
