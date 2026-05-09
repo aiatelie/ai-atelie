@@ -26,6 +26,7 @@ import { capabilitiesRoute } from "./routes/capabilitiesRoute.ts";
 import { agentsRoute } from "./routes/agents.ts";
 import { internalRoutes } from "./routes/internal.ts";
 import { skillsCatalogRoute } from "./routes/skillsCatalog.ts";
+import { artifactsRoutes } from "./routes/artifacts.ts";
 
 const app = new Hono();
 
@@ -68,6 +69,7 @@ app.route("/", elicitRoutes);
 app.route("/", sharedRoutes);
 app.route("/", exportsRoutes);
 app.route("/", commentEditRoutes);
+app.route("/", artifactsRoutes);
 app.route("/", projectsRoutes);
 
 // One-time startup work — clean stale diagnostic screenshots.

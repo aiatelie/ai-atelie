@@ -1,5 +1,6 @@
 /* tweakBridge.ts — host side of the `make-tweakable` contract
- * + iframe self-description for canvas-aware UI choices.
+ * + iframe self-description for canvas-aware UI choices
+ * + window.claude.complete() proxy.
  *
  * Listens for postMessage events from the project iframe:
  *   { type: '__edit_mode_available' }    → page can be tweaked; enable toggle
@@ -8,6 +9,10 @@
  *   { type: '__page_is_canvas' }         → page is a workshop (DesignCanvas):
  *                                          owns its own viewport, suppress the
  *                                          editor's device-frame mode.
+ *   { type: '__claude_complete', id, payload } → artifact called
+ *                                          window.claude.complete(); proxy to
+ *                                          /api/artifacts/claude-complete and
+ *                                          post __claude_complete_response back.
  *
  * Sends to the iframe in response to the toolbar toggle:
  *   { type: '__activate_edit_mode' }     → show the in-page Tweaks panel
@@ -95,7 +100,14 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
   // but the message types are namespaced enough that we can accept all.
   useEffect(() => {
     const onMsg = async (e: MessageEvent) => {
-      const data = e.data as { type?: string; edits?: Record<string, unknown> } | undefined;
+      const data = e.data as
+        | {
+            type?: string;
+            edits?: Record<string, unknown>;
+            id?: string;
+            payload?: unknown;
+          }
+        | undefined;
       if (!data || typeof data.type !== "string") return;
 
       if (data.type === "__edit_mode_available") {
@@ -133,6 +145,49 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
         } catch (err) {
           console.warn("[tweakBridge] network error:", err);
         }
+        return;
+      }
+      if (data.type === "__claude_complete") {
+        // Artifact called window.claude.complete(). Proxy to the API and
+        // post the response back to the originating iframe (use e.source
+        // so we route to the right window even if multiple iframes are
+        // mounted — iframeRef may not be the one that fired this).
+        const id = typeof data.id === "string" ? data.id : null;
+        const source = e.source as Window | null;
+        if (!id || !source) return;
+        const reply = (msg: { result?: string; error?: string }) => {
+          try {
+            source.postMessage(
+              { type: "__claude_complete_response", id, ...msg },
+              "*",
+            );
+          } catch {
+            /* iframe may have unmounted; nothing to do */
+          }
+        };
+        const body =
+          typeof data.payload === "string"
+            ? { prompt: data.payload }
+            : (data.payload as Record<string, unknown> | null) ?? {};
+        try {
+          const res = await fetch("/api/artifacts/claude-complete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const json = (await res.json().catch(() => ({}))) as {
+            text?: string;
+            error?: string;
+          };
+          if (!res.ok) {
+            reply({ error: json.error ?? `HTTP ${res.status}` });
+          } else {
+            reply({ result: typeof json.text === "string" ? json.text : "" });
+          }
+        } catch (err) {
+          reply({ error: err instanceof Error ? err.message : "fetch failed" });
+        }
+        return;
       }
     };
     window.addEventListener("message", onMsg);

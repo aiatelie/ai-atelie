@@ -57,6 +57,61 @@ export type { ProjectManifest };
 
 /* ─── Reload-script injection (HTML responses get this appended) ─── */
 
+/* The window.claude.complete() bridge — injected into every artifact HTML
+ * so a sandboxed iframe (which can't reach the parent's fetch) can still
+ * call Claude. The bridge:
+ *
+ *   1. Generates a unique request id per call.
+ *   2. Posts `{ type: "__claude_complete", id, payload }` to window.parent.
+ *   3. Returns a Promise that resolves on the matching
+ *      `{ type: "__claude_complete_response", id, result | error }`.
+ *
+ * The parent (web/src/lib/tweakBridge.ts) forwards the payload to
+ * /api/artifacts/claude-complete and posts the result back. A 30s timeout
+ * rejects pending calls so a frozen parent can't leak Promises forever.
+ *
+ * Self-contained, idempotent (the IIFE returns early if window.claude
+ * already exists), and tiny enough to inline without a fetch round-trip.
+ */
+const CLAUDE_COMPLETE_BRIDGE = `
+<script>(function(){
+  try {
+    if (window.claude && typeof window.claude.complete === "function") return;
+    var pending = Object.create(null);
+    window.addEventListener("message", function(e){
+      var d = e.data;
+      if (!d || d.type !== "__claude_complete_response") return;
+      var p = pending[d.id];
+      if (!p) return;
+      delete pending[d.id];
+      if (d.error) p.reject(new Error(d.error));
+      else p.resolve(d.result);
+    });
+    window.claude = {
+      complete: function(promptOrOptions){
+        return new Promise(function(resolve, reject){
+          var id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+          pending[id] = { resolve: resolve, reject: reject };
+          try {
+            window.parent.postMessage({ type: "__claude_complete", id: id, payload: promptOrOptions }, "*");
+          } catch (err) {
+            delete pending[id];
+            reject(err);
+            return;
+          }
+          setTimeout(function(){
+            if (pending[id]) {
+              delete pending[id];
+              reject(new Error("window.claude.complete() timed out after 30s"));
+            }
+          }, 30000);
+        });
+      }
+    };
+  } catch(e) { /* injection failure shouldn't break the artifact */ }
+})();</script>
+`;
+
 function injectReloadClient(html: string, id: string): string {
   const snippet = `
 <script>(function(){try{
@@ -78,8 +133,12 @@ function injectReloadClient(html: string, id: string): string {
   };
 }catch(e){}})();</script>
 `;
-  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, snippet + "</body>");
-  return html + snippet;
+  // Inject both bridges before </body> when present, otherwise append.
+  // Order: the claude bridge first so it's defined before any inline
+  // script in the artifact has a chance to call it.
+  const combined = CLAUDE_COMPLETE_BRIDGE + snippet;
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, combined + "</body>");
+  return html + combined;
 }
 
 /* ─── Synthetic component preview ─── */
