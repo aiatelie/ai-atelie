@@ -19,6 +19,12 @@ type CacheEntry = {
   etag: string | null;
   loaded: boolean;
   loading: Promise<void> | null;
+  /** True when saveThreads stashed user-created threads while
+   *  fetchFromServer was still in flight. Cleared once the fetch
+   *  resolves. Used to gate the concurrent-save guard in the 200-OK
+   *  path — prevents it from firing on every SSE invalidation, which
+   *  would ping-pong between tabs. */
+  stashedDuringLoad: boolean;
 };
 const cache = new Map<string, CacheEntry>();
 // Per-project cancel-fns returned by metaEvents.subscribeProjectMeta.
@@ -33,7 +39,7 @@ function emptyArchive(): ThreadArchive { return { threads: [], activeId: null };
 function getEntry(projectId: string): CacheEntry {
   let c = cache.get(projectId);
   if (!c) {
-    c = { archive: emptyArchive(), etag: null, loaded: false, loading: null };
+    c = { archive: emptyArchive(), etag: null, loaded: false, loading: null, stashedDuringLoad: false };
     cache.set(projectId, c);
   }
   return c;
@@ -81,12 +87,19 @@ async function fetchFromServer(projectId: string): Promise<void> {
           threads: Array.isArray(data?.threads) ? (data.threads as ChatThread[]) : [],
           activeId: typeof data?.activeId === "string" ? data.activeId : null,
         };
-        // Only swap cache + emit when content actually changed. Otherwise
-        // our own PATCH → SSE echo → setState → save loop runs forever.
-        if (JSON.stringify(next) !== JSON.stringify(c.archive)) {
+        // When saveThreads stashed fresh user data while we were loading,
+        // keep the local version — it's newer than the server's. Only
+        // gated on the stashedDuringLoad flag so cross-tab SSE
+        // invalidation (which also calls fetchFromServer) correctly
+        // adopts the authoritative server content instead of pushing
+        // a stale local view back.
+        if (c.stashedDuringLoad) {
+          schedulePush(projectId);
+        } else if (JSON.stringify(next) !== JSON.stringify(c.archive)) {
           c.archive = next;
           changed = true;
         }
+        c.stashedDuringLoad = false;
         c.etag = r.headers.get("etag");
       }
       c.loaded = true;
@@ -213,7 +226,14 @@ export function saveThreads(projectId: string, archive: ThreadArchive): void {
     // Stash the new archive so it overrides the in-flight fetch, but
     // don't trigger a push yet — the loading promise will write the
     // server result. The next mutation after load will push correctly.
+    //
+    // Only flag stashedDuringLoad when the stash carries actual user
+    // content. The React mount/project-switch save effect fires with an
+    // empty `threads` array on the first render after a project change
+    // (before the load useEffect's setThreads has applied), and an empty
+    // stash must NOT cause us to push over the server's real data.
     c.archive = archive;
+    if (archive.threads.length > 0) c.stashedDuringLoad = true;
     return;
   }
   c.archive = archive;

@@ -54,6 +54,15 @@ export class DmBridge {
     this.win = iframe.contentWindow;
     this.ready = new Promise<void>((resolve) => { this.resolveReady = resolve; });
     window.addEventListener("message", this.boundOnMsg);
+    // Eager-resolve when inject-script already ran in this iframe (e.g.
+    // bridge constructed AFTER the inject-script's ready message fired,
+    // which we'd otherwise miss). Same-origin iframes only — accessing
+    // a property on a cross-origin contentWindow throws SecurityError,
+    // caught by the try and treated as "not yet injected".
+    try {
+      const w = this.win as (Window & { __DM_INJECTED__?: boolean }) | null;
+      if (w?.__DM_INJECTED__) this.resolveReady();
+    } catch { /* cross-origin or detached */ }
   }
 
   /** Idempotently inject inject-script.js into the iframe doc. */
@@ -97,7 +106,7 @@ export class DmBridge {
 
   send(cmd: DmOutbound) {
     if (!this.win) return;
-    try { this.win.postMessage({ __DM_CMD__: cmd }, "*"); } catch { /* ignore */ }
+    try { this.win.postMessage({ __DM_CMD__: cmd }, window.location.origin); } catch { /* ignore */ }
   }
 
   on(listener: Listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -109,7 +118,7 @@ export class DmBridge {
   }
 
   private onMsg(e: MessageEvent) {
-    if (!this.win || e.source !== this.win) return;
+    if (!this.win || e.source !== this.win || e.origin !== window.location.origin) return;
     const data = e.data as { __DM_MSG__?: DmInbound } | undefined;
     if (!data || !data.__DM_MSG__) return;
     const msg = data.__DM_MSG__;
