@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createMemoryDriver } from "./memory-driver.ts";
 import { rebindRepos } from "./repos/index.ts";
 
-let projectsRoutes: { fetch: (req: Request) => Promise<Response> };
+let projectsRoutes: { fetch: (req: Request) => Response | Promise<Response> };
 
 beforeAll(async () => {
   // Swap the driver BEFORE the route module is imported. The repos

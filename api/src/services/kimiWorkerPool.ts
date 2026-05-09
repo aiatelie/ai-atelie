@@ -28,7 +28,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, stat, open as openFile, type FileHandle } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { homedir } from "node:os";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { ENV, KIMI_SANDBOX_AGENT_PATH, screenshotDirFor } from "../env.ts";
 import { registerChild, unregisterChild } from "./runRegistry.ts";
 import { kimiLineToAgentEvents } from "./agentEvents.ts";

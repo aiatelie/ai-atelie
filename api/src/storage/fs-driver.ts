@@ -12,7 +12,7 @@
  */
 
 import { EventEmitter } from "node:events";
-import { realpathSync } from "node:fs";
+import { mkdirSync, realpathSync } from "node:fs";
 import { watch } from "node:fs";
 import {
   appendFile,
@@ -74,6 +74,15 @@ function isInside(parent: string, child: string): boolean {
   } catch {
     return child === parent || child.startsWith(parent + "/");
   }
+}
+
+/** Resolve symlinks for a root path, creating it first if missing.
+ *  Used at driver init so an absent SHARED_ROOT (web/.data is not
+ *  checked in) doesn't crash the first request with ENOENT. */
+function ensureRealpath(p: string): string {
+  const abs = resolvePath(p);
+  try { mkdirSync(abs, { recursive: true }); } catch { /* read-only or permission issue; let realpath/use-time error surface */ }
+  try { return realpathSync(abs); } catch { return abs; }
 }
 
 /** Path traversal guard for BlobStore. Rejects absolute paths, `..`,
@@ -536,8 +545,13 @@ export function createFsDriver(opts: FsDriverOptions): StorageDriver {
   // Resolve symlinks once at init so every isInside() call in the hot
   // path hits the VFS cache instead of walking /var→/private/var on
   // every blob operation. macOS /tmp→/private/tmp is the main case.
-  const projectsRoot = realpathSync(resolvePath(opts.projectsRoot));
-  const sharedRoot = realpathSync(resolvePath(opts.sharedRoot));
+  // Roots may not exist yet on a fresh checkout (web/.data isn't in
+  // git); create them first so realpathSync doesn't throw ENOENT and
+  // sink the first storage call. Fall back to the resolved path if
+  // even mkdir fails (read-only volume, permissions) — the actual
+  // storage operations will surface a clearer error at use time.
+  const projectsRoot = ensureRealpath(opts.projectsRoot);
+  const sharedRoot = ensureRealpath(opts.sharedRoot);
   const reloadDebounceMs = opts.reloadDebounceMs ?? 250;
 
   // Lazy per-project caches. Created on first project(id) call.

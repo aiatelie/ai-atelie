@@ -70,10 +70,21 @@ async function runAgent(
 export const commentEditRoutes = new Hono();
 
 commentEditRoutes.post("/api/comment-edit", async (c) => {
-  // Strict body size enforcement: read the raw bytes first so chunked
-  // or headerless transfers can't bypass the cap. Hono's c.req.json()
-  // buffers the entire body regardless; checking .arrayBuffer() first
-  // catches oversized payloads before they inflate into JS objects.
+  // Strict body size enforcement: pre-check content-length so honest
+  // clients are rejected before we allocate, then stream-read with a
+  // running byte count so chunked or headerless transfers can't bypass
+  // the cap by omitting the header. Hono's c.req.json() buffers the
+  // entire body regardless of size; doing it ourselves means oversized
+  // payloads never inflate into JS objects.
+  const tooLarge413 = () => c.json(
+    { error: `Request body too large (max ${MAX_BODY_BYTES / 1024 / 1024}MB)` },
+    413,
+  );
+  const declaredLen = c.req.header("content-length");
+  if (declaredLen) {
+    const n = parseInt(declaredLen, 10);
+    if (Number.isFinite(n) && n > MAX_BODY_BYTES) return tooLarge413();
+  }
   let rawBody: ArrayBuffer;
   try {
     const r = c.req.raw;
@@ -88,10 +99,7 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
         total += value.byteLength;
         if (total > MAX_BODY_BYTES) {
           reader.cancel();
-          return c.json(
-            { error: `Request body too large (max ${MAX_BODY_BYTES / 1024 / 1024}MB)` },
-            413,
-          );
+          return tooLarge413();
         }
       }
       const merged = new Uint8Array(total);
@@ -99,13 +107,12 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
       for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
       rawBody = merged.buffer;
     } else {
+      // Fallback path (no ReadableStream): we already pre-checked
+      // content-length above. If it was missing here we have no choice
+      // but to buffer and check after — the alternative is rejecting
+      // every headerless request, which would break legitimate clients.
       rawBody = await r.arrayBuffer();
-      if (rawBody.byteLength > MAX_BODY_BYTES) {
-        return c.json(
-          { error: `Request body too large (max ${MAX_BODY_BYTES / 1024 / 1024}MB)` },
-          413,
-        );
-      }
+      if (rawBody.byteLength > MAX_BODY_BYTES) return tooLarge413();
     }
   } catch {
     return c.text("Failed to read request body", 400);
