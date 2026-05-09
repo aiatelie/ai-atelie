@@ -18,7 +18,9 @@
   <a href="https://github.com/aiatelie/ai-atelie/releases"><img src="https://img.shields.io/github/v/release/aiatelie/ai-atelie?logo=semver&label=Release" alt="Release" /></a>
   <a href="https://discord.gg/aiatelie"><img src="https://img.shields.io/discord/XXXXXX?logo=discord&label=Discord" alt="Discord" /></a>
   <a href="https://x.com/aiatelie"><img src="https://img.shields.io/twitter/follow/aiatelie?style=social" alt="X / Twitter" /></a>
-</p>
+    </p>
+
+![AI Atelie](docs/hero.png)
 
 <details>
 <summary>中文</summary>
@@ -36,6 +38,8 @@
   <a href="https://github.com/aiatelie/ai-atelie/blob/main/LICENSE"><img src="https://img.shields.io/github/license/aiatelie/ai-atelie?label=License" alt="License" /></a>
   <a href="https://github.com/aiatelie/ai-atelie/releases"><img src="https://img.shields.io/github/v/release/aiatelie/ai-atelie?logo=semver&label=Release" alt="Release" /></a>
 </p>
+
+![AI Atelie](docs/hero.png)
 
 </details>
 
