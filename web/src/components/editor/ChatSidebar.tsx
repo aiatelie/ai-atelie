@@ -256,7 +256,13 @@ export function ChatTab({
         onRetry={onRetry}
         onDeleteMessage={onDeleteMessage}
         onRestore={onRestore}
-        onSendStarter={(text) => onSend(text, [], loadModelId())}
+        onSendStarter={(text) => {
+          // Read the active skill set from localStorage at fire time —
+          // the Composer persists every toggle change immediately, so
+          // this is always current even though Composer owns the state.
+          const skillsPreamble = buildSkillsPreamble(loadActiveSkills(projectId));
+          onSend(text, [], loadModelId(), skillsPreamble ? { skillsPreamble } : undefined);
+        }}
         onEditMessage={(tid, idx, text) => {
           // Truncate the thread from this index and pop the original
           // text into the Composer for editing.

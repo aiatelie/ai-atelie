@@ -59,7 +59,14 @@ export const SKILLS: ComposerSkill[] = [
       "Create a fully interactive prototype with realistic state management and transitions. Use React useState/useEffect for dynamic behavior. Include hover states, click interactions, form validation, animated transitions, and multi-step navigation flows. It should feel like a real working app, not a static mockup.",
   },
   {
-    id: "frontend-design",
+    // Deliberately NOT "frontend-design" — that id collides with the
+    // catalog skill of the same name in DEFAULT_ACTIVE_SKILLS
+    // (api/src/services/promptBuilder.ts). If the chip and the manifest
+    // default share an id, the skill prompt gets injected twice: once
+    // via the system-prompt `active skills` block and again via the
+    // hidden chip preamble on the user turn. Using a distinct id keeps
+    // the two injection paths orthogonal.
+    id: "posture-frontend-design",
     label: "Frontend design",
     color: "#D97706",
     prompt:
@@ -76,10 +83,11 @@ export const SKILLS: ComposerSkill[] = [
 
 /** Build the hidden preamble injected before the user's text on send.
  *  Returns `undefined` when no skills are active so the caller can
- *  cheaply branch on truthiness. The format mirrors how the existing
- *  intake preamble rides under the user's first message: a labeled
- *  block separated from the user's typed text by a horizontal rule, so
- *  Claude sees "[active skills] context … --- user comment".
+ *  cheaply branch on truthiness. The format is a labeled header line
+ *  followed by one `### Skill\nprompt` block per active skill. The
+ *  caller (Composer / queueOrSend) concatenates this preamble with the
+ *  user's typed text, separated by a blank line — no `---` separator is
+ *  inserted by this function.
  *
  *  Unknown ids in `activeIds` are silently skipped — defensive against
  *  stale localStorage entries from a previous bundle that referenced

@@ -14,10 +14,13 @@
  *   • SkillChips are local-state toggles for the *composer*, hardcoded
  *     in `data/skills.ts`, and inject prompt text into outgoing turns.
  *
- * Tooltip semantics: native `title` attribute. We deliberately don't
- * build a custom popover — the prompt text is long, native tooltips
- * handle wrapping/positioning correctly, and the chip row already
- * fights for vertical space at narrow widths.
+ * Tooltip semantics: each chip uses `aria-describedby` pointing at a
+ * visually-hidden <span> that contains the full prompt text. This is
+ * keyboard- and screen-reader-accessible (AT announces the description
+ * on focus), and the CSS class `.srOnly` positions the element off-screen
+ * without `display:none` so it remains in the accessibility tree. The
+ * native `title` is intentionally omitted — it is not announced by
+ * most AT and is invisible on touch/mobile surfaces.
  *
  * Renders nothing when the SKILLS list is empty (defensive — keeps the
  * composer from sprouting an empty bar if we ever empty the catalog).
@@ -44,21 +47,17 @@ export function SkillChips({
     <div className={s.row} role="group" aria-label="Composer skills">
       {SKILLS.map((sk) => {
         const isActive = activeSet.has(sk.id);
+        const descId = `skill-desc-${sk.id}`;
         return (
           <button
             key={sk.id}
             type="button"
             role="switch"
             aria-checked={isActive}
+            aria-describedby={descId}
             data-active={isActive ? "true" : "false"}
             data-skill-id={sk.id}
             className={`${s.chip} ${isActive ? s.chipActive : ""}`}
-            // The full prompt rides as the title so the user can hover
-            // any chip to see exactly what they're activating before
-            // committing. Native tooltips delay before showing — that's
-            // fine; we don't want a busy popover for a low-frequency
-            // inspect gesture.
-            title={`${sk.label}\n\n${sk.prompt}`}
             // Inline accent color as a CSS custom property so the
             // module CSS can use it for the active-state border / dot
             // without baking five color variants into the stylesheet.
@@ -72,6 +71,11 @@ export function SkillChips({
           >
             <span className={s.dot} aria-hidden="true" />
             <span className={s.label}>{sk.label}</span>
+            {/* Visually hidden description announced by AT on focus.
+                Not display:none — that removes it from the a11y tree. */}
+            <span id={descId} className={s.srOnly}>
+              {sk.label}: {sk.prompt}
+            </span>
           </button>
         );
       })}

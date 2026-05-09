@@ -76,6 +76,7 @@ import { classifyKind, computedHints, smartLabel } from "../lib/smartLabel";
 import { applyOverrides, setOverride, clearRoute, readRoute, useOverrideCount, useDirtyRoutes } from "../lib/editorOverrides";
 import { notifyTurnComplete } from "../lib/notifications";
 import { trackEvent } from "../lib/telemetry";
+import { buildSkillsPreamble, loadActiveSkills } from "../data/skills";
 import {
   startStream,
   subscribeStream,
@@ -2798,7 +2799,19 @@ export default function Editor() {
                         if (dataUrl) chatAttachments.unshift({ dataUrl, name: `comment-${c.id}.png` });
                       }
                     } catch { /* best-effort */ }
-                    queueOrSend(text, chatAttachments, opts.modelId);
+                    // Pass the skill preamble for the comment-promote path
+                    // the same way the Composer does on a normal send.
+                    // Skills are persisted to localStorage on every toggle,
+                    // so reading at send time always reflects the current set.
+                    const skillsPreamble = buildSkillsPreamble(
+                      loadActiveSkills(activeProject.id),
+                    );
+                    queueOrSend(
+                      text,
+                      chatAttachments,
+                      opts.modelId,
+                      skillsPreamble ? { skillsPreamble } : undefined,
+                    );
                   })();
                 }
               }}
