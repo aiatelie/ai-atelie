@@ -113,11 +113,17 @@ export async function runClaude(
         model: payload.modelId || undefined,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
-        // Skills come from `additionalDirectories` only — never from cwd's
-        // `.claude/` or `~/.claude/`. Empty `settingSources` makes that
-        // explicit and prevents an adapter cwd that happens to contain a
-        // `.claude/skills/` from silently bleeding into product runtime.
-        settingSources: [],
+        // Project skills come from `additionalDirectories` only — never
+        // from cwd's `.claude/` or local `.claude/settings.local.json`.
+        // We DO need the user-level source ("user" loads
+        // `~/.claude/settings.json` which is where the SDK resolves the
+        // OAuth bearer token from `~/.claude/.credentials.json`); without
+        // it every run 401s with "Failed to authenticate." The previous
+        // empty-array config silently broke auth — the SDK docstring
+        // notes that `query()` defaults to ALL sources, while explicit
+        // `[]` loads NONE, which in turn means no auth bootstrap.
+        // Valid values per the SDK type: 'user' | 'project' | 'local'.
+        settingSources: ["user"],
         // Disallowed tools — force MCP ask-user, tighten toolbox to relevant tools.
         // Claude Code's native AskUserQuestion has no UI surface in our chat sidebar;
         // force the model onto mcp__ask-user__ask_user which routes through the
@@ -205,16 +211,29 @@ export async function runClaude(
       if (err instanceof Error && err.stack) {
         console.error(err.stack.split("\n").slice(0, 5).join("\n"));
       }
+      // Auto-heal heuristics for stale-session resume:
+      //   1. `exited with code 1` — the spawned `claude` CLI crashed
+      //      partway through replaying a corrupt session log.
+      //   2. `401` / `Failed to authenticate` — the session was created
+      //      under a different credential context (e.g. user toggled
+      //      login state between runs); the bearer the SDK replays no
+      //      longer authenticates even though `~/.claude/.credentials.json`
+      //      itself is valid. Orphan and start fresh; the new session
+      //      picks up current credentials.
+      const isCorruptSession = /exited with code 1/i.test(msg);
+      const isAuthFailureOnResume = /401\b|Failed to authenticate|Invalid authentication credentials/i
+        .test(msg);
       if (
         attempt === 1 &&
         triedResume &&
         originalSid &&
-        /exited with code 1/i.test(msg)
+        (isCorruptSession || isAuthFailureOnResume)
       ) {
         sid = orphanSession("claude", rootDir, originalSid);
         sessionExists = false;
-        console.log(`[runClaude] auto-healing → orphan + retry with sid=${sid.slice(0, 8)}`);
-        send("status", { phase: "retry", reason: "session-corrupted" });
+        const reason = isAuthFailureOnResume ? "session-auth-stale" : "session-corrupted";
+        console.log(`[runClaude] auto-healing → orphan + retry with sid=${sid.slice(0, 8)} (${reason})`);
+        send("status", { phase: "retry", reason });
         continue;
       }
       send("error", { message: `claude SDK error: ${msg}` });
