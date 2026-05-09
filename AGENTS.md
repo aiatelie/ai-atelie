@@ -57,6 +57,24 @@ Each project at `web/projects/<id>/` is served raw to an iframe canvas — no bu
 
 The agent CLI is launched as a subprocess by the api server; SSE streams responses back to the editor. Skills inside an editor session come from `ENV.SKILLS_DIR` (the product `skills/` directory), not from `.claude/skills/` — that's contributor-only.
 
+### Runtime AI in artifacts (`window.ai.complete`)
+
+Generated artifacts (HTML files in the sandboxed preview iframe) can make one-shot AI calls at runtime — no API key in the artifact, no SDK to import, provider-neutral:
+
+```js
+const reply = await window.ai.complete("grade this answer: ...");
+// or:  await window.ai.complete({ messages: [{ role: "user", content: "..." }] })
+```
+
+How it works:
+
+- A bridge script is auto-injected into every HTML response from `/p/:id/*` (see `api/src/routes/projects.ts` → `AI_COMPLETE_BRIDGE`). Defines `window.ai.complete` (and `window.claude.complete` as a legacy alias).
+- The artifact `postMessage`s `__ai_complete` to its parent. The host listener in `web/src/lib/tweakBridge.ts` forwards to `POST /api/artifacts/complete`, tagging the request with the active model from `loadModelId()`.
+- The route (`api/src/routes/artifacts.ts`) calls `pickAdapter(modelId).complete()` — the same dispatch the agent path uses. Each `AgentAdapter` implements `complete()` (`agents/{claude,kimi,opencode}/complete.ts`). OpenCode fans out further to whatever provider/model the user configured.
+- Rate-limit (10 req/min per IP+UA) and daily token cap are provider-agnostic.
+
+Use it for: trivia graders, AI-powered tutors, "rewrite this" buttons, in-artifact chatbots — anything that needs an LLM at runtime, not just at generation time. Demo at `web/projects/demo/claude-complete-demo.html`. The agent's prompt (`api/src/services/promptBuilder.ts`) already teaches this surface so it can author artifacts that use it.
+
 ## Local dev quirks
 
 - Vite binds `localhost` and IPv6, not `127.0.0.1`.

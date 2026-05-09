@@ -64,6 +64,8 @@ export type { ProjectManifest };
  * OpenCode → any provider OpenCode supports). Artifact code never names
  * a specific vendor.
  *
+ * See AGENTS.md → "Runtime AI in artifacts" for the end-to-end story.
+ *
  *   1. The artifact calls `await window.ai.complete("hello")`.
  *   2. The bridge generates a unique request id and posts
  *      `{ type: "__ai_complete", id, payload }` to window.parent.

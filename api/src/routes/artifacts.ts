@@ -1,6 +1,8 @@
 /* artifacts.ts — proxy endpoint for `window.ai.complete()` calls made
  * from inside preview iframes (artifacts).
  *
+ * Feature overview lives in AGENTS.md → "Runtime AI in artifacts".
+ *
  * Preview iframes are sandboxed (`sandbox="allow-scripts"` without
  * `allow-same-origin`), so artifacts can't talk to any LLM directly.
  * Instead they postMessage `{ type: "__ai_complete", id, payload }`
