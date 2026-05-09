@@ -33,6 +33,7 @@ import type {
   BlobReadTextResult,
   BlobStat,
   BlobStore,
+  DesignSystemsScope,
   ETag,
   JsonKv,
   KvChange,
@@ -53,6 +54,7 @@ const KEY_RE = /^[a-zA-Z0-9_-]+$/;
 export type FsDriverOptions = {
   projectsRoot: string;
   sharedRoot: string;
+  designSystemsRoot: string;
   /** Reload-channel debounce window — coalesces fs.watch bursts so the
    *  iframe doesn't reload mid-write. Mirrors current 250ms. */
   reloadDebounceMs?: number;
@@ -522,6 +524,7 @@ function createFsAppendLog(metaDir: string): AppendLog & { __destroy(): void } {
 export function createFsDriver(opts: FsDriverOptions): StorageDriver {
   const projectsRoot = resolvePath(opts.projectsRoot);
   const sharedRoot = resolvePath(opts.sharedRoot);
+  const designSystemsRoot = resolvePath(opts.designSystemsRoot);
   const reloadDebounceMs = opts.reloadDebounceMs ?? 250;
 
   // Lazy per-project caches. Created on first project(id) call.
@@ -529,6 +532,7 @@ export function createFsDriver(opts: FsDriverOptions): StorageDriver {
 
   // Shared scope is process-singleton.
   let sharedScope: SharedScope | null = null;
+  let designSystemsScope: DesignSystemsScope | null = null;
 
   function projectDir(id: string): string {
     if (!ID_RE.test(id)) throw new Error(`Invalid project id: ${id}`);
@@ -556,6 +560,13 @@ export function createFsDriver(opts: FsDriverOptions): StorageDriver {
         sharedScope = { kv: createFsJsonKv(sharedRoot) };
       }
       return sharedScope;
+    },
+
+    designSystems(): DesignSystemsScope {
+      if (!designSystemsScope) {
+        designSystemsScope = { kv: createFsJsonKv(designSystemsRoot) };
+      }
+      return designSystemsScope;
     },
 
     project(id: string): ProjectScope {

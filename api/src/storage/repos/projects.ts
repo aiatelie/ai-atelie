@@ -36,6 +36,10 @@ export type CreateProjectInput = {
    *  design-aesthetic-presets, design-critique, design-md-author) —
    *  matches what NewProjectForm shows pre-checked. */
   activeSkills?: string[];
+  /** Bound design system id. Persists to manifest.designSystemId so the
+   *  prompt builder can fetch + inject the brand definition on every
+   *  agent turn. Optional — projects without a DS skip the injection. */
+  designSystemId?: string;
 };
 
 const DEFAULT_ACTIVE_SKILLS = [
@@ -127,6 +131,9 @@ export class ProjectRepo {
       entry: "index.html",
       design: { active_skills },
     };
+    if (input.designSystemId) {
+      manifest.designSystemId = input.designSystemId;
+    }
     await this.driver.createProject(input.id);
     const files = this.driver.project(input.id).files;
     await files.write("index.html", input.indexHtml);

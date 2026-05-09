@@ -44,6 +44,10 @@ export const ENV = {
   /** Workspace-wide shared blobs (assets.json, etc). */
   SHARED_ROOT: envPath("SHARED_ROOT", resolvePath(REPO_ROOT, "web/.data")),
 
+  /** User-authored design systems (brand definitions). One JSON file per DS.
+   *  Lives next to projects/ so the data shape is obvious on disk. */
+  DESIGN_SYSTEMS_ROOT: envPath("DESIGN_SYSTEMS_ROOT", resolvePath(REPO_ROOT, "web/design_systems")),
+
   /** Legacy comment-edit fallback root (when payload has no projectId). */
   LEGACY_EDITOR_ROOT: envPath("LEGACY_EDITOR_ROOT", resolvePath(REPO_ROOT, "web")),
 

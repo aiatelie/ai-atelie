@@ -269,7 +269,7 @@ projectsRoutes.get("/api/projects", async (c) => {
 });
 
 projectsRoutes.post("/api/projects/create", async (c) => {
-  let body: { name?: string; id?: string; active_skills?: unknown };
+  let body: { name?: string; id?: string; active_skills?: unknown; design_system_id?: unknown };
   try { body = await c.req.json(); }
   catch { return c.json({ error: "Bad JSON" }, 400); }
   const name = (body.name ?? "Untitled").trim() || "Untitled";
@@ -284,6 +284,20 @@ projectsRoutes.post("/api/projects/create", async (c) => {
       .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
       .slice(0, 32);
     if (cleaned.length > 0) activeSkills = cleaned;
+  }
+  // design_system_id: validate id-shape and existence so a typo doesn't
+  // silently produce a project that asks the agent for a brand it can't
+  // find. A missing DS at create time is a 400, not a silent fall-through.
+  let designSystemId: string | undefined;
+  if (typeof body.design_system_id === "string" && body.design_system_id.length > 0) {
+    if (!ID_RE.test(body.design_system_id)) {
+      return c.json({ error: "invalid design_system_id" }, 400);
+    }
+    const exists = await getRepos().designSystems.exists(body.design_system_id);
+    if (!exists) {
+      return c.json({ error: "design_system_id refers to an unknown design system" }, 400);
+    }
+    designSystemId = body.design_system_id;
   }
   try {
     // Read the canonical DesignCanvas starter so every fresh project lands
@@ -303,6 +317,7 @@ projectsRoutes.post("/api/projects/create", async (c) => {
       styleCss: STARTER_CSS.replace(/__NAME__/g, name),
       designCanvas: designCanvas || undefined,
       activeSkills,
+      designSystemId,
     });
     broadcastShared("projects");
     return c.json({ id, manifest });

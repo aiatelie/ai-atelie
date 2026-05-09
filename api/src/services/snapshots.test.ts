@@ -25,15 +25,17 @@ afterAll(() => {
 
 let projectsRoot: string;
 let sharedRoot: string;
+let designSystemsRoot: string;
 
 function freshDriver() {
-  return createFsDriver({ projectsRoot, sharedRoot, reloadDebounceMs: 30 });
+  return createFsDriver({ projectsRoot, sharedRoot, designSystemsRoot, reloadDebounceMs: 30 });
 }
 
 beforeEach(() => {
   projectsRoot = mkdtempSync(join(tmpdir(), "atelie-snap-projects-"));
   sharedRoot = mkdtempSync(join(tmpdir(), "atelie-snap-shared-"));
-  tmpDirs.push(projectsRoot, sharedRoot);
+  designSystemsRoot = mkdtempSync(join(tmpdir(), "atelie-snap-ds-"));
+  tmpDirs.push(projectsRoot, sharedRoot, designSystemsRoot);
   rebindRepos(freshDriver());
 });
 

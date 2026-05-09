@@ -17,6 +17,7 @@ import { abortAllRuns, killAllChildren } from "./services/runRegistry.ts";
 
 import { commentEditRoutes } from "./routes/commentEdit.ts";
 import { projectsRoutes } from "./routes/projects.ts";
+import { designSystemsRoutes } from "./routes/designSystems.ts";
 import { exportsRoutes } from "./routes/exports.ts";
 import { filesRoutes } from "./routes/files.ts";
 import { elicitRoutes } from "./routes/elicit.ts";
@@ -66,6 +67,7 @@ app.route("/", internalRoutes);
 app.route("/", filesRoutes);
 app.route("/", elicitRoutes);
 app.route("/", sharedRoutes);
+app.route("/", designSystemsRoutes);
 app.route("/", exportsRoutes);
 app.route("/", commentEditRoutes);
 app.route("/", projectsRoutes);

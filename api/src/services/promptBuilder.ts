@@ -104,6 +104,7 @@ import { readFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 
 import { ENV } from "../env.ts";
+import { getRepos } from "../storage/repos/index.ts";
 import { dataUrlToImage } from "./utils.ts";
 import { saveAttachmentToProject, saveScreenshot } from "./attachments.ts";
 import { projectDirOf, readProjectManifest } from "./projectStore.ts";
@@ -140,6 +141,33 @@ function getDesignMdPath(manifest: unknown): string {
   const m = manifest as { design?: { design_md?: unknown } } | null;
   const p = m?.design?.design_md;
   return typeof p === "string" && p.length > 0 ? p : "DESIGN.md";
+}
+
+/** Pull the bound design system id from a manifest (if any). Defensive —
+ *  the manifest is read as `unknown` and may predate the field. */
+function getDesignSystemId(manifest: unknown): string | null {
+  const m = manifest as { designSystemId?: unknown } | null;
+  const id = m?.designSystemId;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+/** Cap on the description we inline into the system prompt. The model
+ *  has a wide context but a 200KB brand spec belongs in a project
+ *  DESIGN.md, not in every turn's preamble. */
+const DESIGN_SYSTEM_MAX_BYTES = 16 * 1024;
+
+/** Render the bound DS as a high-priority preamble. Format is fixed by
+ *  spec — every project + every turn pays the same shape so the model
+ *  learns to recognize it on sight. */
+function formatDesignSystemPreamble(ds: { name: string; description: string }): string {
+  const desc = ds.description.length > DESIGN_SYSTEM_MAX_BYTES
+    ? ds.description.slice(0, DESIGN_SYSTEM_MAX_BYTES) + "\n\n[…truncated; full spec is stored on the design system record]"
+    : ds.description;
+  return [
+    `[Design System] This project uses the **${ds.name}** design system. This is a binding choice for visual style — every visual must follow it. Don't invent colors, type, spacing, or components not grounded here.`,
+    ``,
+    desc,
+  ].join("\n");
 }
 
 /** Read the project's DESIGN.md if present, with traversal guard and a
@@ -234,7 +262,28 @@ async function buildSandboxPrompt(
 ): Promise<string> {
   const manifest = p.projectId ? await readProjectManifest(p.projectId) : null;
   const html = p.outerHtml ? p.outerHtml.slice(0, 1200) : "";
-  const lines: string[] = [
+
+  // Bound design system: highest-priority preamble. Goes ABOVE the persona
+  // so the model treats brand fidelity as a constraint on every action,
+  // not a polish-pass nice-to-have. Silent no-op when no DS is bound or
+  // the bound id no longer resolves (a deleted DS doesn't break the turn).
+  const designSystemId = getDesignSystemId(manifest);
+  let designSystemPreamble: string | null = null;
+  if (designSystemId) {
+    try {
+      const ds = await getRepos().designSystems.get(designSystemId);
+      if (ds) designSystemPreamble = formatDesignSystemPreamble(ds);
+    } catch {
+      // Storage hiccup — fall through; better to send a turn without the
+      // preamble than to refuse the user's edit.
+    }
+  }
+
+  const lines: string[] = [];
+  if (designSystemPreamble) {
+    lines.push(designSystemPreamble, ``);
+  }
+  lines.push(
     PERSONA_AND_CADENCE,
     ``,
     `## This turn`,
@@ -242,7 +291,7 @@ async function buildSandboxPrompt(
     `The project is plain HTML + CDN React + Babel-Standalone (.jsx files).`,
     `There is no build step; the dev server reloads the iframe on every save.`,
     ``,
-  ];
+  );
   if (!p.scopeFile) {
     lines.push(
       `**Pick the presentation format by what you're exploring:**`,

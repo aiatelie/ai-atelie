@@ -22,9 +22,10 @@ afterAll(() => {
 function makeFs(): StorageDriver {
   const projectsRoot = mkdtempSync(join(tmpdir(), "atelie-driver-swap-projects-"));
   const sharedRoot = mkdtempSync(join(tmpdir(), "atelie-driver-swap-shared-"));
-  tmpDirs.push(projectsRoot, sharedRoot);
+  const designSystemsRoot = mkdtempSync(join(tmpdir(), "atelie-driver-swap-design-systems-"));
+  tmpDirs.push(projectsRoot, sharedRoot, designSystemsRoot);
   // Fast debounce so subscription assertions don't burn seconds in tests.
-  return createFsDriver({ projectsRoot, sharedRoot, reloadDebounceMs: 30 });
+  return createFsDriver({ projectsRoot, sharedRoot, designSystemsRoot, reloadDebounceMs: 30 });
 }
 
 function makeMemory(): StorageDriver {
