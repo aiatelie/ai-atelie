@@ -194,35 +194,46 @@ function normalizeBody(body: unknown):
 // ─── Origin enforcement ───────────────────────────────────────────────────
 
 /**
- * Verify that the request originated from the same host as the API server.
+ * Verify that the request originated from the editor as opposed to a
+ * foreign page in the user's browser. The threat being defended is XSRF
+ * — `cors()` already filters CORS responses at the headers layer, this
+ * is belt-and-suspenders.
  *
- * The Vite proxy forwards requests same-origin in dev; in prod the browser
- * always sends Origin (for cross-origin requests) or Referer. A request
- * from a foreign origin carries an Origin header that differs from our
- * host, or no Origin at all (which we treat as suspicious for a POST).
+ * In production, expectedHost (derived from the request's Host header)
+ * matches Origin exactly because editor and API share an origin.
  *
- * Allowed through without an Origin: requests that also have no Referer
- * (curl / server-to-server — those are fine; the risk is *browser* XSRF).
- * When Origin is present it MUST match the host we're running on.
+ * In dev, Vite proxies /api/* from :5173 to :5174 with changeOrigin:true,
+ * which rewrites Host to localhost:5174 while preserving Origin as
+ * http://localhost:5173. So the strict `origin === expectedHost` check
+ * would reject every legitimate browser request. We allow this case
+ * specifically: when no explicit CORS_ORIGIN is set (dev posture) and
+ * the Origin is a localhost / 127.0.0.1 URL, treat it as same-origin.
+ *
+ * Requests with no Origin AND no Referer are non-browser (curl, server-
+ * to-server) — XSRF doesn't apply, allow.
  */
 function isSameOrigin(req: Request, expectedHost: string): boolean {
   const origin = req.headers.get("origin");
   const referer = req.headers.get("referer");
 
-  // No origin + no referer = non-browser call (curl, server-to-server).
-  // Allow these — the attack vector is a foreign *web page* making the call.
   if (!origin && !referer) return true;
 
-  // If Origin is present, it must match our expected host exactly.
+  const corsOrigin = process.env.CORS_ORIGIN;
+  const isDev = !corsOrigin || corsOrigin === "*";
+  const isLocalhostUrl = (s: string) =>
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(s);
+
   if (origin) {
-    // origin is like "http://localhost:5173"; strip trailing slash.
-    return origin.replace(/\/$/, "") === expectedHost;
+    const cleanOrigin = origin.replace(/\/$/, "");
+    if (cleanOrigin === expectedHost) return true;
+    if (isDev && isLocalhostUrl(cleanOrigin)) return true;
+    return false;
   }
 
-  // Origin absent but Referer is present (some browsers omit Origin on
-  // same-origin navigations). Accept if Referer starts with expectedHost.
   if (referer) {
-    return referer.startsWith(expectedHost + "/") || referer === expectedHost;
+    if (referer.startsWith(expectedHost + "/") || referer === expectedHost) return true;
+    if (isDev && isLocalhostUrl(referer)) return true;
+    return false;
   }
 
   return false;
