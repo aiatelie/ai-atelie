@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createMemoryDriver } from "./memory-driver.ts";
 import { rebindRepos } from "./repos/index.ts";
 
-let projectsRoutes: { fetch: (req: Request) => Promise<Response> };
+let projectsRoutes: { fetch: (req: Request) => Response | Promise<Response> };
 
 beforeAll(async () => {
   // Swap the driver BEFORE the route module is imported. The repos
@@ -109,5 +109,53 @@ describe("routes against memory-driver", () => {
     expect(tweak.text).toContain("\"c\":2");
 
     await call("DELETE", "/api/projects/p_tweak");
+  });
+
+  it("fork — happy path copies files and sets origin metadata", async () => {
+    // Create a source project and add an extra file.
+    await call("POST", "/api/projects/create", { id: "p_src", name: "My Design" });
+    const dataUrl = "data:text/css;base64," + Buffer.from("body{color:red}").toString("base64");
+    await call("POST", "/api/projects/p_src/file/upload", { path: "extra.css", dataUrl });
+
+    const fork = await call("POST", "/api/projects/p_src/fork", {});
+    expect(fork.status).toBe(200);
+    const body = JSON.parse(fork.text) as { id: string; manifest: Record<string, unknown> };
+    expect(body.id).toBeTruthy();
+    expect(body.manifest.name).toBe("My Design (Remix)");
+    expect(body.manifest.originProjectId).toBe("p_src");
+    expect(body.manifest.originProjectName).toBe("My Design");
+    expect(typeof body.manifest.forkedAt).toBe("number");
+
+    // The forked project should expose the copied files.
+    const files = await call("GET", `/api/projects/${body.id}/files`);
+    expect(files.status).toBe(200);
+    expect(files.text).toContain("extra.css");
+
+    // Source project must still exist untouched.
+    const srcManifest = await call("GET", "/api/projects/p_src/manifest");
+    expect(srcManifest.status).toBe(200);
+    expect(srcManifest.text).toContain("\"name\":\"My Design\"");
+
+    await call("DELETE", `/api/projects/${body.id}`);
+    await call("DELETE", "/api/projects/p_src");
+  });
+
+  it("fork — returns 404 for missing source project", async () => {
+    const res = await call("POST", "/api/projects/p_nonexistent/fork", {});
+    expect(res.status).toBe(404);
+    expect(res.text).toContain("not found");
+  });
+
+  it("fork — name override is respected", async () => {
+    await call("POST", "/api/projects/create", { id: "p_named", name: "Original" });
+
+    const fork = await call("POST", "/api/projects/p_named/fork", { name: "My Custom Fork" });
+    expect(fork.status).toBe(200);
+    const body = JSON.parse(fork.text) as { id: string; manifest: Record<string, unknown> };
+    expect(body.manifest.name).toBe("My Custom Fork");
+    expect(body.manifest.originProjectId).toBe("p_named");
+
+    await call("DELETE", `/api/projects/${body.id}`);
+    await call("DELETE", "/api/projects/p_named");
   });
 });

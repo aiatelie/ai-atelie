@@ -159,6 +159,14 @@ export function attachStreamToThread(args: {
       entry.flushTimer = null;
     }
     if (!entry.textBuf && !entry.thinkBuf) return;
+    // Validate the target message exists before consuming the buffer.
+    // mutateAssistant returns early if the archive hasn't loaded or the
+    // thread was deleted; clearing the buffer before that check drops data.
+    const archive = libLoadThreads(entry.projectId);
+    const threadIdx = archive.threads.findIndex((t) => t.id === entry.threadId);
+    if (threadIdx === -1) return;
+    const m = archive.threads[threadIdx]?.messages?.[entry.msgIdx];
+    if (!m || m.role !== "assistant") return;
     const t = entry.textBuf; entry.textBuf = "";
     const k = entry.thinkBuf; entry.thinkBuf = "";
     mutateAssistant(entry, (m) => ({

@@ -98,6 +98,74 @@ export type { ProjectManifest };
 
 /* ─── Reload-script injection (HTML responses get this appended) ─── */
 
+/* The window.ai.complete() bridge — injected into every artifact HTML
+ * so a sandboxed iframe (which can't reach the parent's fetch) can call
+ * an LLM at runtime. Provider-neutral: the host routes the call through
+ * whatever the project's chat is configured to use (Claude Code, Kimi,
+ * OpenCode → any provider OpenCode supports). Artifact code never names
+ * a specific vendor.
+ *
+ * See AGENTS.md → "Runtime AI in artifacts" for the end-to-end story.
+ *
+ *   1. The artifact calls `await window.ai.complete("hello")`.
+ *   2. The bridge generates a unique request id and posts
+ *      `{ type: "__ai_complete", id, payload }` to window.parent.
+ *   3. The host (web/src/lib/tweakBridge.ts) forwards to
+ *      /api/artifacts/complete with the active modelId, and posts back
+ *      `{ type: "__ai_complete_response", id, result | error }`.
+ *   4. The bridge resolves / rejects the original Promise.
+ *
+ * `window.claude.complete()` is exposed as an alias so any artifacts
+ * already authored against the legacy name keep working. The legacy
+ * postMessage type `__claude_complete` is still understood by the host.
+ *
+ * 30s timeout rejects pending calls so a frozen parent can't leak
+ * Promises. Self-contained, idempotent, tiny enough to inline.
+ */
+const AI_COMPLETE_BRIDGE = `
+<script>(function(){
+  try {
+    if (window.ai && typeof window.ai.complete === "function") return;
+    var pending = Object.create(null);
+    window.addEventListener("message", function(e){
+      var d = e.data;
+      if (!d) return;
+      // Accept both the canonical and the legacy response type so a
+      // host running the older bridge still talks to a newer artifact.
+      if (d.type !== "__ai_complete_response" && d.type !== "__claude_complete_response") return;
+      var p = pending[d.id];
+      if (!p) return;
+      delete pending[d.id];
+      if (d.error) p.reject(new Error(d.error));
+      else p.resolve(d.result);
+    });
+    function complete(promptOrOptions){
+      return new Promise(function(resolve, reject){
+        var id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        pending[id] = { resolve: resolve, reject: reject };
+        try {
+          window.parent.postMessage({ type: "__ai_complete", id: id, payload: promptOrOptions }, "*");
+        } catch (err) {
+          delete pending[id];
+          reject(err);
+          return;
+        }
+        setTimeout(function(){
+          if (pending[id]) {
+            delete pending[id];
+            reject(new Error("window.ai.complete() timed out after 30s"));
+          }
+        }, 30000);
+      });
+    }
+    window.ai = { complete: complete };
+    // Legacy alias — kept so artifacts authored against the old name
+    // keep working. Drop in a future release once nothing references it.
+    window.claude = { complete: complete };
+  } catch(e) { /* injection failure shouldn't break the artifact */ }
+})();</script>
+`;
+
 function injectReloadClient(html: string, id: string): string {
   // The SSE-driven reload listener wired into every HTML response, plus
   // the auto-tweaks bridge. Both run inside the iframe and both want
@@ -126,8 +194,12 @@ function injectReloadClient(html: string, id: string): string {
 }catch(e){}})();</script>
 <script src="/tweaks-bridge.js" defer></script>
 `;
-  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, snippet + "</body>");
-  return html + snippet;
+  // Inject both bridges before </body> when present, otherwise append.
+  // Order: the ai bridge first so window.ai.complete is defined before
+  // any inline script in the artifact has a chance to call it.
+  const combined = AI_COMPLETE_BRIDGE + snippet;
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, combined + "</body>");
+  return html + combined;
 }
 
 /* ─── Synthetic component preview ─── */
@@ -632,6 +704,58 @@ projectsRoutes.delete("/api/projects/:id", async (c) => {
     await getRepos().projects.delete(id);
     broadcastShared("projects");
     return c.json({ deleted: id });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+/** POST /api/projects/:id/fork — copy design files into a new project.
+ *  Body: { name?: string } — optional name override; defaults to
+ *  "{originalName} (Remix)". Increments the suffix for repeated forks:
+ *  (Remix 2), (Remix 3), etc. so names stay distinct.
+ *  Returns the new project's manifest. */
+projectsRoutes.post("/api/projects/:id/fork", async (c) => {
+  const sourceId = c.req.param("id");
+  if (!ID_RE.test(sourceId)) return c.json({ error: "Invalid project id" }, 400);
+  if (!await requireProject(sourceId)) return c.json({ error: "Project not found" }, 404);
+
+  let body: { name?: string } = {};
+  try { body = await c.req.json().catch(() => ({})); }
+  catch { body = {}; }
+
+  // Derive default name from the source manifest.
+  const sourceManifest = await getRepos().projects.getManifest(sourceId);
+  if (!sourceManifest) return c.json({ error: "Project not found" }, 404);
+
+  let newName: string;
+  if (typeof body.name === "string" && body.name.trim().length > 0) {
+    // Caller-supplied name: trim + cap at 200 chars (matches the intent of
+    // createProject's lightweight sanitization).
+    newName = body.name.trim().slice(0, 200);
+  } else {
+    // Auto-derive: strip any trailing "(Remix)" / "(Remix N)" and re-apply
+    // with the next counter so repeated forks don't collide.
+    const base = sourceManifest.name.replace(/\s*\(Remix(?:\s+\d+)?\)\s*$/, "").trim();
+    // Find existing projects whose names are "base (Remix)" or "base (Remix N)".
+    const existingNames = new Set(
+      (await getRepos().projects.list()).map((p) => p.name),
+    );
+    const candidate = `${base} (Remix)`;
+    if (!existingNames.has(candidate)) {
+      newName = candidate;
+    } else {
+      // Try (Remix 2), (Remix 3), … until we find a free slot.
+      let n = 2;
+      while (existingNames.has(`${base} (Remix ${n})`)) n++;
+      newName = `${base} (Remix ${n})`;
+    }
+  }
+
+  const newId = newProjectId();
+  try {
+    const manifest = await getRepos().projects.fork(sourceId, newId, newName);
+    broadcastShared("projects");
+    return c.json({ id: newId, manifest });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }

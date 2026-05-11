@@ -44,7 +44,7 @@
 
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { ENV, screenshotDirFor } from "../../env.ts";
+import { screenshotDirFor } from "../../env.ts";
 import { preparePromptForPayload, UUID_RE } from "../../services/promptBuilder.ts";
 import { registerChild, unregisterChild } from "../../services/runRegistry.ts";
 import type { AgentAdapter, AgentProbe } from "../types.ts";
@@ -376,9 +376,14 @@ export const opencodeAdapter: AgentAdapter = {
     bashAllowedInSandbox: false,
     silentTimeoutMs: OPENCODE_SILENT_LIMIT_MS,
     supportsPrewarmPool: false,
+    supportsCompletion: true,
   },
   async run({ payload, send, abortSignal, baseUrl, streamId }) {
     return runOpenCode(payload, send, abortSignal, baseUrl, streamId);
+  },
+  async complete(args) {
+    const { opencodeComplete } = await import("./complete.ts");
+    return opencodeComplete(args);
   },
   probe: probeOpenCode,
 };

@@ -37,7 +37,9 @@ function ensure(url: string) {
     es.onmessage = (e) => {
       const set = listeners.get(url);
       if (!set) return;
-      for (const cb of set) cb(e.data);
+      for (const cb of set) {
+        try { cb(e.data); } catch { /* a stale listener shouldn't kill the fanout */ }
+      }
     };
     sources.set(url, es);
   } catch { /* EventSource unsupported */ }

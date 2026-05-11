@@ -9,6 +9,8 @@ import { defineConfig } from "@playwright/test";
 // spawn a parallel one (HMR conflicts with dual `bun run dev` are
 // hostile). If the server is NOT running, Playwright will start it
 // for the duration of the test run and tear it down after.
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173";
+
 export default defineConfig({
   testDir: "./web/tests/e2e",
   outputDir: "./test-results",
@@ -24,7 +26,7 @@ export default defineConfig({
     ["html", { outputFolder: "playwright-report", open: "never" }],
   ],
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: BASE_URL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     // Video: 'on' keeps a .webm of every run (used by the
@@ -35,7 +37,7 @@ export default defineConfig({
   },
   webServer: {
     command: "bun run dev",
-    url: "http://localhost:5173",
+    url: BASE_URL,
     reuseExistingServer: true,
     timeout: 120_000,
   },

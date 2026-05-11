@@ -12,6 +12,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import { mkdirSync, realpathSync } from "node:fs";
 import { watch } from "node:fs";
 import {
   appendFile,
@@ -24,6 +25,7 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import type {
   AppendLog,
@@ -65,7 +67,22 @@ function etagFromMtime(mtimeMs: number): ETag {
 }
 
 function isInside(parent: string, child: string): boolean {
-  return child === parent || child.startsWith(parent + "/");
+  try {
+    const realParent = realpathSync(parent);
+    const realChild = realpathSync(child);
+    return realChild === realParent || realChild.startsWith(realParent + "/");
+  } catch {
+    return child === parent || child.startsWith(parent + "/");
+  }
+}
+
+/** Resolve symlinks for a root path, creating it first if missing.
+ *  Used at driver init so an absent SHARED_ROOT (web/.data is not
+ *  checked in) doesn't crash the first request with ENOENT. */
+function ensureRealpath(p: string): string {
+  const abs = resolvePath(p);
+  try { mkdirSync(abs, { recursive: true }); } catch { /* read-only or permission issue; let realpath/use-time error surface */ }
+  try { return realpathSync(abs); } catch { return abs; }
 }
 
 /** Path traversal guard for BlobStore. Rejects absolute paths, `..`,
@@ -86,13 +103,18 @@ function safeBlobPath(root: string, rel: string): string | null {
 
 async function atomicWriteFile(path: string, data: Uint8Array | string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  const tmp = path + ".tmp";
-  if (typeof data === "string") {
-    await writeFile(tmp, data, "utf8");
-  } else {
-    await writeFile(tmp, data);
+  const tmp = `${path}.${randomUUID()}.tmp`;
+  try {
+    if (typeof data === "string") {
+      await writeFile(tmp, data, "utf8");
+    } else {
+      await writeFile(tmp, data);
+    }
+    await rename(tmp, path);
+  } catch (err) {
+    try { await unlink(tmp); } catch { /* best-effort cleanup */ }
+    throw err;
   }
-  await rename(tmp, path);
 }
 
 async function statOrNull(path: string): Promise<BlobStat | null> {
@@ -520,8 +542,16 @@ function createFsAppendLog(metaDir: string): AppendLog & { __destroy(): void } {
 /* ─── Driver assembly ────────────────────────────────────────────── */
 
 export function createFsDriver(opts: FsDriverOptions): StorageDriver {
-  const projectsRoot = resolvePath(opts.projectsRoot);
-  const sharedRoot = resolvePath(opts.sharedRoot);
+  // Resolve symlinks once at init so every isInside() call in the hot
+  // path hits the VFS cache instead of walking /var→/private/var on
+  // every blob operation. macOS /tmp→/private/tmp is the main case.
+  // Roots may not exist yet on a fresh checkout (web/.data isn't in
+  // git); create them first so realpathSync doesn't throw ENOENT and
+  // sink the first storage call. Fall back to the resolved path if
+  // even mkdir fails (read-only volume, permissions) — the actual
+  // storage operations will surface a clearer error at use time.
+  const projectsRoot = ensureRealpath(opts.projectsRoot);
+  const sharedRoot = ensureRealpath(opts.sharedRoot);
   const reloadDebounceMs = opts.reloadDebounceMs ?? 250;
 
   // Lazy per-project caches. Created on first project(id) call.

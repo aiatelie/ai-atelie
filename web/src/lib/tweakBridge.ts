@@ -1,5 +1,6 @@
 /* tweakBridge.ts — host side of the `make-tweakable` contract
- * + iframe self-description for canvas-aware UI choices.
+ * + iframe self-description for canvas-aware UI choices
+ * + window.ai.complete() proxy.
  *
  * Listens for postMessage events from the project iframe:
  *   { type: '__edit_mode_available', defaults? } → page can be tweaked.
@@ -16,6 +17,13 @@
  *   { type: '__page_is_canvas' }         → page is a workshop (DesignCanvas):
  *                                          owns its own viewport, suppress the
  *                                          editor's device-frame mode.
+ *   { type: '__ai_complete', id, payload }  → artifact called
+ *                                          window.ai.complete(); proxy to
+ *                                          /api/artifacts/complete (with the
+ *                                          active modelId) and post
+ *                                          __ai_complete_response back.
+ *                                          `__claude_complete` accepted as a
+ *                                          legacy alias.
  *
  * Sends to the iframe in response to the toolbar toggle:
  *   { type: '__activate_edit_mode' }     → show the in-page Tweaks panel
@@ -45,6 +53,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { loadModelId } from "../components/editor/ModelPicker";
 
 /** Plain values you'd find in an EDITMODE block — the JSON the host
  *  panel knows how to render typed controls for. */
@@ -122,7 +131,8 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
 
   // Window-level message listener. Gate on origin AND source so only the
   // project iframe can post messages we act on — prevents any hostile
-  // page framed inside an artifact from injecting tweak edits.
+  // page framed inside an artifact from injecting tweak edits or
+  // window.ai.complete() proxy calls.
   useEffect(() => {
     const onMsg = async (e: MessageEvent) => {
       // Security: accept only same-origin messages from the known iframe.
@@ -131,7 +141,13 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
       if (expectedSource && e.source !== expectedSource) return;
 
       const data = e.data as
-        | { type?: string; edits?: Record<string, unknown>; defaults?: Record<string, unknown> }
+        | {
+            type?: string;
+            edits?: Record<string, unknown>;
+            defaults?: Record<string, unknown>;
+            id?: string;
+            payload?: unknown;
+          }
         | undefined;
       if (!data || typeof data.type !== "string") return;
 
@@ -168,6 +184,83 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
         const edits = data.edits;
         if (!edits || typeof edits !== "object") return;
         await persistEdits(projectIdRef.current, activeFileRef.current, edits);
+        return;
+      }
+      if (data.type === "__ai_complete" || data.type === "__claude_complete") {
+        // Artifact called window.ai.complete() (or the legacy
+        // window.claude.complete()). Proxy to /api/artifacts/complete
+        // with the user's currently-selected model so the server
+        // dispatches through the right adapter (claude / kimi /
+        // opencode / whatever opencode is fanning out to). Post the
+        // response back to the originating iframe via e.source so we
+        // route to the right window even if multiple iframes are
+        // mounted — iframeRef may not be the one that fired this.
+        // Origin is already validated at the top of this handler.
+        //
+        // Reply with both response types so artifacts authored against
+        // the legacy `__claude_complete_response` listener still resolve.
+
+        const id = typeof data.id === "string" ? data.id : null;
+        const source = e.source as Window | null;
+        if (!id || !source) return;
+        const reply = (msg: { result?: string; error?: string }) => {
+          const payload = { id, ...msg };
+          try {
+            source.postMessage(
+              { type: "__ai_complete_response", ...payload },
+              window.location.origin,
+            );
+            // Legacy alias for back-compat with artifacts that only
+            // listen for __claude_complete_response.
+            source.postMessage(
+              { type: "__claude_complete_response", ...payload },
+              window.location.origin,
+            );
+          } catch {
+            /* iframe may have unmounted; nothing to do */
+          }
+        };
+        const payload = data.payload;
+        const body: Record<string, unknown> =
+          typeof payload === "string"
+            ? { prompt: payload }
+            : (payload as Record<string, unknown> | null) ?? {};
+        // Always tag the request with the active model so the server
+        // can pickAdapter() exactly the same way the agent path does.
+        // localStorage read; falls back to the global default when
+        // unset (handled by pickAdapter on the server).
+        body.modelId = loadModelId();
+
+        const controller = new AbortController();
+        const TIMEOUT_MS = 28_000;
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+        try {
+          const res = await fetch("/api/artifacts/complete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          const json = (await res.json().catch(() => ({}))) as {
+            text?: string;
+            error?: string;
+          };
+          if (!res.ok) {
+            reply({ error: json.error ?? `HTTP ${res.status}` });
+          } else {
+            reply({ result: typeof json.text === "string" ? json.text : "" });
+          }
+        } catch (err) {
+          clearTimeout(timer);
+          if (err instanceof Error && err.name === "AbortError") {
+            reply({ error: "request timed out" });
+          } else {
+            reply({ error: err instanceof Error ? err.message : "fetch failed" });
+          }
+        }
+        return;
       }
     };
     window.addEventListener("message", onMsg);

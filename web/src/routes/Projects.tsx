@@ -21,17 +21,37 @@ import { Skeleton } from "../components/feedback";
 import {
   createProject,
   deleteProject,
+  forkProject,
   setActiveProject,
   updateProject,
   useProjects,
   type Project,
 } from "../lib/projects";
 
+type SortKey = "recently-used" | "recently-created" | "name";
+
+const SORT_KEY = "projects.sortPref";
+
+function readSortPref(): SortKey {
+  if (typeof window === "undefined") return "recently-used";
+  try {
+    const v = localStorage.getItem(SORT_KEY);
+    if (v === "recently-used" || v === "recently-created" || v === "name") return v;
+  } catch { /* ignore */ }
+  return "recently-used";
+}
+
+function writeSortPref(v: SortKey): void {
+  try { localStorage.setItem(SORT_KEY, v); } catch { /* ignore */ }
+}
+
 export default function Projects() {
   const { all, loading } = useProjects();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>(readSortPref);
 
   // `?journey-mode=1` filters the home grid to the demo project + any
   // project whose name starts with "Journey · ". The journey suite
@@ -40,9 +60,25 @@ export default function Projects() {
   // users never see the param so behavior is unchanged for them.
   const journeyMode = params.get("journey-mode") === "1";
   const visible = useMemo(() => {
-    if (!journeyMode) return all;
-    return all.filter((p) => p.id === "demo" || p.name.startsWith("Journey · "));
-  }, [all, journeyMode]);
+    let list = journeyMode
+      ? all.filter((p) => p.id === "demo" || p.name.startsWith("Journey · "))
+      : all;
+
+    // Search filter — case-insensitive substring on name.
+    const q = query.trim().toLowerCase();
+    if (q) list = list.filter((p) => p.name.toLowerCase().includes(q));
+
+    // Sort.
+    const sorted = [...list];
+    if (sort === "recently-used") {
+      sorted.sort((a, b) => b.updatedAt - a.updatedAt);
+    } else if (sort === "recently-created") {
+      sorted.sort((a, b) => b.createdAt - a.createdAt);
+    } else {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    }
+    return sorted;
+  }, [all, journeyMode, query, sort]);
 
   const openProject = (id: string) => {
     setActiveProject(id);
@@ -62,6 +98,13 @@ export default function Projects() {
     // bigger composer, starter chips) and the same intake prompt fires
     // automatically.
     navigate("/editor?fresh=1");
+  };
+
+  /** Fork a project and navigate directly into the forked editor. */
+  const handleFork = async (sourceId: string) => {
+    const p = await forkProject(sourceId);
+    setActiveProject(p.id);
+    navigate("/editor");
   };
 
   return (
@@ -86,29 +129,65 @@ export default function Projects() {
         </aside>
 
         <main className={s.main}>
-          <nav className={s.tabstrip} aria-label="Home sections">
-            <button
-              type="button"
-              className={s.tab}
-              data-active="true"
-              aria-current="page"
-            >
-              Projects
-              {!loading && (
-                <span className={s.tabCount} aria-label={`${visible.length} projects`}>
-                  {visible.length}
-                </span>
-              )}
-            </button>
-          </nav>
+          <div className={s.tabrow}>
+            <nav className={s.tabstrip} aria-label="Home sections">
+              <button
+                type="button"
+                className={s.tab}
+                data-active="true"
+                aria-current="page"
+              >
+                Projects
+                {!loading && (
+                  <span className={s.tabCount} aria-label={`${visible.length} projects`}>
+                    {visible.length}
+                  </span>
+                )}
+              </button>
+            </nav>
+            <div className={s.toolbar}>
+              <div className={s.searchWrap}>
+                <svg className={s.searchIcon} width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="6.5" cy="6.5" r="4.5" />
+                  <line x1="10.5" y1="10.5" x2="14" y2="14" />
+                </svg>
+                <input
+                  type="search"
+                  className={s.searchInput}
+                  placeholder="Search projects…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  data-testid="project-search"
+                  aria-label="Search projects"
+                />
+              </div>
+              <div className={s.sortWrap}>
+                <select
+                  className={s.sortSelect}
+                  value={sort}
+                  onChange={(e) => {
+                    const v = e.target.value as SortKey;
+                    setSort(v);
+                    writeSortPref(v);
+                  }}
+                  data-testid="project-sort"
+                  aria-label="Sort projects"
+                >
+                  <option value="recently-used">Recently used</option>
+                  <option value="recently-created">Recently created</option>
+                  <option value="name">Name</option>
+                </select>
+              </div>
+            </div>
+          </div>
 
           <div className={s.mainBody}>
-            {visible.length === 0 ? (
-              loading ? (
-                <LoadingSkeleton />
-              ) : (
-                <EmptyState />
-              )
+            {loading && visible.length === 0 ? (
+              <LoadingSkeleton />
+            ) : visible.length === 0 && query.trim() ? (
+              <NoSearchResults query={query.trim()} />
+            ) : visible.length === 0 ? (
+              <EmptyState />
             ) : (
               <div className={s.grid}>
                 {visible.map((p) => (
@@ -118,6 +197,7 @@ export default function Projects() {
                     onOpen={() => openProject(p.id)}
                     onDelete={() => setDeleting(p)}
                     onRename={(next) => updateProject(p.id, { name: next })}
+                    onFork={() => handleFork(p.id)}
                   />
                 ))}
               </div>
@@ -186,19 +266,38 @@ function EmptyState() {
   );
 }
 
+function NoSearchResults({ query }: { query: string }) {
+  return (
+    <div className={s.noResults}>
+      <span className={s.noResultsIcon} aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="6.5" cy="6.5" r="4.5" />
+          <line x1="10.5" y1="10.5" x2="14" y2="14" />
+          <line x1="5" y1="6.5" x2="8" y2="6.5" />
+        </svg>
+      </span>
+      <p className={s.noResultsText}>
+        No projects match &ldquo;{query}&rdquo;. Try a different search.
+      </p>
+    </div>
+  );
+}
+
 function ProjectCard({
-  project, onOpen, onDelete, onRename,
+  project, onOpen, onDelete, onRename, onFork,
 }: {
   project: Project;
   onOpen: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
+  onFork: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(project.name);
 
   const tabsLabel = `${project.openTabs.length} tab${project.openTabs.length === 1 ? "" : "s"}`;
   const lastUpdated = formatTime(project.updatedAt);
+  const isRemix = !!project.originProjectId;
 
   if (editing) {
     return (
@@ -226,6 +325,14 @@ function ProjectCard({
   return (
     <div className={s.card} onClick={onOpen}>
       <div className={s.cardName}>{project.name}</div>
+      {isRemix && (
+        <div className={s.cardRemixMeta}>
+          <span className={s.cardRemixBadge}>Remix</span>
+          {project.originProjectName && (
+            <span className={s.cardRemixFrom}>from {project.originProjectName}</span>
+          )}
+        </div>
+      )}
       <div className={s.tabsList}>
         {project.openTabs.slice(0, 5).map((t) => (
           <span key={t.id} className={s.tabPill}>{t.label}</span>
@@ -240,6 +347,22 @@ function ProjectCard({
         <span>{lastUpdated}</span>
       </div>
       <div className={s.cardActions}>
+        <button
+          className={s.cardActBtn}
+          data-testid="project-fork"
+          onClick={(e) => { e.stopPropagation(); onFork(); }}
+          title="Fork project"
+        >
+          {/* Y-shape branch glyph — clearer "fork" read at 14px than
+              the full octicon which gets muddy at small sizes. */}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="4" cy="3" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="10" cy="3" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="7" cy="11" r="1.5" fill="currentColor" stroke="none" />
+            <path d="M4 4.5 L4 6 Q4 8 7 9.5" />
+            <path d="M10 4.5 L10 6 Q10 8 7 9.5" />
+          </svg>
+        </button>
         <button
           className={s.cardActBtn}
           onClick={(e) => { e.stopPropagation(); setEditing(true); }}
