@@ -589,6 +589,16 @@ projectsRoutes.post("/api/projects/:id/tweak", async (c) => {
           unknownKeys,
         }, 422);
       }
+      // The `_meta` sidecar is authored-only — it carries control hints
+      // (min/max/swatches/options/etc.) and is not a user-editable knob.
+      // The host bridge already strips it before applying edits, but
+      // belt-and-braces here so a malicious or buggy client can't
+      // rewrite the schema via /tweak.
+      if (Object.prototype.hasOwnProperty.call(body.edits!, "_meta")) {
+        return c.json({
+          error: "The `_meta` key is authored-only and cannot be edited via /tweak",
+        }, 422);
+      }
       const merged = { ...parsed, ...body.edits };
       // Escape `*/` in output so it never terminates the EDITMODE-END marker.
       const afterJson = escapeEditModeJson(JSON.stringify(merged, null, 2));

@@ -10,23 +10,31 @@
  *   3. POSTs /api/projects/:id/tweak so the edit lands in source
  *      between the EDITMODE markers and survives reload.
  *
- * Control mapping (derived from the value's runtime type):
- *   string starting with `#`  → <input type="color">
- *   number                    → <input type="range"> + numeric readout
- *   boolean                   → checkbox toggle
- *   string with newlines OR
- *     length > 60             → <textarea>
- *   string (everything else)  → <input type="text">
+ * Control mapping (in order of precedence):
+ *   1. `_meta.<key>.swatches: string[]`  →  curated swatch picker
+ *   2. `_meta.<key>.options:  string[]`  →  <select> dropdown
+ *   3. runtime type of the value:
+ *        string starting with `#`  → <input type="color"> + hex text
+ *        number                    → <input type="range"> + numeric readout
+ *        boolean                   → checkbox toggle
+ *        string with newlines OR
+ *          length > 60             → <textarea>
+ *        string (everything else)  → <input type="text">
  *
- * The panel is intentionally dumb — no schema, no priorities. The keys
- * come from whatever the artifact author put in their EDITMODE block;
- * we just reflect them. If the agent wants nicer labels, it can name
- * keys camelCase ("primaryColor") and we humanize them on display.
+ * `_meta.<key>.{min,max,step,unit,label,help}` refine the runtime-type
+ * mapping (proper-range slider, unit suffix, label override, caption).
+ *
+ * The panel stays dumb. The agent author owns the schema (via `_meta`)
+ * AND the runtime values; we just reflect them.
  */
 
 import { useEffect, useRef, useState } from "react";
 import s from "./editor.module.css";
-import type { TweakBridge, TweakValue } from "../../lib/tweakBridge";
+import type {
+  TweakBridge,
+  TweakFieldMeta,
+  TweakValue,
+} from "../../lib/tweakBridge";
 
 type Props = {
   bridge: TweakBridge;
@@ -39,7 +47,8 @@ type Props = {
 };
 
 /** "primaryColor" → "Primary color"; "fontSize" → "Font size".
- *  Pure cosmetic — JSON keys are the source of truth. */
+ *  Pure cosmetic — JSON keys are the source of truth. Overridden by
+ *  `_meta.<key>.label` when the author wants a custom display name. */
 function humanizeKey(k: string): string {
   const spaced = k
     .replace(/[_-]+/g, " ")
@@ -59,7 +68,7 @@ function isLongString(v: string): boolean {
 }
 
 export function TweaksPanel({ bridge, activeFile, onClose }: Props) {
-  const { defaults, applyEdits } = bridge;
+  const { defaults, meta, applyEdits } = bridge;
 
   if (!defaults || Object.keys(defaults).length === 0) {
     return (
@@ -116,6 +125,7 @@ export function TweaksPanel({ bridge, activeFile, onClose }: Props) {
             key={key}
             name={key}
             value={value}
+            meta={meta?.[key]}
             onChange={(next) => applyEdits({ [key]: next })}
           />
         ))}
@@ -145,6 +155,13 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 600,
 };
 
+const helpStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--ink-44)",
+  lineHeight: 1.35,
+  marginTop: -2,
+};
+
 const rowStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -167,10 +184,12 @@ const inputStyle: React.CSSProperties = {
 function Field({
   name,
   value,
+  meta,
   onChange,
 }: {
   name: string;
   value: TweakValue;
+  meta?: TweakFieldMeta;
   onChange: (next: TweakValue) => void;
 }) {
   // Local state so the input stays responsive even when the parent
@@ -191,6 +210,38 @@ function Field({
     onChange(v);
   };
 
+  // The label + help caption are shared by every control variant.
+  const label = meta?.label ?? humanizeKey(name);
+  const help = meta?.help;
+
+  // ─── meta.options first — works for any string value ─────────────
+  // (When the author wants a fixed set, that beats every other
+  // heuristic — even color hex strings.)
+  if (meta?.options && (typeof value === "string" || typeof local === "string")) {
+    const sv = typeof local === "string" ? local : String(value);
+    return (
+      <div style={rowStyle}>
+        <span style={labelStyle}>{label}</span>
+        <select
+          value={sv}
+          onChange={(e) => commit(e.target.value)}
+          style={inputStyle}
+          aria-label={label}
+        >
+          {/* Surface unknown values too so we don't silently drop them
+              if the artifact's source carries something not in options. */}
+          {!meta.options.includes(sv) && (
+            <option value={sv}>{sv} (current)</option>
+          )}
+          {meta.options.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+        {help && <div style={helpStyle}>{help}</div>}
+      </div>
+    );
+  }
+
   if (typeof value === "boolean" || typeof local === "boolean") {
     const b = typeof local === "boolean" ? local : Boolean(value);
     return (
@@ -199,26 +250,34 @@ function Field({
           type="checkbox"
           checked={b}
           onChange={(e) => commit(e.target.checked)}
-          aria-label={humanizeKey(name)}
+          aria-label={label}
         />
         <span style={{ ...labelStyle, textTransform: "none", letterSpacing: 0, fontSize: 13, fontWeight: 500, color: "var(--ink-92)" }}>
-          {humanizeKey(name)}
+          {label}
         </span>
+        {help && <span style={helpStyle}>{help}</span>}
       </label>
     );
   }
 
   if (typeof value === "number" || typeof local === "number") {
     const n = typeof local === "number" ? local : Number(value);
-    // Heuristic range — pick a sensible min/max around the seed so the
-    // slider feels useful without forcing the artifact to declare a
-    // schema. Most tweaks are sizes (4–120 px) or 0–100 percentages.
-    const min = Math.min(0, n - Math.max(1, Math.abs(n)) * 2);
-    const max = Math.max(n + Math.max(1, Math.abs(n)) * 2, n + 1);
-    const step = Math.abs(n) > 10 ? 1 : 0.1;
+    // Meta-declared range wins. Heuristic fallback when absent picks a
+    // sensible min/max around the seed so the slider feels useful
+    // without forcing the artifact to declare a schema for every knob.
+    const min = typeof meta?.min === "number"
+      ? meta.min
+      : Math.min(0, n - Math.max(1, Math.abs(n)) * 2);
+    const max = typeof meta?.max === "number"
+      ? meta.max
+      : Math.max(n + Math.max(1, Math.abs(n)) * 2, n + 1);
+    const step = typeof meta?.step === "number"
+      ? meta.step
+      : Math.abs(n) > 10 ? 1 : 0.1;
+    const unit = meta?.unit ?? "";
     return (
       <div style={rowStyle}>
-        <span style={labelStyle}>{humanizeKey(name)}</span>
+        <span style={labelStyle}>{label}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input
             type="range"
@@ -228,20 +287,30 @@ function Field({
             value={n}
             onChange={(e) => commit(Number(e.target.value))}
             style={{ flex: 1 }}
-            aria-label={humanizeKey(name)}
+            aria-label={label}
           />
-          <input
-            type="number"
-            value={n}
-            step={step}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (Number.isFinite(v)) commit(v);
-            }}
-            style={{ ...inputStyle, width: 64, fontFamily: "var(--font-mono)", fontSize: 12 }}
-            aria-label={`${humanizeKey(name)} (numeric)`}
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <input
+              type="number"
+              value={n}
+              step={step}
+              min={typeof meta?.min === "number" ? meta.min : undefined}
+              max={typeof meta?.max === "number" ? meta.max : undefined}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isFinite(v)) commit(v);
+              }}
+              style={{ ...inputStyle, width: 64, fontFamily: "var(--font-mono)", fontSize: 12 }}
+              aria-label={`${label} (numeric)`}
+            />
+            {unit && (
+              <span style={{ fontSize: 11, color: "var(--ink-44)", fontFamily: "var(--font-mono)" }}>
+                {unit}
+              </span>
+            )}
+          </div>
         </div>
+        {help && <div style={helpStyle}>{help}</div>}
       </div>
     );
   }
@@ -249,16 +318,74 @@ function Field({
   // From here on the value is a string.
   const sv = typeof local === "string" ? local : String(value);
 
+  // ─── Curated swatch picker ────────────────────────────────────────
+  // When meta.swatches is present, render the curated row INSTEAD of
+  // the free hex picker. Curated > free for design intent: the author
+  // picked the palette, the user picks within it.
+  if (isHexColor(value) && meta?.swatches && meta.swatches.length > 0) {
+    return (
+      <div style={rowStyle}>
+        <span style={labelStyle}>{label}</span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {meta.swatches.map((swatch) => {
+            const active = sv.toLowerCase() === swatch.toLowerCase();
+            return (
+              <button
+                key={swatch}
+                type="button"
+                onClick={() => commit(swatch)}
+                aria-label={`${label}: ${swatch}`}
+                aria-pressed={active}
+                title={swatch}
+                style={{
+                  width: 28,
+                  height: 28,
+                  padding: 0,
+                  borderRadius: 999,
+                  cursor: "pointer",
+                  background: swatch,
+                  border: active
+                    ? "2px solid var(--ink-92)"
+                    : "1px solid var(--ink-15)",
+                  // Inset shadow so the swatch stays legible against a
+                  // matching panel background — without this a #FFFFFF
+                  // swatch on a paper-cream surface would be invisible.
+                  boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
+                  transition: "transform 0.12s ease",
+                  transform: active ? "scale(1.08)" : "scale(1)",
+                }}
+              />
+            );
+          })}
+          {/* Surface the current value as text so users see what's
+              live even when it isn't one of the curated swatches. */}
+          <span
+            style={{
+              alignSelf: "center",
+              fontSize: 11,
+              color: "var(--ink-44)",
+              fontFamily: "var(--font-mono)",
+              marginLeft: 4,
+            }}
+          >
+            {sv}
+          </span>
+        </div>
+        {help && <div style={helpStyle}>{help}</div>}
+      </div>
+    );
+  }
+
   if (isHexColor(value) || isHexColor(local)) {
     return (
       <div style={rowStyle}>
-        <span style={labelStyle}>{humanizeKey(name)}</span>
+        <span style={labelStyle}>{label}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input
             type="color"
             value={sv}
             onChange={(e) => commit(e.target.value)}
-            aria-label={humanizeKey(name)}
+            aria-label={label}
             style={{
               width: 36,
               height: 28,
@@ -274,9 +401,10 @@ function Field({
             value={sv}
             onChange={(e) => commit(e.target.value)}
             style={{ ...inputStyle, fontFamily: "var(--font-mono)", fontSize: 12 }}
-            aria-label={`${humanizeKey(name)} (hex)`}
+            aria-label={`${label} (hex)`}
           />
         </div>
+        {help && <div style={helpStyle}>{help}</div>}
       </div>
     );
   }
@@ -284,28 +412,30 @@ function Field({
   if (isLongString(sv)) {
     return (
       <div style={rowStyle}>
-        <span style={labelStyle}>{humanizeKey(name)}</span>
+        <span style={labelStyle}>{label}</span>
         <textarea
           value={sv}
           onChange={(e) => commit(e.target.value)}
           rows={3}
           style={{ ...inputStyle, resize: "vertical", minHeight: 56, fontFamily: "var(--font-system)" }}
-          aria-label={humanizeKey(name)}
+          aria-label={label}
         />
+        {help && <div style={helpStyle}>{help}</div>}
       </div>
     );
   }
 
   return (
     <div style={rowStyle}>
-      <span style={labelStyle}>{humanizeKey(name)}</span>
+      <span style={labelStyle}>{label}</span>
       <input
         type="text"
         value={sv}
         onChange={(e) => commit(e.target.value)}
         style={inputStyle}
-        aria-label={humanizeKey(name)}
+        aria-label={label}
       />
+      {help && <div style={helpStyle}>{help}</div>}
     </div>
   );
 }

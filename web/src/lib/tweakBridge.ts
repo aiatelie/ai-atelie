@@ -60,6 +60,43 @@ import { loadModelId } from "../components/editor/ModelPicker";
 export type TweakValue = string | number | boolean;
 export type TweakDefaults = Record<string, TweakValue>;
 
+/** Per-key authoring hints (the optional `_meta` sidecar inside an
+ *  EDITMODE block). All fields are optional; the panel falls back to
+ *  runtime-type heuristics whenever a hint is absent.
+ *
+ *  Authoring example (inside the EDITMODE block):
+ *    {
+ *      "primaryColor": "#D97757",
+ *      "fontSize":     16,
+ *      "tone":         "Confident",
+ *      "_meta": {
+ *        "primaryColor": { "label": "Primary",
+ *                          "swatches": ["#D97757","#2657FF","#10B981","#0E1116"] },
+ *        "fontSize":     { "min": 8, "max": 48, "step": 1, "unit": "px" },
+ *        "tone":         { "options": ["Confident","Playful","Editorial"] }
+ *      }
+ *    } */
+export type TweakFieldMeta = {
+  /** Override the auto-humanized label (e.g. "primaryColor" → "Primary"
+   *  instead of "Primary color"). */
+  label?: string;
+  /** Optional one-line caption rendered below the control. */
+  help?: string;
+  /** Numeric controls — clamp + step. Use min/max for percentages (0–100)
+   *  or sizes (e.g. 8–48 px) so the slider doesn't pick a bad heuristic. */
+  min?: number;
+  max?: number;
+  step?: number;
+  /** Suffix the numeric readout (e.g. "px", "%", "ms"). Cosmetic only. */
+  unit?: string;
+  /** Hex colors — curated swatch picker instead of a free color input.
+   *  Each entry should be a valid #RGB / #RGBA / #RRGGBB / #RRGGBBAA. */
+  swatches?: string[];
+  /** Plain strings — render as a single-select dropdown. */
+  options?: string[];
+};
+export type TweakMeta = Record<string, TweakFieldMeta>;
+
 export type TweakBridge = {
   /** True when the current iframe page declared __edit_mode_available. */
   available: boolean;
@@ -75,6 +112,12 @@ export type TweakBridge = {
    *  when the iframe is the legacy kind that ships its own panel and
    *  doesn't expose its values to the host. */
   defaults: TweakDefaults | null;
+  /** Authoring hints from the optional `_meta` sidecar inside the
+   *  EDITMODE block. Each key matches a key in `defaults` (extras are
+   *  ignored). Empty / null when the block has no `_meta`. The panel
+   *  uses these to render proper-range sliders, curated swatches,
+   *  option dropdowns, custom labels, and help captions. */
+  meta: TweakMeta | null;
   /** Push a partial edit to the iframe AND persist it via /tweak. Used
    *  by the host-side Tweaks panel; the iframe applies edits live via
    *  CSS variables / data-tweak hooks / window.__applyTweaks. */
@@ -99,6 +142,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
   const [editing, setEditing] = useState(false);
   const [isCanvas, setIsCanvas] = useState(false);
   const [defaults, setDefaults] = useState<TweakDefaults | null>(null);
+  const [meta, setMeta] = useState<TweakMeta | null>(null);
 
   // Track latest activeFile in a ref so the message handler always picks
   // the current route, not whatever it was when the listener was attached.
@@ -118,6 +162,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
       setEditing(false);
       setIsCanvas(false);
       setDefaults(null);
+      setMeta(null);
     };
     ifr.addEventListener("load", onLoad);
     return () => ifr.removeEventListener("load", onLoad);
@@ -145,6 +190,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
             type?: string;
             edits?: Record<string, unknown>;
             defaults?: Record<string, unknown>;
+            meta?: Record<string, unknown>;
             id?: string;
             payload?: unknown;
           }
@@ -165,6 +211,38 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
             }
           }
           if (Object.keys(filtered).length > 0) setDefaults(filtered);
+        }
+        // The optional `meta` payload is the authoring schema sidecar
+        // (per-key hints — min/max/step/unit/swatches/options/label/help).
+        // Validate each entry's shape before accepting it so a typo'd
+        // field doesn't crash the panel render. Unknown fields are
+        // dropped silently.
+        const m = data.meta;
+        if (m && typeof m === "object" && !Array.isArray(m)) {
+          const filteredMeta: TweakMeta = {};
+          for (const [k, raw] of Object.entries(m)) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+            const r = raw as Record<string, unknown>;
+            const entry: TweakFieldMeta = {};
+            if (typeof r.label === "string") entry.label = r.label;
+            if (typeof r.help === "string") entry.help = r.help;
+            if (typeof r.min === "number") entry.min = r.min;
+            if (typeof r.max === "number") entry.max = r.max;
+            if (typeof r.step === "number" && r.step > 0) entry.step = r.step;
+            if (typeof r.unit === "string") entry.unit = r.unit;
+            if (Array.isArray(r.swatches)) {
+              const swatches = r.swatches.filter(
+                (x): x is string => typeof x === "string" && /^#[0-9a-fA-F]{3,8}$/.test(x.trim()),
+              );
+              if (swatches.length > 0) entry.swatches = swatches;
+            }
+            if (Array.isArray(r.options)) {
+              const options = r.options.filter((x): x is string => typeof x === "string");
+              if (options.length > 0) entry.options = options;
+            }
+            if (Object.keys(entry).length > 0) filteredMeta[k] = entry;
+          }
+          if (Object.keys(filteredMeta).length > 0) setMeta(filteredMeta);
         }
         return;
       }
@@ -318,7 +396,7 @@ export function useTweakBridge({ iframeRef, projectId, activeFile }: Args): Twea
     sendToIframe("__deactivate_edit_mode");
   }, [sendToIframe]);
 
-  return { available, editing, isCanvas, defaults, applyEdits, toggle, deactivate };
+  return { available, editing, isCanvas, defaults, meta, applyEdits, toggle, deactivate };
 }
 
 /** POST partial edits to /api/projects/:id/tweak so the EDITMODE-marked

@@ -5,11 +5,20 @@
  *
  * Contract (host ↔ iframe):
  *
- *   iframe → host  __edit_mode_available  { defaults: {…} }
+ *   iframe → host  __edit_mode_available  { defaults: {…}, meta?: {…} }
  *                  Sent on load if the document contains an EDITMODE
- *                  block. The `defaults` payload is the parsed JSON,
+ *                  block. The `defaults` payload is the parsed JSON
+ *                  (without the optional `_meta` sub-key, see below),
  *                  which the host uses to render typed controls
  *                  (color/range/text/checkbox).
+ *
+ *                  If the parsed JSON contains a `_meta` object, it is
+ *                  extracted before announcing and sent in `meta`. The
+ *                  host uses `meta[<key>]` to refine control rendering:
+ *                  numeric { min, max, step, unit }, hex { swatches: [..] }
+ *                  to render curated swatches instead of a free picker,
+ *                  string { options: [..] } for a select, plus
+ *                  { label, help } cosmetic overrides per key.
  *
  *   host  → iframe __activate_edit_mode    {}
  *                  No-op for the auto-bridge (the host owns the panel).
@@ -132,6 +141,28 @@
     return null;
   }
 
+  // Split a parsed EDITMODE object into { defaults, meta }. The optional
+  // `_meta` key is the per-knob schema sidecar (min/max/step/unit/
+  // swatches/options/label/help) used by the host to refine its
+  // control rendering. Defaults is everything else; meta is the
+  // `_meta` object (or null). The split happens here so downstream
+  // code never has to remember to skip `_meta`.
+  function splitMeta(parsed) {
+    if (!parsed) return { defaults: null, meta: null };
+    if (Object.prototype.hasOwnProperty.call(parsed, "_meta")) {
+      var meta = parsed._meta;
+      var defaults = {};
+      Object.keys(parsed).forEach(function (k) {
+        if (k !== "_meta") defaults[k] = parsed[k];
+      });
+      // Defensive: meta must be a plain object. Anything else (array,
+      // string, null) is dropped.
+      var validMeta = (meta && typeof meta === "object" && !Array.isArray(meta)) ? meta : null;
+      return { defaults: defaults, meta: validMeta };
+    }
+    return { defaults: parsed, meta: null };
+  }
+
   // ─── Apply incoming edits ──────────────────────────────────────
   function applyEdits(edits) {
     if (!edits || typeof edits !== "object") return;
@@ -225,14 +256,16 @@
     });
   }
 
-  function announce(defaults) {
+  function announce(defaults, meta) {
     if (!defaults) return;
     try {
       // Use explicit origin — both sides are same-origin.
-      window.parent.postMessage({
+      var payload = {
         type: "__edit_mode_available",
         defaults: defaults,
-      }, window.location.origin);
+      };
+      if (meta) payload.meta = meta;
+      window.parent.postMessage(payload, window.location.origin);
     } catch (e) { /* ignore */ }
   }
 
@@ -245,12 +278,15 @@
     // First try inline blocks — fastest path, no network.
     var inline = tryParse(findInline());
     if (inline) {
+      var splitInline = splitMeta(inline);
       registerListener();
       // Apply defaults once at startup so any saved state already
       // reflected in the source flows into CSS variables before paint
-      // settles (purely cosmetic — values may already match).
-      applyEdits(inline);
-      announce(inline);
+      // settles (purely cosmetic — values may already match). Note we
+      // pass the split `defaults` here — `_meta` would just dirty
+      // --_meta as a CSS var, no point.
+      applyEdits(splitInline.defaults);
+      announce(splitInline.defaults, splitInline.meta);
       return;
     }
     // Fallback to a raw fetch of our own URL. Artifacts that do all
@@ -260,9 +296,10 @@
       if (window.__editModeOwned) return;
       var parsed = tryParse(raw);
       if (!parsed) return;
+      var split = splitMeta(parsed);
       registerListener();
-      applyEdits(parsed);
-      announce(parsed);
+      applyEdits(split.defaults);
+      announce(split.defaults, split.meta);
     });
   }
 
