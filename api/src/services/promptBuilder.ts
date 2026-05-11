@@ -209,6 +209,16 @@ function buildLegacyPrompt(p: CommentPayload, attachmentPaths: string[]): string
     for (const path of attachmentPaths) lines.push(`- \`${path}\``);
     lines.push("Use the Read tool on any of those paths if your runtime supports image reads.");
   }
+  if (p.chipPreamble) {
+    lines.push(
+      "",
+      `## Composer posture for this turn`,
+      ``,
+      `The user has these composer chips active. Treat them as authoritative intent for THIS turn — they describe HOW to approach the task, separately from the user's literal comment below. Apply them unless they would conflict with a DESIGN.md directive or an active manifest skill, in which case prefer the manifest.`,
+      ``,
+      p.chipPreamble,
+    );
+  }
   lines.push(
     "",
     `**User's comment:**`,
@@ -317,6 +327,16 @@ async function buildSandboxPrompt(
     lines.push(
       `Reference these from your code edits using the project-relative path above.`,
       `Do NOT try to copy or rename them — they are already where they need to be.`,
+    );
+  }
+  if (p.chipPreamble) {
+    lines.push(
+      "",
+      `## Composer posture for this turn`,
+      ``,
+      `The user has these composer chips active. Treat them as authoritative intent for THIS turn — they describe HOW to approach the task, separately from the user's literal comment below. Apply them unless they would conflict with a DESIGN.md directive or an active manifest skill, in which case prefer the manifest.`,
+      ``,
+      p.chipPreamble,
     );
   }
   lines.push(

@@ -63,7 +63,7 @@ type Props = {
     text: string,
     attachments: Attachment[],
     modelId: string,
-    opts?: { includeCanvas?: boolean; skillsPreamble?: string },
+    opts?: { includeCanvas?: boolean; skillsPreamble?: string; activeChipIds?: string[] },
   ) => void;
   onRestore?: (m: Extract<ChatThread["messages"][number], { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;

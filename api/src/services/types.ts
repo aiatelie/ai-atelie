@@ -43,6 +43,14 @@ export type CommentPayload = {
   projectId?: string;
   /** When set, the AI is told to ONLY edit this single file (component canvas mode). */
   scopeFile?: string;
+  /** Composer-chip posture block for THIS turn. Pre-rendered Markdown
+   *  (one `### <Label>` heading per active chip, with the prompt body
+   *  underneath). Rendered by the prompt builder as a dedicated
+   *  "## Composer posture for this turn" section BEFORE the user's
+   *  comment — kept separate from `comment` so the user's typed text
+   *  stays cleanly attributable on the model side. Optional: when no
+   *  chips are active, the field is omitted and no section renders. */
+  chipPreamble?: string;
   /** Client-generated stream id (chatStream.newStreamId). When present
    *  AND well-formed, the server uses it as the registry key so a
    *  reloaded client can resume via GET /api/comment-edit/replay/:streamId.

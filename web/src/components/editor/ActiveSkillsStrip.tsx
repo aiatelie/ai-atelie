@@ -3,10 +3,12 @@
  * to change them.
  *
  * Surfaces the project's `manifest.design.active_skills` selection as
- * a compact chip strip rendered just above the chat composer. Without
- * this, users only see the selection in Settings → Skills, which is
- * easy to forget mid-conversation. With this strip the active set is
- * always one glance away.
+ * a compact chip strip rendered at the TOP of the chat sidebar, right
+ * under the thread tabs. Project-scope context belongs at the top with
+ * other project info (thread tabs); putting it just above the composer
+ * (as v1 did) crowded the textarea behind three rows of metadata. The
+ * "always one glance away" guarantee still holds — it's pinned above
+ * the message list, not scrolled into it.
  *
  * Click anywhere on the strip → opens Settings to the Skills section
  * (caller's responsibility, via the `onEdit` prop). Skills can be

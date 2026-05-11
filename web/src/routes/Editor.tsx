@@ -450,7 +450,7 @@ export default function Editor() {
   // below drains it once the turn ends. Scoped per thread so switching
   // threads mid-queue doesn't fire the queued message into a different
   // session.
-  const [queued, setQueued] = useState<(QueuedMessage & { threadId: string; target: CommentTarget | null; includeCanvas?: boolean; preamble?: string }) | null>(null);
+  const [queued, setQueued] = useState<(QueuedMessage & { threadId: string; target: CommentTarget | null; includeCanvas?: boolean; preamble?: string; chipPreamble?: string; activeChips?: string[] }) | null>(null);
   // Comments awaiting the post-stream "Resolve N promoted comments?"
   // confirmation strip (rendered above the comments list). Cleared on
   // confirm or dismiss. Scoped to one project — switching projects clears
@@ -713,18 +713,14 @@ export default function Editor() {
       streamId: retryStreamId,
       msgIdx: aIdx,
     });
-    // Apply the *current* chip posture to the retry. We don't persist
-    // the original-send preamble per message (the bubble only stores
-    // the typed text), so on retry we rebuild from the live chip state.
-    // Semantically right: chips are sticky posture for the project, so
-    // "retry this turn with my current chips on" matches what the user
-    // expects when they toggle a chip and hit retry. The opposite —
-    // replaying the exact original send byte-for-byte — would silently
-    // ignore the chip the user just turned on.
-    const retryPreamble = buildSkillsPreamble(loadActiveSkills(activeProject.id));
-    const retryComment = retryPreamble
-      ? `${retryPreamble}\n\n${userMsg.content}`
-      : userMsg.content;
+    // Apply the *current* chip posture to the retry. Chips are
+    // sticky-posture-for-the-project — "retry this turn with my
+    // current chips on" matches the user's mental model. Replaying
+    // the original byte-for-byte would silently ignore a chip the
+    // user just turned on. The chipPreamble travels in its own
+    // stream body field; the user's typed text stays unchanged in
+    // `comment`.
+    const retryChipPreamble = buildSkillsPreamble(loadActiveSkills(activeProject.id));
     await startStream({
       streamId: retryStreamId,
       body: {
@@ -732,7 +728,8 @@ export default function Editor() {
         selector: userMsg.selector ?? "",
         tag: userMsg.tag ?? "",
         innerText: userMsg.innerText,
-        comment: retryComment,
+        comment: userMsg.content,
+        chipPreamble: retryChipPreamble,
         attachments: [],
         screenshotDataUrl,
         sessionId: thread.id,
@@ -984,8 +981,25 @@ export default function Editor() {
     thumbnailOverride?: string;
     /** Hidden text prepended to `text` in the API request, but never
      *  shown in the user bubble. Used to ride the project intake brief
-     *  along with the user's first send (Image-57-style welcome flow). */
+     *  along with the user's first send (Image-57-style welcome flow).
+     *  Concatenated into `comment` on the wire — the intake reads as
+     *  extra user context, not as standalone posture. */
     preamble?: string;
+    /** Composer-chip posture for THIS turn. Pre-rendered Markdown
+     *  built by `buildSkillsPreamble`. Travels as its OWN stream body
+     *  field (`chipPreamble`) so the api prompt builder can render it
+     *  in a dedicated section, separate from the user's blockquoted
+     *  comment. Distinct from `preamble` (above): intake is one-shot
+     *  project context, chipPreamble is sticky posture per active
+     *  chip set. */
+    chipPreamble?: string;
+    /** Raw chip-id list that produced `chipPreamble`. Pinned to the
+     *  user message so reviewing the thread later still surfaces
+     *  which posture shaped each turn — the bubble renders a tiny
+     *  pill strip from this. Kept separate from chipPreamble so
+     *  a future schema change (e.g. trimming the rendered preamble
+     *  for token cost) doesn't break the history view. */
+    activeChips?: string[];
   }) => {
     const includeCanvas = opts.includeCanvas !== false;
     let thread = activeThread;
@@ -1021,6 +1035,7 @@ export default function Editor() {
       kind: target?.kind,
       attachments: opts.attachments.length > 0 ? opts.attachments : undefined,
       preamble: opts.preamble,
+      activeChips: opts.activeChips && opts.activeChips.length > 0 ? opts.activeChips : undefined,
       // Pre-populate the thumbnail when the caller has one ready (Draw
       // mode passes its composite). The DOM-snapshot resolver below
       // preserves this via `thumbnailOverride ?? snap.thumbnail`.
@@ -1167,6 +1182,7 @@ export default function Editor() {
         outerHtml: target?.outerHtml,
         descriptor: target?.descriptor,
         comment: opts.preamble ? `${opts.preamble}\n\n${opts.text}` : opts.text,
+        chipPreamble: opts.chipPreamble,
         attachments: opts.attachments,
         screenshotDataUrl,
         sessionId: thread.id,
@@ -1216,7 +1232,7 @@ export default function Editor() {
     text: string,
     attachments: Attachment[],
     modelId: string,
-    sendOpts?: { includeCanvas?: boolean; skillsPreamble?: string },
+    sendOpts?: { includeCanvas?: boolean; skillsPreamble?: string; activeChipIds?: string[] },
   ) => {
     // Snapshot the same target the live `onSend` would have used, so
     // the queued message lands on the element the user was looking at
@@ -1237,23 +1253,22 @@ export default function Editor() {
     // Consume the per-project intake flag on the user's first send.
     // Their typed text shows in the bubble; the intake brief rides as
     // a hidden preamble so Claude reads brief + text. Subsequent sends
-    // don't re-attach it (flag is cleared after the first read).
+    // don't re-attach it (flag is cleared after the first read). The
+    // intake stays in `preamble` because semantically it's extended
+    // user context — it travels concatenated into `comment` on the
+    // wire and reads as part of what the user said this turn.
     let preamble: string | undefined;
     if (pendingIntakeFor === activeProject.id) {
       preamble = buildIntakePreamble();
       setPendingIntakeFor(null);
     }
-    // Composer skill chips ride as a hidden preamble too. When both an
-    // intake brief AND skill posture exist on the same turn (the
-    // user toggled a chip before sending their first message), stack
-    // them so Claude reads intake → skills → user text. Both are
-    // designer-context, both belong to the model not the bubble, so
-    // joining with a blank line keeps them readable.
-    if (sendOpts?.skillsPreamble) {
-      preamble = preamble
-        ? `${preamble}\n\n${sendOpts.skillsPreamble}`
-        : sendOpts.skillsPreamble;
-    }
+    // Composer chip posture is system-level context, not user context,
+    // so it travels in its OWN stream body field (`chipPreamble`) and
+    // the api prompt builder renders it as a dedicated
+    // "## Composer posture for this turn" section above the user's
+    // comment — no longer smuggled inside the blockquoted comment.
+    const chipPreamble = sendOpts?.skillsPreamble;
+    const activeChips = sendOpts?.activeChipIds;
     if (isBlocked && activeThread) {
       // Replace any prior queued entry — only one slot. Tie the entry
       // to the active thread so a thread switch can clear it (see the
@@ -1268,10 +1283,12 @@ export default function Editor() {
         target,
         includeCanvas: sendOpts?.includeCanvas,
         preamble,
+        chipPreamble,
+        activeChips,
       });
       return;
     }
-    runTurn({ text, attachments, target, modelId, includeCanvas: sendOpts?.includeCanvas, preamble });
+    runTurn({ text, attachments, target, modelId, includeCanvas: sendOpts?.includeCanvas, preamble, chipPreamble, activeChips });
   };
 
   // ─── Multi-select comment promotion ──────────────────────────
@@ -1506,6 +1523,8 @@ export default function Editor() {
       modelId: q.modelId,
       includeCanvas: q.includeCanvas,
       preamble: q.preamble,
+      chipPreamble: q.chipPreamble,
+      activeChips: q.activeChips,
     });
     // runTurn is stable enough — captured in a closure above. The deps
     // we care about are isBlocked + queued + activeThread identity.
@@ -2815,14 +2834,19 @@ export default function Editor() {
                     // the same way the Composer does on a normal send.
                     // Skills are persisted to localStorage on every toggle,
                     // so reading at send time always reflects the current set.
-                    const skillsPreamble = buildSkillsPreamble(
-                      loadActiveSkills(activeProject.id),
-                    );
+                    const active = loadActiveSkills(activeProject.id);
+                    const skillsPreamble = buildSkillsPreamble(active);
+                    const promoteOpts: {
+                      skillsPreamble?: string;
+                      activeChipIds?: string[];
+                    } = {};
+                    if (skillsPreamble) promoteOpts.skillsPreamble = skillsPreamble;
+                    if (active.length > 0) promoteOpts.activeChipIds = active;
                     queueOrSend(
                       text,
                       chatAttachments,
                       opts.modelId,
-                      skillsPreamble ? { skillsPreamble } : undefined,
+                      Object.keys(promoteOpts).length > 0 ? promoteOpts : undefined,
                     );
                   })();
                 }

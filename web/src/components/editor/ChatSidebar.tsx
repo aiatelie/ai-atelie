@@ -20,7 +20,7 @@ import { dayLabel, fullDateTime, relativeTime, shouldShowDaySeparator } from "./
 import { ElicitForm } from "./ElicitForm";
 import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { SkillChips } from "./SkillChips";
-import { buildSkillsPreamble, loadActiveSkills, saveActiveSkills, skillsStorageKey } from "../../data/skills";
+import { SKILLS, buildSkillsPreamble, loadActiveSkills, saveActiveSkills, skillsStorageKey } from "../../data/skills";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
@@ -119,6 +119,13 @@ export type ChatMessage =
        *  project intake brief along with the user's first message —
        *  the user sees only what they typed, Claude reads brief + text. */
       preamble?: string;
+      /** Composer chip ids active at send time (e.g. ["wireframe",
+       *  "tweakable"]). Frozen on the message so reviewing the thread
+       *  weeks later still shows which postures shaped each reply, and
+       *  the user can see exactly what Claude was reading on top of
+       *  their typed text. Rendered as a tiny pill strip under the
+       *  bubble; absent on older messages = render nothing. */
+      activeChips?: string[];
       /** Iframe scroll position at comment time. */
       scrollX?: number;
       scrollY?: number;
@@ -204,7 +211,7 @@ export function ChatTab({
     text: string,
     attachments: Attachment[],
     modelId: string,
-    opts?: { includeCanvas?: boolean; skillsPreamble?: string },
+    opts?: { includeCanvas?: boolean; skillsPreamble?: string; activeChipIds?: string[] },
   ) => void;
   onRestore?: (m: Extract<ChatMessage, { role: "user" }>) => void;
   pendingElicit?: ElicitRequest | null;
@@ -249,6 +256,18 @@ export function ChatTab({
         onRename={onRenameThread}
         onNew={onNewThread}
       />
+      {/* Project-scope aesthetic-skill summary sits at the TOP of the
+          chat panel, right under the thread tabs — that's where
+          long-lived project context belongs. Previously it lived just
+          above the composer; moving it up reduces the vertical
+          metadata stack (ActiveSkillsStrip + SkillChips + ContextPills)
+          that was crowding the textarea on narrow sidebars, and pairs
+          it with other project-scope info (thread tabs) instead of
+          per-turn controls (chips, attachments). */}
+      <ActiveSkillsStrip
+        projectId={projectId}
+        onEdit={onOpenSkillsSettings ?? (() => {})}
+      />
       <ChatBody
         thread={activeThread}
         threadId={activeThread?.id ?? ""}
@@ -260,8 +279,12 @@ export function ChatTab({
           // Read the active skill set from localStorage at fire time —
           // the Composer persists every toggle change immediately, so
           // this is always current even though Composer owns the state.
-          const skillsPreamble = buildSkillsPreamble(loadActiveSkills(projectId));
-          onSend(text, [], loadModelId(), skillsPreamble ? { skillsPreamble } : undefined);
+          const active = loadActiveSkills(projectId);
+          const skillsPreamble = buildSkillsPreamble(active);
+          const opts: { skillsPreamble?: string; activeChipIds?: string[] } = {};
+          if (skillsPreamble) opts.skillsPreamble = skillsPreamble;
+          if (active.length > 0) opts.activeChipIds = active;
+          onSend(text, [], loadModelId(), Object.keys(opts).length > 0 ? opts : undefined);
         }}
         onEditMessage={(tid, idx, text) => {
           // Truncate the thread from this index and pop the original
@@ -283,10 +306,6 @@ export function ChatTab({
           onCancel={onCancelQueued ?? (() => {})}
         />
       )}
-      <ActiveSkillsStrip
-        projectId={projectId}
-        onEdit={onOpenSkillsSettings ?? (() => {})}
-      />
       <Composer
         disabled={!!activeThread && (isAssistantPending(activeThread) || !!pendingElicit)}
         hasQueued={!!queuedMessage}
@@ -428,13 +447,17 @@ function Composer({
    *  that don't pass `showCanvasToggle` ignore it (Onboard has no iframe).
    *  `opts.skillsPreamble` is the resolved hidden-context block built from
    *  the persistent <SkillChips> the user has toggled on — the route
-   *  should prepend it to the outgoing API `comment` so Claude reads
-   *  posture + user text, while the bubble shows only the typed text. */
+   *  passes it through to the api as a dedicated `chipPreamble` stream
+   *  body field so Claude reads posture + user text, while the bubble
+   *  shows only the typed text. `opts.activeChipIds` is the raw id list
+   *  for the same set; the route freezes it onto the user message so
+   *  reviewing the thread later still shows which postures shaped each
+   *  send. */
   onSend: (
     text: string,
     attachments: Attachment[],
     modelId: string,
-    opts?: { includeCanvas?: boolean; skillsPreamble?: string },
+    opts?: { includeCanvas?: boolean; skillsPreamble?: string; activeChipIds?: string[] },
   ) => void;
   /** When provided AND `disabled` is true, the send button becomes a Stop
    *  button that calls this. Lets the user abort an in-flight reply. */
@@ -634,9 +657,15 @@ function Composer({
     // the user's input and risk a concurrent SDK turn squeaking through
     // a micro-window where `disabled` flips false between chunks.
     const skillsPreamble = buildSkillsPreamble(activeSkillIds);
-    const sendOpts: { includeCanvas?: boolean; skillsPreamble?: string } = {};
+    const sendOpts: { includeCanvas?: boolean; skillsPreamble?: string; activeChipIds?: string[] } = {};
     if (showCanvasToggle) sendOpts.includeCanvas = includeCanvas;
     if (skillsPreamble) sendOpts.skillsPreamble = skillsPreamble;
+    // Freeze the raw chip-id list onto this send too — the route
+    // stores it on the user message so reviewing the thread later
+    // still surfaces "this turn ran with wireframe + tweakable on."
+    // Only attached when at least one chip is active so older
+    // messages without the field render cleanly as "no posture".
+    if (activeSkillIds.length > 0) sendOpts.activeChipIds = activeSkillIds.slice();
     const opts = Object.keys(sendOpts).length > 0 ? sendOpts : undefined;
     onSend(t, attachments, modelId, opts);
     setText("");
@@ -668,7 +697,15 @@ function Composer({
       // should still get the wireframe posture applied — otherwise the
       // chip silently no-ops for that turn, which is a footgun.
       const skillsPreamble = buildSkillsPreamble(activeSkillIds);
-      onSend(cmd.prompt, [], modelId, skillsPreamble ? { skillsPreamble } : undefined);
+      const slashOpts: { skillsPreamble?: string; activeChipIds?: string[] } = {};
+      if (skillsPreamble) slashOpts.skillsPreamble = skillsPreamble;
+      if (activeSkillIds.length > 0) slashOpts.activeChipIds = activeSkillIds.slice();
+      onSend(
+        cmd.prompt,
+        [],
+        modelId,
+        Object.keys(slashOpts).length > 0 ? slashOpts : undefined,
+      );
       setText("");
       setAttachments([]);
       return;
@@ -1473,6 +1510,32 @@ function Bubble({
             </div>
           )}
           <div className={s.text}>{m.content}</div>
+          {m.activeChips && m.activeChips.length > 0 && (
+            // Per-turn posture record. A tiny pill strip under the
+            // typed text showing which chips were lit when this
+            // message was sent. Read-only and informational — clicking
+            // doesn't reactivate (chips are sticky-posture; toggling
+            // historical state would be confusing). The label is the
+            // current catalog label; unknown ids (chip removed in a
+            // later release) render as the raw id so the record stays
+            // legible.
+            <div className={s.bubbleChipStrip}>
+              {m.activeChips.map((id) => {
+                const sk = SKILLS.find((x) => x.id === id);
+                return (
+                  <span
+                    key={id}
+                    className={s.bubbleChip}
+                    style={{ "--chip-accent": sk?.color ?? "#999" } as React.CSSProperties}
+                    title={sk?.prompt ?? `Unknown chip: ${id}`}
+                  >
+                    <span className={s.bubbleChipDot} aria-hidden="true" />
+                    {sk?.label ?? id}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <div className={s.bubbleActionsRight}>
             {m.domHtml && onRestore && (
               <button className={s.restoreBtn} onClick={() => onRestore(m)} title="Restore the iframe to how it looked at this comment">

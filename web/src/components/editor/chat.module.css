@@ -508,6 +508,43 @@
   justify-content: flex-end;
   margin-top: 8px;
 }
+
+/* Per-turn posture record under the user bubble — read-only pill strip
+   showing which composer chips were active when the message was sent.
+   Sits between the typed text and the row of action buttons; small and
+   muted so the typed text stays the visual anchor. */
+.bubbleChipStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  margin-bottom: -2px;
+  --chip-accent: var(--brand, #7C3AED);
+}
+.bubbleChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font: 500 10px/1 var(--font-system, system-ui);
+  /* Inherit the bubble's text color so this works on both
+     .bubbleUser (dark surface) and a hypothetical light variant.
+     Opacity dims the strip so it doesn't compete with typed text. */
+  color: inherit;
+  opacity: 0.7;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: help;
+}
+.bubbleChipDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--chip-accent);
+  flex-shrink: 0;
+}
 .restoreBtn {
   appearance: none;
   border: 1px solid var(--on-ink-18);

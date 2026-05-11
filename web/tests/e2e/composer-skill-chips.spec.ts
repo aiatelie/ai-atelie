@@ -256,6 +256,85 @@ test.describe("composer skill chips", () => {
     await expect(clearAll).toHaveCount(0);
   });
 
+  test("ActiveSkillsStrip renders at the TOP of the chat, not in the composer", async ({ page }) => {
+    // The strip is project-scope info. It belongs with the thread tabs
+    // and above the message list, not stacked between the chip row and
+    // the textarea — that was crowding the composer with three rows of
+    // metadata.
+    //
+    // The strip self-hides when:
+    //   (a) the project manifest has no aesthetic skills active, OR
+    //   (b) /api/skills/catalog isn't reachable.
+    // Both are valid states; this test exists to assert structural
+    // position WHEN it does render. We stub both endpoints so the
+    // strip materializes deterministically — otherwise headless CI
+    // without the api running gets a hidden strip and a false skip.
+    await page.route("**/api/skills/catalog", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          skills: [
+            { name: "frontend-design", display: "Frontend design", description: "", kind: "aesthetic" },
+          ],
+        }),
+      });
+    });
+    await page.route("**/api/projects/*/manifest", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ design: { active_skills: ["frontend-design"] } }),
+      });
+    });
+    // Reload so the strip's mount-time fetches go through our stubs.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector("iframe", { timeout: 10_000 });
+
+    const strip = page.locator('button[title="Edit aesthetic skills (Settings → Skills)"]');
+    const chipsRow = page.locator('[aria-label="Composer skills"]');
+    await expect(strip).toBeVisible({ timeout: 5_000 });
+    const stripBox = await strip.boundingBox();
+    const chipsBox = await chipsRow.boundingBox();
+    expect(stripBox).toBeTruthy();
+    expect(chipsBox).toBeTruthy();
+    // The structural contract: strip is ABOVE the chip row (since it
+    // was moved out of the composer to the top of the chat panel).
+    expect(stripBox!.y).toBeLessThan(chipsBox!.y);
+  });
+
+  test("sent message bubble records which chips were active", async ({ page }) => {
+    // Toggle a couple of chips on, then exercise the send path. We
+    // don't actually need the API to respond — the userMsg bubble
+    // is created synchronously by the editor, so the chip pill strip
+    // under the typed text is observable before the (broken) stream
+    // would have completed.
+    await page.locator('[data-skill-id="wireframe"]').click();
+    await page.locator('[data-skill-id="tweakable"]').click();
+
+    const composer = page.getByTestId("chat-composer");
+    await composer.waitFor({ timeout: 10_000 });
+    await composer.click();
+    await composer.fill("verify-bubble-chips marker");
+
+    // Submit via Cmd/Ctrl+Enter (Enter alone also submits per the
+    // composer contract). We use a key event for portability.
+    await composer.press("Enter");
+
+    // The new user bubble shows up immediately. Find the bubble that
+    // contains our marker text and assert it carries the chip strip.
+    const bubble = page.locator('div', { hasText: "verify-bubble-chips marker" }).first();
+    await bubble.waitFor({ state: "visible", timeout: 10_000 });
+
+    // The chip strip is a sibling of the typed text within the user
+    // bubble. Two pills: Wireframe + Make tweakable, in toggle order.
+    // The dot has --chip-accent inline; the label uses the catalog
+    // text. Match by text presence inside the same bubble container.
+    const userBubble = page.locator('[class*="bubbleUser"]').filter({ hasText: "verify-bubble-chips marker" }).first();
+    await expect(userBubble).toContainText("Wireframe");
+    await expect(userBubble).toContainText("Make tweakable");
+  });
+
   test("cross-tab change via storage event updates the chip set", async ({ page }) => {
     // The Composer listens for the `storage` event so a chip toggled
     // in another tab of the same project ripples into this tab
