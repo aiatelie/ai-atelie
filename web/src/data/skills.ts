@@ -65,9 +65,12 @@ export const SKILLS: ComposerSkill[] = [
     // default share an id, the skill prompt gets injected twice: once
     // via the system-prompt `active skills` block and again via the
     // hidden chip preamble on the user turn. Using a distinct id keeps
-    // the two injection paths orthogonal.
+    // the two injection paths orthogonal. The visible label is also
+    // distinct ("Bold direction" vs the manifest's "Frontend design")
+    // so the chip row and the ActiveSkillsStrip don't surface two
+    // identical-looking controls one above the other.
     id: "posture-frontend-design",
-    label: "Frontend design",
+    label: "Bold direction",
     color: "#D97706",
     prompt:
       "Pick an extreme visual direction: brutally minimal, maximalist chaos, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, editorial/magazine, brutalist/raw, art deco/geometric, soft/pastel. Avoid generic fonts like Inter, Roboto, Arial — choose distinctive, characterful typography. NEVER converge on the same choices across generations.",

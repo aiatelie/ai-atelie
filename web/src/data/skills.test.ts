@@ -22,11 +22,32 @@ function installLocalStorageShim() {
 
 test("SKILLS catalog ships the expected five chips", () => {
   const ids = SKILLS.map((s) => s.id);
-  expect(ids).toEqual(["wireframe", "hifi", "interactive", "frontend-design", "tweakable"]);
+  // `posture-frontend-design` (not `frontend-design`) — the chip's id
+  // is deliberately distinct from the catalog skill of the same name
+  // in api DEFAULT_ACTIVE_SKILLS so the prompt isn't injected twice.
+  expect(ids).toEqual(["wireframe", "hifi", "interactive", "posture-frontend-design", "tweakable"]);
   for (const sk of SKILLS) {
     expect(sk.label.length).toBeGreaterThan(0);
     expect(sk.prompt.length).toBeGreaterThan(20);
     expect(sk.color).toMatch(/^#[0-9A-F]{6}$/i);
+  }
+});
+
+test("chip labels don't collide with the manifest active-skills strip", () => {
+  // The ActiveSkillsStrip renders project-manifest aesthetic skills
+  // ("Frontend design", "Aesthetic presets", "Design critique",
+  // "DESIGN.md author"). If a composer chip shares one of those labels,
+  // the user sees two identical-looking pills stacked above the
+  // composer — confusing because they're wired to different code paths.
+  // Keep the chip labels disjoint.
+  const manifestSkillLabels = new Set([
+    "Frontend design",
+    "Aesthetic presets",
+    "Design critique",
+    "DESIGN.md author",
+  ]);
+  for (const sk of SKILLS) {
+    expect(manifestSkillLabels.has(sk.label)).toBe(false);
   }
 });
 

@@ -21,6 +21,15 @@
   margin: 0;
 }
 
+/* Wrapper around each chip + its sibling sr-only description. Inline so
+   the row's flex layout still positions the chip directly; the sr-only
+   span is absolute-positioned so it contributes nothing to the row's
+   visible layout. */
+.chipWrap {
+  display: inline-flex;
+  position: relative;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

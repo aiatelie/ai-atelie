@@ -713,6 +713,18 @@ export default function Editor() {
       streamId: retryStreamId,
       msgIdx: aIdx,
     });
+    // Apply the *current* chip posture to the retry. We don't persist
+    // the original-send preamble per message (the bubble only stores
+    // the typed text), so on retry we rebuild from the live chip state.
+    // Semantically right: chips are sticky posture for the project, so
+    // "retry this turn with my current chips on" matches what the user
+    // expects when they toggle a chip and hit retry. The opposite —
+    // replaying the exact original send byte-for-byte — would silently
+    // ignore the chip the user just turned on.
+    const retryPreamble = buildSkillsPreamble(loadActiveSkills(activeProject.id));
+    const retryComment = retryPreamble
+      ? `${retryPreamble}\n\n${userMsg.content}`
+      : userMsg.content;
     await startStream({
       streamId: retryStreamId,
       body: {
@@ -720,7 +732,7 @@ export default function Editor() {
         selector: userMsg.selector ?? "",
         tag: userMsg.tag ?? "",
         innerText: userMsg.innerText,
-        comment: userMsg.content,
+        comment: retryComment,
         attachments: [],
         screenshotDataUrl,
         sessionId: thread.id,

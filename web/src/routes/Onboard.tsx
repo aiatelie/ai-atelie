@@ -112,7 +112,7 @@ export default function Onboard() {
   // a disabled composer used to silently drop, and a micro-window
   // between assistant chunks could spawn a concurrent SDK turn on the
   // same sessionId. Hold the message here until the turn drains.
-  const [queued, setQueued] = useState<(QueuedMessage & { threadId: string; preamble?: string }) | null>(null);
+  const [queued, setQueued] = useState<(QueuedMessage & { threadId: string }) | null>(null);
 
   // Persist on every change so opening the editor mid-conversation
   // hydrates the same thread. Threads now live server-side; the lib
@@ -287,19 +287,7 @@ export default function Onboard() {
 
   /* ─── runTurn: post + stream ─────────────────────────────────── */
 
-  const runTurn = async (opts: {
-    text: string;
-    attachments?: Attachment[];
-    modelId?: string;
-    startNewThread?: boolean;
-    hidden?: boolean;
-    /** Hidden context block prepended to the API `comment` field, but
-     *  never rendered in the user bubble. Used to ride the active
-     *  composer skill chips' prompt payloads under the user's typed
-     *  text — Claude reads posture + text, the user sees only what
-     *  they typed. Mirrors the Editor route's intake-preamble path. */
-    preamble?: string;
-  }) => {
+  const runTurn = async (opts: { text: string; attachments?: Attachment[]; modelId?: string; startNewThread?: boolean; hidden?: boolean }) => {
     let thread = activeThread;
     if (opts.startNewThread || !thread) thread = startNewThread();
     const threadId = thread.id;
@@ -312,7 +300,6 @@ export default function Onboard() {
       streamId,
       modelId: opts.modelId,
       hidden: opts.hidden,
-      preamble: opts.preamble,
       ts: Date.now(),
     };
     const assistantMsg: ChatMessage = {
@@ -341,7 +328,7 @@ export default function Onboard() {
       body: {
         route: "index.html",
         selector: "",
-        comment: opts.preamble ? `${opts.preamble}\n\n${opts.text}` : opts.text,
+        comment: opts.text,
         attachments: opts.attachments ?? [],
         sessionId: thread.id,
         modelId: opts.modelId,
@@ -436,12 +423,7 @@ export default function Onboard() {
   // /api/elicit-response). Otherwise the message would queue waiting
   // for an event that never comes (the SDK is blocked on the elicit),
   // and the user sees their reply silently disappear.
-  const queueOrSend = (
-    text: string,
-    attachments: Attachment[],
-    modelId: string,
-    sendOpts?: { includeCanvas?: boolean; skillsPreamble?: string },
-  ) => {
+  const queueOrSend = (text: string, attachments: Attachment[], modelId: string) => {
     if (pendingElicit) {
       const answeredId = pendingElicit.request.id;
       // Clear local form first so the UI updates immediately even if the
@@ -454,7 +436,6 @@ export default function Onboard() {
       }).catch(() => { /* offline — server-side timeout will recover */ });
       return;
     }
-    const preamble = sendOpts?.skillsPreamble;
     if (isBlocked && activeThread) {
       setQueued({
         text,
@@ -462,11 +443,10 @@ export default function Onboard() {
         modelId,
         queuedAt: Date.now(),
         threadId: activeThread.id,
-        preamble,
       });
       return;
     }
-    runTurn({ text, attachments, modelId, preamble });
+    runTurn({ text, attachments, modelId });
   };
 
   useEffect(() => {
@@ -478,7 +458,7 @@ export default function Onboard() {
     // before fire-off so a re-render race can't double-fire.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setQueued(null);
-    runTurn({ text: q.text, attachments: q.attachments, modelId: q.modelId, preamble: q.preamble });
+    runTurn({ text: q.text, attachments: q.attachments, modelId: q.modelId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isBlocked, queued, activeThread?.id]);
 
@@ -619,7 +599,7 @@ export default function Onboard() {
               <Composer
                 disabled={lastIsPending}
                 hasQueued={!!queued && !!activeThread && queued.threadId === activeThread.id}
-                onSend={(text, attachments, modelId, opts) => queueOrSend(text, attachments, modelId, opts)}
+                onSend={(text, attachments, modelId) => queueOrSend(text, attachments, modelId)}
                 onStop={lastIsPending ? onStop : undefined}
                 draftKey={activeThread ? `onboard-draft:${activeThread.id}` : undefined}
                 projectId={projectId}

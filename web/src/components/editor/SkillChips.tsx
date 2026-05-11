@@ -14,13 +14,18 @@
  *   • SkillChips are local-state toggles for the *composer*, hardcoded
  *     in `data/skills.ts`, and inject prompt text into outgoing turns.
  *
- * Tooltip semantics: each chip uses `aria-describedby` pointing at a
- * visually-hidden <span> that contains the full prompt text. This is
- * keyboard- and screen-reader-accessible (AT announces the description
- * on focus), and the CSS class `.srOnly` positions the element off-screen
- * without `display:none` so it remains in the accessibility tree. The
- * native `title` is intentionally omitted — it is not announced by
- * most AT and is invisible on touch/mobile surfaces.
+ * Disclosure semantics: each chip exposes its full prompt three ways so
+ * every input modality gets a preview before activation:
+ *   1. Native `title={prompt}` — sighted mouse users get the browser
+ *      tooltip on hover. Matches the rest of this codebase's chip /
+ *      icon-button convention (see context pills, message actions, etc.).
+ *   2. `aria-describedby` pointing at a sibling .srOnly <span> that
+ *      lives OUTSIDE the button — screen readers announce the
+ *      description on focus, and because the span is a sibling (not a
+ *      descendant), it doesn't pollute the button's accessible name.
+ *   3. The button's own accessible name is the chip's short label
+ *      ("Wireframe"), set via `aria-label` for stability if we ever
+ *      add visual decoration that would otherwise leak into the name.
  *
  * Renders nothing when the SKILLS list is empty (defensive — keeps the
  * composer from sprouting an empty bar if we ever empty the catalog).
@@ -49,34 +54,46 @@ export function SkillChips({
         const isActive = activeSet.has(sk.id);
         const descId = `skill-desc-${sk.id}`;
         return (
-          <button
-            key={sk.id}
-            type="button"
-            role="switch"
-            aria-checked={isActive}
-            aria-describedby={descId}
-            data-active={isActive ? "true" : "false"}
-            data-skill-id={sk.id}
-            className={`${s.chip} ${isActive ? s.chipActive : ""}`}
-            // Inline accent color as a CSS custom property so the
-            // module CSS can use it for the active-state border / dot
-            // without baking five color variants into the stylesheet.
-            style={{ "--chip-accent": sk.color } as React.CSSProperties}
-            onClick={() => {
-              const next = isActive
-                ? activeIds.filter((id) => id !== sk.id)
-                : [...activeIds, sk.id];
-              onToggle(next);
-            }}
-          >
-            <span className={s.dot} aria-hidden="true" />
-            <span className={s.label}>{sk.label}</span>
-            {/* Visually hidden description announced by AT on focus.
-                Not display:none — that removes it from the a11y tree. */}
+          // Fragment so the .srOnly description sibling lives outside
+          // the <button> — keeps the accessible name = aria-label only,
+          // and aria-describedby still picks up the long prompt.
+          <span key={sk.id} className={s.chipWrap}>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isActive}
+              aria-label={sk.label}
+              aria-describedby={descId}
+              data-active={isActive ? "true" : "false"}
+              data-skill-id={sk.id}
+              className={`${s.chip} ${isActive ? s.chipActive : ""}`}
+              // Inline accent color as a CSS custom property so the
+              // module CSS can use it for the active-state border / dot
+              // without baking five color variants into the stylesheet.
+              style={{ "--chip-accent": sk.color } as React.CSSProperties}
+              // Native browser tooltip for sighted mouse users — the
+              // full prompt text. Matches every other chip / icon
+              // button in this composer (context pills, attach button,
+              // etc.). aria-describedby covers the AT path; the two
+              // are complementary, not redundant.
+              title={sk.prompt}
+              onClick={() => {
+                const next = isActive
+                  ? activeIds.filter((id) => id !== sk.id)
+                  : [...activeIds, sk.id];
+                onToggle(next);
+              }}
+            >
+              <span className={s.dot} aria-hidden="true" />
+              <span className={s.label}>{sk.label}</span>
+            </button>
+            {/* Visually hidden description announced by AT via the
+                button's aria-describedby. Sibling-not-descendant so it
+                doesn't get folded into the button's accessible name. */}
             <span id={descId} className={s.srOnly}>
               {sk.label}: {sk.prompt}
             </span>
-          </button>
+          </span>
         );
       })}
     </div>
