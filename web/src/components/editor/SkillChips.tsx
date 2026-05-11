@@ -31,7 +31,7 @@
  * composer from sprouting an empty bar if we ever empty the catalog).
  */
 
-import { SKILLS } from "../../data/skills";
+import { SKILLS, toggleSkill } from "../../data/skills";
 import s from "./skillChips.module.css";
 
 export function SkillChips({
@@ -40,32 +40,44 @@ export function SkillChips({
 }: {
   activeIds: string[];
   /** Called with the new full list of active ids after a chip is
-   *  clicked. The parent persists + uses it to build the next send's
-   *  preamble. We pass the resolved list (not the toggled id) so the
-   *  parent doesn't have to know the diff rule. */
+   *  clicked or the clear-all affordance is used. The parent persists
+   *  + uses it to build the next send's preamble. We pass the resolved
+   *  list (not the toggled id) so the parent doesn't have to know
+   *  group / clear rules — they live in `data/skills.ts`. */
   onToggle: (nextActiveIds: string[]) => void;
 }) {
   if (SKILLS.length === 0) return null;
   const activeSet = new Set(activeIds);
+  const hasAny = activeIds.length > 0;
 
   return (
     <div className={s.row} role="group" aria-label="Composer skills">
-      {SKILLS.map((sk) => {
+      {SKILLS.map((sk, i) => {
         const isActive = activeSet.has(sk.id);
         const descId = `skill-desc-${sk.id}`;
+        // Visually separate group transitions — when this chip's group
+        // is different from the previous chip's, add a small gap so
+        // the user can read the grouping at a glance. (The catalog is
+        // ordered so grouped chips sit together; we don't sort here.)
+        const prev = i > 0 ? SKILLS[i - 1] : undefined;
+        const isGroupBoundary = !!prev && prev.group !== sk.group;
         return (
-          // Fragment so the .srOnly description sibling lives outside
+          // Wrapper so the .srOnly description sibling lives outside
           // the <button> — keeps the accessible name = aria-label only,
           // and aria-describedby still picks up the long prompt.
-          <span key={sk.id} className={s.chipWrap}>
+          <span
+            key={sk.id}
+            className={`${s.chipWrap} ${isGroupBoundary ? s.chipWrapBoundary : ""}`}
+          >
             <button
               type="button"
-              role="switch"
+              role={sk.group ? "radio" : "switch"}
               aria-checked={isActive}
               aria-label={sk.label}
               aria-describedby={descId}
               data-active={isActive ? "true" : "false"}
               data-skill-id={sk.id}
+              data-skill-group={sk.group ?? ""}
               className={`${s.chip} ${isActive ? s.chipActive : ""}`}
               // Inline accent color as a CSS custom property so the
               // module CSS can use it for the active-state border / dot
@@ -77,12 +89,7 @@ export function SkillChips({
               // etc.). aria-describedby covers the AT path; the two
               // are complementary, not redundant.
               title={sk.prompt}
-              onClick={() => {
-                const next = isActive
-                  ? activeIds.filter((id) => id !== sk.id)
-                  : [...activeIds, sk.id];
-                onToggle(next);
-              }}
+              onClick={() => onToggle(toggleSkill(activeIds, sk.id))}
             >
               <span className={s.dot} aria-hidden="true" />
               <span className={s.label}>{sk.label}</span>
@@ -96,6 +103,21 @@ export function SkillChips({
           </span>
         );
       })}
+      {/* Clear-all affordance — only present when at least one chip is
+          active, so the row stays minimal in its default state. Native
+          title for hover; aria-label for screen readers. */}
+      {hasAny && (
+        <button
+          type="button"
+          className={s.clearAll}
+          onClick={() => onToggle([])}
+          title="Clear all skill chips"
+          aria-label="Clear all skill chips"
+          data-skill-clear="true"
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }

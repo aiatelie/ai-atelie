@@ -1,5 +1,13 @@
 import { test, expect } from "bun:test";
-import { SKILLS, buildSkillsPreamble, skillsStorageKey, loadActiveSkills, saveActiveSkills } from "./skills";
+import {
+  SKILLS,
+  buildSkillsPreamble,
+  skillsStorageKey,
+  loadActiveSkills,
+  saveActiveSkills,
+  toggleSkill,
+  normalizeActiveSkills,
+} from "./skills";
 
 // Minimal localStorage shim so the persistence helpers exercise the
 // real path under bun's no-DOM test runtime. skills.ts gates its IO
@@ -76,8 +84,11 @@ test("skillsStorageKey is per-project and falls back when missing", () => {
 
 test("save / load round-trips active skill ids", () => {
   installLocalStorageShim();
-  saveActiveSkills("p1", ["wireframe", "hifi"]);
-  expect(loadActiveSkills("p1")).toEqual(["wireframe", "hifi"]);
+  // Pick a fidelity chip + a modifier — a legitimate post-grouping
+  // combination. (Two fidelity chips together would be repaired by
+  // normalizeActiveSkills on load; that case is covered separately.)
+  saveActiveSkills("p1", ["wireframe", "tweakable"]);
+  expect(loadActiveSkills("p1")).toEqual(["wireframe", "tweakable"]);
   // Empty array clears the key (no dead "[]" rows).
   saveActiveSkills("p1", []);
   expect(loadActiveSkills("p1")).toEqual([]);
@@ -91,4 +102,74 @@ test("load defends against malformed storage values", () => {
   expect(loadActiveSkills("p2")).toEqual([]);
   localStorage.setItem("composer-skills:p2", "{ not: 'json' ");
   expect(loadActiveSkills("p2")).toEqual([]);
+});
+
+test("the fidelity chips share a group; modifiers are independent", () => {
+  // Wireframe / High fidelity / Interactive are mutually exclusive
+  // ("low-fi sketch" vs "polished production" vs "fully interactive
+  // app"). Bold direction + Make tweakable are orthogonal modifiers
+  // that compose with any fidelity choice and with each other.
+  const groups = Object.fromEntries(SKILLS.map((s) => [s.id, s.group]));
+  expect(groups.wireframe).toBe("fidelity");
+  expect(groups.hifi).toBe("fidelity");
+  expect(groups.interactive).toBe("fidelity");
+  expect(groups["posture-frontend-design"]).toBeUndefined();
+  expect(groups.tweakable).toBeUndefined();
+});
+
+test("toggleSkill is a plain toggle for ungrouped chips", () => {
+  expect(toggleSkill([], "tweakable")).toEqual(["tweakable"]);
+  expect(toggleSkill(["tweakable"], "tweakable")).toEqual([]);
+  expect(toggleSkill(["tweakable"], "posture-frontend-design")).toEqual([
+    "tweakable",
+    "posture-frontend-design",
+  ]);
+});
+
+test("toggleSkill replaces, not appends, within a group", () => {
+  // Activating a fidelity chip when another is already on should
+  // swap them, not stack them. Ungrouped chips around it stay put.
+  expect(toggleSkill(["wireframe"], "hifi")).toEqual(["hifi"]);
+  expect(toggleSkill(["tweakable", "wireframe"], "interactive")).toEqual([
+    "tweakable",
+    "interactive",
+  ]);
+  // De-activating still works the normal way inside a group.
+  expect(toggleSkill(["hifi", "tweakable"], "hifi")).toEqual(["tweakable"]);
+});
+
+test("toggleSkill is a no-op for unknown ids", () => {
+  // Defensive — if a stale UI somehow sends a removed id, don't
+  // mutate the active list.
+  expect(toggleSkill(["wireframe"], "no-such-chip")).toEqual(["wireframe"]);
+});
+
+test("normalizeActiveSkills drops unknown ids", () => {
+  expect(normalizeActiveSkills(["wireframe", "deleted-id", "tweakable"])).toEqual([
+    "wireframe",
+    "tweakable",
+  ]);
+});
+
+test("normalizeActiveSkills keeps the last occurrence in each group", () => {
+  // localStorage written by a pre-grouping bundle could have stored
+  // [wireframe, hifi] (both fidelity). The fix is to keep the LAST
+  // one, since the toggle logic appends new ids to the end so the
+  // last position reflects most-recent-intent.
+  expect(normalizeActiveSkills(["wireframe", "hifi"])).toEqual(["hifi"]);
+  expect(normalizeActiveSkills(["wireframe", "tweakable", "hifi"])).toEqual([
+    "tweakable",
+    "hifi",
+  ]);
+  // Ungrouped chips never collapse, even if they appear twice (the
+  // saved state shouldn't contain duplicates, but be defensive).
+  expect(normalizeActiveSkills(["tweakable"])).toEqual(["tweakable"]);
+});
+
+test("loadActiveSkills repairs pre-grouping storage on read", () => {
+  installLocalStorageShim();
+  // Simulate localStorage written by the v1 chip implementation,
+  // which allowed two fidelity chips to be on at once.
+  localStorage.setItem("composer-skills:p3", JSON.stringify(["wireframe", "hifi", "tweakable"]));
+  expect(loadActiveSkills("p3")).toEqual(["hifi", "tweakable"]);
 });

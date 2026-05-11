@@ -30,6 +30,46 @@
   position: relative;
 }
 
+/* Boundary between chip groups (fidelity ↔ modifiers). A modest
+   left margin so the eye can parse "these three are exclusive, the
+   rest are independent" without needing a divider line. */
+.chipWrapBoundary {
+  margin-left: 8px;
+}
+
+/* Clear-all affordance. Same pill shape as the chips but with an icon
+   glyph instead of a label, and a muted resting state — it should
+   recede when no chips are active (the row hides it entirely in that
+   case) and become legible on hover. */
+.clearAll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  padding: 0;
+  font: 500 14px/1 var(--font-system, system-ui);
+  color: var(--ink-48);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  user-select: none;
+}
+
+.clearAll:hover {
+  color: var(--ink-92);
+  background: var(--ink-04);
+  border-color: var(--ink-08);
+}
+
+.clearAll:focus-visible {
+  outline: 2px solid var(--brand, #7C3AED);
+  outline-offset: 1px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

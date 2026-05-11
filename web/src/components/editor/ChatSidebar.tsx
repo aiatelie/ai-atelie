@@ -20,7 +20,7 @@ import { dayLabel, fullDateTime, relativeTime, shouldShowDaySeparator } from "./
 import { ElicitForm } from "./ElicitForm";
 import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { SkillChips } from "./SkillChips";
-import { buildSkillsPreamble, loadActiveSkills, saveActiveSkills } from "../../data/skills";
+import { buildSkillsPreamble, loadActiveSkills, saveActiveSkills, skillsStorageKey } from "../../data/skills";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
 import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
@@ -488,6 +488,23 @@ function Composer({
   useEffect(() => {
     saveActiveSkills(projectId, activeSkillIds);
   }, [projectId, activeSkillIds]);
+  useEffect(() => {
+    // Cross-tab sync: if the user toggles a chip in another tab of the
+    // same project, the `storage` event fires here. Update our local
+    // state from the persisted value so the UI doesn't drift. Only
+    // react to changes on THIS project's key — other projects' tabs
+    // shouldn't ripple over (and our own setItem inside this tab
+    // doesn't fire `storage`, so there's no echo).
+    if (typeof window === "undefined") return;
+    const ourKey = skillsStorageKey(projectId);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== ourKey) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveSkillIds(loadActiveSkills(projectId));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [projectId]);
   // Per-turn toggle: should we attach a fresh iframe screenshot to this
   // send? Default on (mirrors prior behaviour). Resets to on after every
   // submit so a one-off skip doesn't silently disable the snapshot for the

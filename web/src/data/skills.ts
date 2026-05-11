@@ -34,13 +34,28 @@ export type ComposerSkill = {
    *  while this chip is active. Shown verbatim in the hover tooltip
    *  so the user always knows what they're activating. */
   prompt: string;
+  /** Optional group key. Chips that share a group are mutually
+   *  exclusive — activating one deactivates the others in the same
+   *  group. Used for the fidelity axis (wireframe / hifi /
+   *  interactive) where the prompts contradict each other and
+   *  multi-activating just confuses the model. Ungrouped chips are
+   *  independent toggles. */
+  group?: string;
 };
+
+// The "fidelity" group key — wireframe / hifi / interactive contradict
+// each other ("sketchy low-fi" vs "polished production" vs "fully
+// interactive prototype"). Picking one is the user's intent; letting
+// the model see two of them at once just makes Claude pick one
+// silently or interpolate.
+const FIDELITY_GROUP = "fidelity";
 
 export const SKILLS: ComposerSkill[] = [
   {
     id: "wireframe",
     label: "Wireframe",
     color: "#6B7280",
+    group: FIDELITY_GROUP,
     prompt:
       "Help the user explore design ideas quickly. Generate multiple rough wireframes to map out the design space before committing to a direction. Prioritize breadth over polish: show 3-5 distinctly different approaches. Use simple shapes, placeholder text, and minimal color. Sketchy vibe — handwritten but readable fonts, b&w with some color, low-fi and simple.",
   },
@@ -48,6 +63,7 @@ export const SKILLS: ComposerSkill[] = [
     id: "hifi",
     label: "High fidelity",
     color: "#7C3AED",
+    group: FIDELITY_GROUP,
     prompt:
       "Produce polished, production-quality designs. Use real typography, refined spacing, carefully considered color. Every detail should feel intentional. Avoid placeholders — if you need copy, write real copy. If you need images, use CSS gradients or SVG illustrations.",
   },
@@ -55,6 +71,7 @@ export const SKILLS: ComposerSkill[] = [
     id: "interactive",
     label: "Interactive",
     color: "#0EA5E9",
+    group: FIDELITY_GROUP,
     prompt:
       "Create a fully interactive prototype with realistic state management and transitions. Use React useState/useEffect for dynamic behavior. Include hover states, click interactions, form validation, animated transitions, and multi-step navigation flows. It should feel like a real working app, not a static mockup.",
   },
@@ -105,6 +122,69 @@ export function buildSkillsPreamble(activeIds: string[]): string | undefined {
   return `${header}\n${body}`;
 }
 
+/** Compute the next active-skill set after the user clicks a chip.
+ *
+ *  Semantics:
+ *    • If the clicked chip is already active, remove it (toggle off).
+ *    • If it's inactive and belongs to a group, replace whatever else
+ *      is active in that group with the clicked id (radio behavior).
+ *    • If it's inactive and ungrouped, append it (plain toggle).
+ *
+ *  New ids land at the end of the array — the resulting order is
+ *  "first activated → most recently activated", which is what
+ *  buildSkillsPreamble surfaces to the model. Unknown ids in
+ *  `activeIds` are preserved (defensive against stale storage
+ *  predating a chip rename).
+ */
+export function toggleSkill(activeIds: string[], toggledId: string): string[] {
+  if (activeIds.includes(toggledId)) {
+    return activeIds.filter((id) => id !== toggledId);
+  }
+  const toggled = SKILLS.find((s) => s.id === toggledId);
+  if (!toggled) return activeIds;
+  const group = toggled.group;
+  if (group) {
+    // Drop any other id from the same group, then append the new one.
+    // Keep unrelated ids untouched and in order.
+    const groupSiblings = new Set(
+      SKILLS.filter((s) => s.group === group).map((s) => s.id),
+    );
+    const filtered = activeIds.filter((id) => !groupSiblings.has(id));
+    return [...filtered, toggledId];
+  }
+  return [...activeIds, toggledId];
+}
+
+/** Normalize an active-skill list so it satisfies the group constraint:
+ *  at most one chip from each group, with the LAST occurrence in the
+ *  array winning (most-recent-intent semantics, since new ids are
+ *  appended to the end). Unknown ids are dropped silently — they refer
+ *  to chips that no longer exist.
+ *
+ *  Used by `loadActiveSkills` to repair localStorage written by an
+ *  older bundle (pre-grouping) where two fidelity chips could be on
+ *  at once.
+ */
+export function normalizeActiveSkills(ids: string[]): string[] {
+  const known = ids.filter((id) => SKILLS.some((s) => s.id === id));
+  const seenGroups = new Set<string>();
+  const result: string[] = [];
+  // Walk in reverse so we keep the LAST occurrence of each group, then
+  // reverse back to preserve activation order. (Set + walking forward
+  // would keep the FIRST occurrence, which is the opposite of
+  // toggleSkill's append-at-end intent.)
+  for (let i = known.length - 1; i >= 0; i--) {
+    const id = known[i];
+    const sk = SKILLS.find((s) => s.id === id)!;
+    if (sk.group) {
+      if (seenGroups.has(sk.group)) continue;
+      seenGroups.add(sk.group);
+    }
+    result.push(id);
+  }
+  return result.reverse();
+}
+
 /** localStorage key for the per-project active-skills set. The chips
  *  persist independently per project so toggling "wireframe" on for
  *  one project doesn't bleed into another. When projectId is missing
@@ -116,7 +196,11 @@ export function skillsStorageKey(projectId: string | undefined): string {
 }
 
 /** Read the persisted active-skill ids for a project. Defensive against
- *  parse errors and shape drift — returns [] on anything unexpected. */
+ *  parse errors and shape drift — returns [] on anything unexpected.
+ *  Result is normalized through `normalizeActiveSkills`, which drops
+ *  unknown ids and collapses any same-group co-activation to the most
+ *  recently added one. This silently repairs localStorage written by
+ *  an older bundle that allowed e.g. wireframe + hifi at once. */
 export function loadActiveSkills(projectId: string | undefined): string[] {
   if (typeof window === "undefined") return [];
   try {
@@ -124,7 +208,8 @@ export function loadActiveSkills(projectId: string | undefined): string[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((x): x is string => typeof x === "string");
+    const strings = parsed.filter((x): x is string => typeof x === "string");
+    return normalizeActiveSkills(strings);
   } catch {
     return [];
   }
