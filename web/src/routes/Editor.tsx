@@ -31,6 +31,7 @@ import type { SelectedInfo } from "../components/editor/Inspector";
 import { CommentBubble, type CommentTarget, type Attachment } from "../components/editor/CommentBubble";
 import { CommentPins } from "../components/editor/CommentPins";
 import { LeftPanel } from "../components/editor/LeftPanel";
+import { AuthBanner } from "../components/editor/AuthBanner";
 import { FileBrowserView, PageIcon, ComponentIcon, AssetIcon } from "../components/editor/FileBrowserView";
 import { toast } from "../components/toast";
 import { Spinner } from "../components/feedback";
@@ -444,6 +445,11 @@ export default function Editor() {
   // sidebar can auto-switch to that thread — otherwise the form floats
   // above an "empty" body when the user is on a different thread.
   const [pendingElicit, setPendingElicit] = useState<{ request: ElicitRequest; threadId: string } | null>(null);
+  // Timestamp of the last stream error that carried code="auth_required".
+  // Used to force the AuthBanner visible without waiting for its own
+  // 5-min poll cycle — a fresh 401 should surface help immediately.
+  // null = no recent auth failure; banner-dismissal sets this back to null.
+  const [authRequiredAt, setAuthRequiredAt] = useState<number | null>(null);
   // One-slot composer queue. When the user types into a disabled
   // composer (assistant still streaming or an elicit form is open) and
   // hits Enter, the message lands here instead of dropping. A useEffect
@@ -806,6 +812,11 @@ export default function Editor() {
         flushText();
         setPendingElicit(null);
         updateAssistant((m) => ({ ...m, error: e.message, pending: false }));
+        // Auth failures get the AuthBanner instead of a generic error
+        // toast — the user needs a fix, not a postmortem.
+        if (e.code === "auth_required") {
+          setAuthRequiredAt(Date.now());
+        }
         notifyTurnComplete({
           status: "failure",
           title: `${projectTitle} · agent error`,
@@ -2208,6 +2219,14 @@ export default function Editor() {
 
   return (
     <div className={s.shell}>
+      {/* AuthBanner sits at the top so it can't be missed; sticky CSS
+          keeps it pinned even when the editor scrolls. Quiet by default
+          (returns null) — visible only when auth probe says broken OR a
+          live stream error tagged code="auth_required" arrived. */}
+      <AuthBanner
+        forceShown={authRequiredAt != null}
+        onForcedShownDismissed={() => setAuthRequiredAt(null)}
+      />
       {paletteOpen && (
         <Suspense fallback={null}>
           <QuickSwitcher
