@@ -860,6 +860,105 @@
   text-align: center;
 }
 
+/* Verb-grouped tool footer (expanded state) */
+.toolVerbGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.verbGroup {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ink-08);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.verbGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2, var(--surface));
+  border: none;
+  padding: 4px 10px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  color: var(--ink-64);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  transition: background 100ms ease;
+}
+.verbGroupHeader:hover {
+  background: var(--ink-04);
+  color: var(--ink-92);
+}
+.verbGroupLabel {
+  font-weight: 600;
+  color: var(--brand-fg);
+  flex-shrink: 0;
+}
+.verbGroupFiles {
+  flex: 1;
+  color: var(--ink-50);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.verbGroupBody {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface, var(--app-bg));
+}
+
+/* Todo delta rendering */
+.todoDelta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.todoDeltaRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.todoDeltaAdded {
+  background: color-mix(in srgb, var(--kind-edit-bg) 60%, transparent);
+  color: var(--kind-edit-fg);
+}
+.todoDeltaRemoved {
+  background: color-mix(in srgb, #c00 8%, transparent);
+  color: var(--ink-55);
+  text-decoration: line-through;
+}
+.todoDeltaPrefix {
+  flex-shrink: 0;
+  width: 10px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+.todoDeltaContent {
+  flex: 1;
+  word-break: break-word;
+}
+.todoDeltaStatus {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  opacity: 0.6;
+  text-transform: lowercase;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
 .attachThumbs {
   display: flex;
   flex-wrap: wrap;

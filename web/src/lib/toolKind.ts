@@ -65,8 +65,9 @@ const KIND_BY_NAME: Record<string, ToolKind> = {
 /** Strip MCP prefix (`mcp__server__tool` → `tool`) and lowercase
  *  for case-insensitive lookup. Tools from real Claude (`Read`),
  *  Kimi (`read_file`), OpenCode (`shell`), and MCP
- *  (`mcp__ask-user__ask_user`) all converge on the same lookup key. */
-function normalizeName(name: string): string {
+ *  (`mcp__ask-user__ask_user`) all converge on the same lookup key.
+ *  Exported so callers like `prevToolOf` can stay in lock-step. */
+export function normalizeName(name: string): string {
   const stripped = name.replace(/^mcp__[^_]+__/, "");
   return stripped.toLowerCase();
 }
@@ -86,6 +87,55 @@ export const KIND_VERB: Record<ToolKind, string> = {
   search: "Searching",
   other: "Working",
 };
+
+/** Per-tool-name semantic verbs for richer status/summary text.
+ *  Falls back to `KIND_VERB[kindOf(name)]` when no specific verb exists.
+ *  Maps the normalized (lowercase, no MCP prefix) tool name to a verb. */
+const VERB_BY_NAME: Record<string, string> = {
+  // read family
+  read: "Reading",
+  read_file: "Reading",
+  view: "Viewing",
+  cat: "Reading",
+  ls: "Listing",
+  list_starters: "Listing",
+  // edit family
+  edit: "Editing",
+  multiedit: "Editing",
+  write: "Writing",
+  notebookedit: "Editing",
+  str_replace_editor: "Editing",
+  str_replace_based_edit_tool: "Editing",
+  replace: "Replacing",
+  todowrite: "Updating todos",
+  copy_starter: "Copying",
+  // execute family
+  bash: "Running",
+  shell: "Running",
+  run: "Running",
+  run_command: "Running",
+  // fetch family
+  webfetch: "Fetching",
+  fetch: "Fetching",
+  curl: "Fetching",
+  web_get: "Fetching",
+  websearch: "Searching web",
+  web_search: "Searching web",
+  // search family
+  grep: "Searching",
+  glob: "Listing",
+  find: "Searching",
+  rg: "Searching",
+};
+
+/** Semantic verb for the given tool name — more specific than `KIND_VERB`.
+ *  e.g. verbOf("Write") → "Writing", verbOf("TodoWrite") → "Updating todos",
+ *  verbOf("Glob") → "Listing". Falls back to the kind-level verb. */
+export function verbOf(name: string | null | undefined): string {
+  if (!name) return KIND_VERB.other;
+  const stripped = name.replace(/^mcp__[^_]+__/, "").toLowerCase();
+  return VERB_BY_NAME[stripped] ?? KIND_VERB[KIND_BY_NAME[stripped] ?? "other"];
+}
 
 /** Stable label per kind, used for screen-reader hints and
  *  occasional debug output. */
