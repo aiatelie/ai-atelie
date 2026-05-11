@@ -1,109 +1,153 @@
 ---
 name: make-tweakable
 display: Make tweakable
-description: Add in-design tweak controls
+description: Add in-design tweak controls — knobs the user can adjust live to explore variations without re-prompting.
 kind: capability
 body_status: verbatim
 ---
 
 # Tweaks
 
-The user can toggle **Tweaks** on/off from the toolbar. When on, show additional in-page controls that let the user tweak aspects of the design — colors, fonts, spacing, copy, layout variants, feature flags, whatever makes sense. **You design the tweaks UI**; it lives inside the prototype. Title your panel/window **"Tweaks"** so the naming matches the toolbar toggle.
+The host editor has a **"Tweak"** toolbar toggle. When the user opens a design that participates in the Tweaks protocol, the toggle activates; clicking it opens a **panel in the editor's right sidebar** with controls — color swatches, sliders, toggles, dropdowns. Each adjustment writes back to source so the artifact persists.
 
-## Protocol
+**One protocol, one panel.** The panel is rendered by the host editor — never inside the design. The artifact's only job is to emit a JSON block describing what's tweakable and how each knob should affect the page. Do **not** build a panel inside the artifact; do **not** import any `tweaks_panel` or `useTweaks` library; do **not** set `window.__editModeOwned`. None of those exist in this product. If you've seen them in other Claude environments, ignore that pattern — it doesn't apply here.
 
-- **Order matters: register the listener before you announce availability.** If you post `__edit_mode_available` first, the host's activate message can land before your handler exists and the toggle silently does nothing.
+When to add tweaks: the user invokes this skill via the **"Add tweaks"** toolbar button (which fires a short message: *"Apply the make-tweakable skill to `<route>`. Focus on: …"*) OR when they ask to "make this tweakable / add knobs / let me adjust." Also add a few tweaks **by default** on every substantive design — exploration is the point.
 
-- **First**, register a `message` listener on `window` that handles:
-  `{type: '__activate_edit_mode'}` → show your Tweaks panel
-  `{type: '__deactivate_edit_mode'}` → hide it
-- **Then** — only once that listener is live — call:
-  `window.parent.postMessage({type: '__edit_mode_available'}, window.location.origin)`
-  This makes the toolbar toggle appear.
-- When the user changes a value, apply it live in the page **and** persist it by calling:
-  `window.parent.postMessage({type: '__edit_mode_set_keys', edits: {fontSize: 18}}, window.location.origin)`
-  You can send partial updates — only the keys you include are merged.
+---
 
-## Persisting state
+## How to make a design tweakable
 
-Wrap your tweakable defaults in comment markers so the host can rewrite them on disk, like this:
+Three steps:
 
-```
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "primaryColor": "#D97757",
-  "fontSize": 16,
-  "dark": false
-}/*EDITMODE-END*/;
-```
+### 1. Embed an EDITMODE block
 
-The block between the markers **must be valid JSON** (double-quoted keys and strings, primitive values only — no nested objects except the optional `_meta` sidecar below). There must be exactly one such block in the root HTML file (or in a JSX file loaded via Babel-Standalone). When you post `__edit_mode_set_keys`, the host parses the JSON, merges your edits, and writes the file back — so the change survives reload.
-
-## `_meta` — control hints for the host panel (RECOMMENDED)
-
-When you go with the cheap path (no panel of your own, just an EDITMODE block — see below), the host renders typed controls based on the runtime type of each value: color picker for `#hex`, range slider for numbers, checkbox for booleans, textarea for long strings, text input otherwise. The default heuristics for sliders pick `[0, 2|n|]` around the seed, which works for sizes but **misses on percentages (should be 0–100), opacity (0–1), and other constrained ranges**.
-
-Solve this by adding an optional `_meta` sub-key inside the EDITMODE block. Each entry refines one knob:
-
-```
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "primaryColor": "#D97757",
-  "fontSize":     16,
-  "opacity":      0.5,
-  "tone":         "Confident",
-  "_meta": {
-    "primaryColor": {
-      "label":    "Primary",
-      "help":     "Used for buttons, links, the headline rule.",
-      "swatches": ["#D97757", "#2657FF", "#10B981", "#0E1116"]
-    },
-    "fontSize": { "min": 8,  "max": 48, "step": 1, "unit": "px" },
-    "opacity":  { "min": 0,  "max": 1,  "step": 0.05 },
-    "tone":     { "options": ["Confident", "Playful", "Editorial", "Clinical"] }
-  }
-}/*EDITMODE-END*/;
-```
-
-Supported per-key fields (all optional):
-
-- **`label`** — display label override (else the key is auto-humanized: `primaryColor` → "Primary color").
-- **`help`** — one-line caption rendered below the control.
-- **`min` / `max` / `step`** — numeric range. Required for percentages and opacity to avoid heuristic flailing. Otherwise the slider picks a sensible range from the seed.
-- **`unit`** — suffix on the numeric readout (`"px"`, `"%"`, `"ms"`). Cosmetic only — the underlying value stays bare.
-- **`swatches`** — array of hex strings. When present, the panel renders a **curated swatch row instead of a free color picker**. Prefer this over `<input type="color">` for design intent: you picked the palette, the user picks within it. 3–5 swatches is the sweet spot.
-- **`options`** — array of allowed string values. Renders as a `<select>` dropdown; works for any string-valued knob. Beats free text when the design has discrete states (variants, tones, presets).
-
-The `_meta` key is treated as **authored-only** — the host bridge strips it before applying edits, the server rejects `_meta` in `/api/projects/:id/tweak` POSTs. Round-trips preserve `_meta` verbatim.
-
-## Opting out of the auto-bridge
-
-When you ship a custom Tweaks panel, the host's auto-bridge (`/tweaks-bridge.js`) is still injected into the page. Without an opt-out it will *also* post `__edit_mode_available` and render a host-side sidebar — both work, but the duplicate UI is noisy.
-
-### `window.__editModeOwned` — the opt-out flag
-
-Set this **synchronously in an inline `<script>` near the top of `<body>`**, *before* any `defer`-ed or `DOMContentLoaded`-fired script runs:
+Inside an inline `<script>` (or top of a JSX file), declare your tweakable values wrapped in magic comment markers:
 
 ```html
-<script>window.__editModeOwned = true;</script>
+<script>
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "headline":  "Hello",
+    "accent":    "#D97757",
+    "fontSize":  48,
+    "_meta": {
+      "headline":  { "label": "Headline", "help": "Big top line." },
+      "accent":    { "swatches": ["#D97757", "#2657FF", "#10B981", "#0E1116"] },
+      "fontSize":  { "min": 16, "max": 96, "step": 2, "unit": "px" }
+    }
+  }/*EDITMODE-END*/;
+</script>
 ```
 
-**Timing is critical.** The auto-bridge is injected with `defer` and runs after `DOMContentLoaded`. If you set `__editModeOwned` inside a `DOMContentLoaded` handler or in a `defer`-ed script, you may lose the race and the auto-bridge will already have announced itself. An inline script (no `defer`, no `async`) at the top of `<body>` is always safe.
+Rules:
 
-Any truthy value disables the bridge (`true`, `1`, `"yes"` all work).
+- **Exactly one** EDITMODE block per file.
+- Block content must be **valid JSON** (double-quoted keys/strings, no trailing commas, primitive values plus the optional `_meta` object).
+- Put it in the **root HTML file's inline script**, or in a `.jsx` file loaded via Babel-standalone. The host's auto-bridge scans both.
+
+### 2. Wire each knob into the rendered page
+
+The host applies each edit through three layers automatically — pick whichever fits your design (you can mix them per-knob):
+
+**CSS custom properties** — for every edit `{key: value}` the host sets `--<key>` on `:root`. Reference them from CSS:
+
+```css
+h1 { color: var(--accent); font-size: var(--fontSize); }
+```
+
+**`data-tweak-text` and `data-tweak-attr` attributes** — elements with these get their text content or an attribute set automatically:
+
+```html
+<h1 data-tweak-text="headline">Hello</h1>
+<img data-tweak-attr="poster:src" src="poster-a.jpg" />
+```
+
+**`window.__applyTweaks(edits)` hook** — define this function and the host calls it on every edit. Use when CSS vars / data attributes aren't enough (re-rendering React, swapping a className, recomputing layout):
+
+```js
+window.__applyTweaks = (edits) => {
+  if (edits.layoutVariant !== undefined) {
+    document.body.dataset.layout = edits.layoutVariant;
+  }
+};
+```
+
+### 3. (Optional) `_meta` — authoring hints
+
+The host renders typed controls by inspecting the value's runtime type — `#hex` → color picker, number → range slider, boolean → checkbox, string → text input. The `_meta` sidecar refines that:
+
+```jsonc
+"_meta": {
+  "<key>": {
+    "label":    "Display name (else auto-humanized)",
+    "help":     "One-line caption rendered under the control",
+    "min":      8,                              // numbers
+    "max":      48,
+    "step":     1,
+    "unit":     "px",                           // suffix on numeric readouts
+    "swatches": ["#a", "#b", "#c", "#d"],       // hex strings — curated picker (ALWAYS prefer over free picker)
+    "options":  ["Confident", "Playful", "Editorial"]  // strings — renders a <select>
+  }
+}
+```
+
+`_meta` is **authored-only** — the host strips it before applying edits; the server rejects `_meta` in edit POSTs.
+
+**Strongly recommend** `_meta` for:
+- **Color knobs**: `swatches` produces measurably better design than a free hex picker. You picked the palette; the user picks within it. 3–5 swatches is the sweet spot.
+- **Numeric knobs**: declare `min/max/step/unit`, otherwise the slider's auto-range guesses and gets it wrong for percentages, opacity, and constrained dimensions.
+- **String knobs with closed sets** (variant, tone, preset): `options: ["A", "B", "C"]` renders a dropdown instead of free text.
+
+---
+
+## Minimum viable artifact
+
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Hello</title></head>
+<body>
+  <h1 id="title" data-tweak-text="headline">Hello</h1>
+  <script>
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "headline":  "Hello",
+      "accent":    "#D97757",
+      "fontSize":  48,
+      "_meta": {
+        "accent":   { "swatches": ["#D97757", "#2657FF", "#10B981", "#0E1116"] },
+        "fontSize": { "min": 16, "max": 96, "step": 2, "unit": "px" }
+      }
+    }/*EDITMODE-END*/;
+    // Seed the page from defaults on first load.
+    document.documentElement.style.setProperty("--accent", TWEAK_DEFAULTS.accent);
+    document.documentElement.style.setProperty("--fontSize", TWEAK_DEFAULTS.fontSize + "px");
+  </script>
+  <style>
+    h1 { color: var(--accent); font-size: var(--fontSize); }
+  </style>
+</body>
+</html>
+```
+
+That's it. Open this in the editor → the "Tweak" toolbar toggle activates → click it → the sidebar panel renders three controls (headline text input, accent swatch row, headline-size range slider). Adjust them — the page updates live and the source persists.
+
+---
 
 ## Tips
 
-- Keep the Tweaks surface small — a floating panel in the bottom-right of the screen, or inline handles. Don't overbuild.
-- Hide the controls entirely when Tweaks is off; the design should look final.
-- If the user asks for multiple variants of a single element within a larger design, use this to allow cycling thru the options.
-- If the user does not ask for any tweaks, add a couple anyway by default; be creative and try to expose the user to interesting possibilities.
-- Add `data-cc-no-inspect="true"` to the panel root and the FAB so the editor's inspector skips them.
-- **Prefer curated swatches over free color pickers.** Free hex pickers give the user too much freedom and produce slop; a 3–5 swatch palette `_meta.<key>.swatches` channels the choice within an intentional range. Same for `_meta.<key>.options` on discrete-state strings (tone, variant, preset) — beats free text.
+- **Add tweaks by default.** Even when the user didn't ask, pick 3–5 high-impact knobs (headline, accent, key dimension, layout variant). Never ship a design without a couple of knobs to play with.
+- **Curated > free pickers for color.** A 3–5 hex palette in `_meta.swatches` produces better design than a free hex picker. Always prefer it.
+- **Use `_meta.options` for any string with a closed set** (variant, tone, preset). Beats free text every time.
+- **Pick high-leverage knobs.** 5–10 is the sweet spot. More than that and the panel becomes a wall of controls; fewer and you've under-exposed the design.
 
-## Cheap path: no panel, just an EDITMODE block
+## Wire protocol (reference only — you don't need to think about this)
 
-If your tweak surface is small (≤6 keys, all primitives) and you don't need bespoke UI, **skip writing a panel entirely**. Just embed the EDITMODE block (with `_meta` hints!) and wire each key through one of:
-- a CSS variable named after the key — `var(--<key>)` — and set values via `--<key>: ...` on `:root`
-- a `window.__applyTweaks(edits)` function that re-renders with the new values
-- a `data-tweak-text="<key>"` attribute on an element whose text content tracks the key, or `data-tweak-attr="<key>:<attrName>"` for arbitrary attributes
+The host's auto-bridge handles the postMessage handshake — you don't write listener code. Documented for completeness:
 
-The host's auto-bridge (`/tweaks-bridge.js`, injected into every preview HTML) reads the EDITMODE block, posts `__edit_mode_available` with `{ defaults, meta }` to the parent, and applies any incoming `__edit_mode_set_keys` through those three layers. The host then renders typed controls — swatches when `_meta.swatches` is set, otherwise color picker for `#hex`, range slider for numbers (honouring `_meta.{min,max,step,unit}`), selects when `_meta.options` is set, toggles for booleans, text/textarea for strings — without any panel code on your side.
+| Direction | Message | Payload |
+| --- | --- | --- |
+| iframe → host | `__edit_mode_available` | `{ defaults, meta }` |
+| iframe → host | `__edit_mode_set_keys` | `{ edits: { key: value, … } }` |
+| host → iframe | `__edit_mode_set_keys` | `{ edits: { key: value, … } }` (when user moves a knob in the sidebar) |
+
+The bridge applies edits via the three layers (CSS vars → `data-tweak-*` → `__applyTweaks`) in order. The server (`/api/projects/:id/tweak`) persists each edit by merging it into the EDITMODE block on disk; the iframe hot-reloads to pick up the new defaults.

@@ -46,7 +46,7 @@ const Inspector = lazy(() => import("../components/editor/Inspector").then((m) =
 const AssetsDialog = lazy(() => import("../components/editor/AssetsDialog").then((m) => ({ default: m.AssetsDialog })));
 const TemplatesDialog = lazy(() => import("../components/editor/TemplatesDialog").then((m) => ({ default: m.TemplatesDialog })));
 const SettingsDialog = lazy(() => import("../components/editor/SettingsDialog").then((m) => ({ default: m.SettingsDialog })));
-const TweaksPreviewDialog = lazy(() => import("../components/editor/TweaksPreviewDialog").then((m) => ({ default: m.TweaksPreviewDialog })));
+import { AddTweaksPopover } from "../components/editor/AddTweaksPopover";
 const TweaksPanel = lazy(() => import("../components/editor/TweaksPanel").then((m) => ({ default: m.TweaksPanel })));
 const QuickSwitcher = lazy(() => import("../components/editor/QuickSwitcher").then((m) => ({ default: m.QuickSwitcher })));
 const KeyboardShortcutsModal = lazy(() => import("../components/editor/KeyboardShortcutsModal").then((m) => ({ default: m.KeyboardShortcutsModal })));
@@ -473,7 +473,13 @@ export default function Editor() {
     setSettingsSection("skills");
     setSettingsOpen(true);
   }, []);
-  const [tweaksPreviewPrompt, setTweaksPreviewPrompt] = useState<string | null>(null);
+  // AddTweaks popover state — opens under the "Add tweaks" toolbar
+  // button. `anchorRect` is set at click-time so the popover positions
+  // itself under the button. Replaces the older TweaksPreviewDialog
+  // modal that hardcoded a 25-line prompt template — we now invoke
+  // the make-tweakable skill with a short message and let the skill
+  // body (mounted via additionalDirectories) drive the protocol.
+  const [addTweaksAnchor, setAddTweaksAnchor] = useState<DOMRect | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const dmRef = useRef<DmBridge | null>(null);
   // Host-side data-dm-ref counter. Used in the applyToSelection fallback
@@ -2538,43 +2544,15 @@ export default function Editor() {
             onCaptureExport={onCaptureExport}
             onWalkExportParent={onWalkExportParent}
             tweakBridge={tweakBridge}
-            onAskTweaks={() => {
-              // Build the AI prompt that asks Claude to add live-tweak
-              // controls to the current page. The host (this editor) wires
-              // everything in once the page posts __edit_mode_available, so
-              // the prompt only needs to instruct on:
-              //   1. the EDITMODE-BEGIN/END marker block (so source rewrites
-              //      can find + patch the JSON)
-              //   2. the existing tweaks-panel.jsx in the project
-              //   3. wiring TWEAK_DEFAULTS keys into the rendered output
-              // The dialog lets the user edit before sending.
-              const prompt = [
-                `For the active page \`${activeTab.route}\` in this sandbox project,`,
-                `add live-tweak controls so I can adjust the salient values (text, colors,`,
-                `font sizes, spacing, etc.) without touching code.`,
-                ``,
-                `**How it works in this project:**`,
-                `- The page is plain HTML + CDN React + Babel-Standalone (no build step).`,
-                `- There is already a \`tweaks-panel.jsx\` at the project root that exports`,
-                `  \`useTweaks(DEFAULTS, "storageKey")\` and \`<TweaksPanel>\`. Use them — don't`,
-                `  re-implement.`,
-                `- Define \`const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{...}/*EDITMODE-END*/;\``,
-                `  inside the page (or a small companion .jsx). The marker comments are`,
-                `  load-bearing — the editor's host bridge reads them to write knob changes`,
-                `  back to source. The block must be valid JSON, exactly one per file.`,
-                `- Wire the values from \`useTweaks\` into the rendered output, and render`,
-                `  \`<TweaksPanel>\` with \`<TweakText>\`/\`<TweakSelect>\`/\`<TweakSlider>\`/`,
-                `  \`<TweakToggle>\` children for each key.`,
-                ``,
-                `**Scope:**`,
-                `- Only edit files inside this project directory.`,
-                `- Pick 5–10 high-leverage knobs — don't try to expose every value.`,
-                `- Keep the panel small (floating bottom-right is the established pattern).`,
-                ``,
-                `When done, the editor's "Edit live" toolbar toggle will appear and clicking`,
-                `it will open your panel. Each knob change writes back to source automatically.`,
-              ].join("\n");
-              setTweaksPreviewPrompt(prompt);
+            onAskTweaks={(buttonRect) => {
+              // Open the AddTweaks popover anchored under the toolbar
+              // button. The popover composes a minimal skill-invocation
+              // message ("Apply the make-tweakable skill to <route>.")
+              // and sends it on confirm — the protocol details live in
+              // skills/make-tweakable/SKILL.md (mounted via
+              // additionalDirectories), so we don't re-explain them
+              // here.
+              setAddTweaksAnchor(buttonRect);
             }}
             overrideCount={overrideCountForActive}
             onReset={async () => {
@@ -2941,20 +2919,26 @@ export default function Editor() {
         </Suspense>
       )}
 
-      {tweaksPreviewPrompt !== null && (
-        <Suspense fallback={null}>
-          <TweaksPreviewDialog
-            open={tweaksPreviewPrompt !== null}
-            initialPrompt={tweaksPreviewPrompt ?? ""}
-            onClose={() => setTweaksPreviewPrompt(null)}
-            onConfirm={async (prompt) => {
-              setTweaksPreviewPrompt(null);
-              setChatTabSwitchKey((k) => k + 1);
-              await runTurn({ text: prompt, attachments: [], target: null });
-            }}
-          />
-        </Suspense>
-      )}
+      {/* AddTweaksPopover — anchored under the "Add tweaks" toolbar
+          button. On submit it sends a short skill-invocation message
+          ("Apply the make-tweakable skill to <route>." + optional
+          user-supplied focus); the agent reads the full protocol
+          from skills/make-tweakable/SKILL.md (mounted via
+          additionalDirectories) and picks the right path (cheap
+          EDITMODE block or tweaks_panel.jsx starter) based on what
+          the user asked for + the design's complexity. */}
+      <AddTweaksPopover
+        open={addTweaksAnchor !== null}
+        route={activeTab.route}
+        anchorRect={addTweaksAnchor}
+        onClose={() => setAddTweaksAnchor(null)}
+        onSubmit={async (message) => {
+          setAddTweaksAnchor(null);
+          setChatTabSwitchKey((k) => k + 1);
+          await runTurn({ text: message, attachments: [], target: null });
+        }}
+      />
+
 
       {settingsOpen && (
         <Suspense fallback={null}>
@@ -3455,7 +3439,9 @@ function Toolbar({
   onDisplay: (d: DisplayMode) => void;
   viewport: Viewport;
   onViewport: (vp: Viewport) => void;
-  onAskTweaks: () => void;
+  /** Open the AddTweaks popover. Receives the toolbar button's
+   *  bounding rect so the popover can anchor itself under it. */
+  onAskTweaks: (buttonRect: DOMRect) => void;
   exportScale: number;
   onExportScale: (n: number) => void;
   exportFormat: ExportFormat;
@@ -3812,15 +3798,15 @@ function Toolbar({
 
       <button
         className={s.iconBtn}
-        title="Ask AI to add tweak controls for this file"
-        onClick={onAskTweaks}
+        title="Ask AI to add tweak controls (knobs the user can adjust live)"
+        onClick={(e) => onAskTweaks(e.currentTarget.getBoundingClientRect())}
       >
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
           <circle cx="9" cy="7" r="4" />
           <path d="M3 14 L6 11" strokeLinecap="round" />
           <path d="M7 7 H11 M9 5 V9" strokeLinecap="round" />
         </svg>
-        Tweaks
+        Add tweaks
       </button>
 
       {/* Live-tweak toggle — only appears when the iframe page declared
@@ -3849,14 +3835,14 @@ function Toolbar({
             tweakBridge.toggle();
           }}
           title={tweakBridge.editing
-            ? "Hide the in-page Tweaks panel"
-            : "Show the in-page Tweaks panel — edits write back to source"}
+            ? "Hide the tweak panel"
+            : "Show the tweak panel — adjust knobs, edits write back to source"}
         >
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
             <circle cx="8" cy="8" r="2.2" />
             <path d="M8 1.5 V4 M8 12 V14.5 M1.5 8 H4 M12 8 H14.5 M3.2 3.2 L4.8 4.8 M11.2 11.2 L12.8 12.8 M3.2 12.8 L4.8 11.2 M11.2 4.8 L12.8 3.2" />
           </svg>
-          {tweakBridge.editing ? "Tweaking" : "Edit live"}
+          {tweakBridge.editing ? "Tweaking" : "Tweak"}
         </button>
       )}
 
