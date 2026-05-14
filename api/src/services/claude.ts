@@ -184,7 +184,16 @@ export async function runClaude(
         send("status", { phase: "retry", reason: "session-corrupted" });
         continue;
       }
-      send("error", { message: `claude SDK error: ${msg}` });
+      // Tag auth failures so the client can surface a "sign back in"
+      // banner instead of a generic error. The SDK bubbles the CLI's
+      // textual error verbatim — match on "401" or "authenticate" so
+      // we catch both phrasings the CLI uses ("API Error: 401 …" and
+      // "Failed to authenticate").
+      const isAuthFailure = /\b401\b|authenticate|invalid authentication/i.test(msg);
+      send("error", {
+        message: `claude SDK error: ${msg}`,
+        code: isAuthFailure ? "auth_required" : "sdk_error",
+      });
       return;
     }
   }

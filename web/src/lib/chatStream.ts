@@ -77,7 +77,7 @@ export type StreamEvent =
   | { type: "elicit"; request: ElicitRequest }
   | { type: "elicitClear"; id: string }
   | { type: "usage"; usage: TurnUsage }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; code?: string }
   | { type: "done" };
 
 export type StreamState = {
@@ -536,8 +536,12 @@ function parseSseBlock(block: string): { events: StreamEvent[]; eventIndex: numb
     return wrap([]);
   }
   if (event === "error") {
-    const p = parsed as { message?: string };
-    return wrap([{ type: "error", message: p.message ?? "Unknown error" }]);
+    const p = parsed as { message?: string; code?: string };
+    return wrap([{
+      type: "error",
+      message: p.message ?? "Unknown error",
+      ...(typeof p.code === "string" ? { code: p.code } : {}),
+    }]);
   }
   if (event === "elicit") {
     const p = parsed as ElicitRequest;

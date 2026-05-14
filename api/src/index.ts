@@ -26,6 +26,7 @@ import { capabilitiesRoute } from "./routes/capabilitiesRoute.ts";
 import { agentsRoute } from "./routes/agents.ts";
 import { internalRoutes } from "./routes/internal.ts";
 import { skillsCatalogRoute } from "./routes/skillsCatalog.ts";
+import { healthRoute } from "./routes/health.ts";
 import { artifactsRoutes } from "./routes/artifacts.ts";
 
 const app = new Hono();
@@ -66,6 +67,7 @@ app.get("/api/health", (c) => c.json({ ok: true, port: ENV.API_PORT }));
 // but `projectsRoutes` includes the /p/:id/* catch-all so it goes last.
 app.route("/", capabilitiesRoute);
 app.route("/", skillsCatalogRoute);
+app.route("/", healthRoute);
 app.route("/", agentsRoute);
 app.route("/", debugRoutes);
 app.route("/", internalRoutes);
