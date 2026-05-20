@@ -66,7 +66,45 @@ The server sanitizes (filesystem-safe chars only) and collision-suffixes (`-2`, 
 | "4K", "8K", "high quality video" | `export_video` with `resolution` set + `quality: "high"` or `"master"`. Vector content stays sharp at 4K/8K because the browser re-rasterizes at higher DPI. |
 | Ambiguous | Use `mcp__ask-user__ask_user` with `kind: "enum"` and options like `["PNG (transparent)", "JPEG (smaller)", "OGraf (Resolve 21+)"]` |
 
-**Important nuance about OGraf** in Resolve 21: the bundle imports as a *baked* clip — text and colors are not editable in the Inspector. If the user expects post-import text editing in Resolve, OGraf does NOT deliver that today. PNG (re-export when content changes) is more honest. State this in your reply when relevant.
+## OGraf export — always elicit first
+
+`export_ograf` is not a one-shot call. An OGraf bundle can be an overlay or a
+whole page, animated or static, with or without inspector-editable fields —
+and the right choice changes every time. **Before calling `export_ograf`, run
+a short `ask_user` elicitation.** Then pass the answers as args.
+
+Ask (one `ask_user` call per decision, or batch where natural):
+
+1. **Scope** — `kind:"enum"`, options `["Just this element (overlay)", "The whole page"]`
+   → `scope: "element"` or `"page"`. Element = transparent frame, CSS
+   shadow-scoped, sized to the element. Page = keeps the page background,
+   sized to the captured root. For `page`, pass the page's root wrapper as
+   `selector`, not `body`.
+2. **Animation** — only if the element actually animates. `kind:"enum"`,
+   options `["Keep it animated", "Freeze it (static)"]` → `animated: true|false`.
+   Animated graphics stay seekable as Resolve scrubs the timeline.
+3. **Editable props** — inspect the design, *propose* a concrete list, let the
+   user confirm/trim. e.g. "I can make these editable in Resolve's inspector:
+   **Headline text**, **Headline size**, **Headline font**, **Background
+   color**, **Entrance duration** — want all of them?" Each confirmed prop
+   becomes a `props[]` entry with a `key`, `label`, `type` (text/number/color),
+   `control` (text/background/color/fontSize/fontFamily/opacity/duration) and a
+   `target` CSS selector. **Default to offering BOTH `fontSize` AND
+   `fontFamily` for every prominent text element** — the user wants to resize
+   *and* re-pick the font inside Resolve. Resolve's OGraf renderer is Chromium,
+   so a `fontFamily` value resolves against the OS's installed fonts — typing
+   "Helvetica Neue" or "JetBrains Mono" in the Inspector switches to that
+   system font live. Empty `props` = a baked graphic (nothing editable) — fine
+   if the user doesn't need it.
+
+What the exporter now guarantees (these were hard-won — don't second-guess
+them): HTML/CSS/images are inlined (no runtime fetch — Resolve's sandbox
+blocks it); CSS `@keyframes` are made seekable so they follow Resolve's
+timeline; the graphic is sized by true layout pixels. Declared `props` show
+up as real inspector controls and update live via the OGraf data API.
+
+One Resolve-side gotcha to tell the user: the imported clip's **Composite
+Mode must be Normal** (not Multiply) for a clean alpha overlay.
 
 ## Defaults
 
@@ -74,6 +112,9 @@ When the user doesn't specify:
 - `format` → `png`
 - `scale` → `2` (high-DPI; `4` for hero shots if the file size cost is acceptable)
 - `backgroundColor` → `transparent` for PNG, omit for JPEG (which forces white)
+- video `resolution` → `4K`, `quality` → `high` — this user works in 4K, so
+  high quality is the baseline, not an opt-in. Only go smaller when the user
+  explicitly asks for a lighter file.
 
 ## Feedback loop
 
@@ -90,7 +131,7 @@ After a successful export, when iteration is plausible, call `mcp__ask-user__ask
 When the user picks one, route accordingly:
 - "Looks good" → done, no further calls
 - "Try a different format" → ask which, then re-call the right capability
-- "Higher quality / 4K" → re-call `export_element` with `scale: 4` (or `export_video` with `resolution: "4K"` once that capability lands)
+- "Higher quality / 4K" → re-call `export_element` with `scale: 4`, or `export_video` with `resolution: "4K"`, `quality: "master"`
 - "Adjust background" → re-call with `backgroundColor` flipped
 
 **Don't ask after every export** — only when the result might genuinely need iteration (complex element, ambiguous request, hero shot). For simple "give me a PNG" calls, just confirm and stop.

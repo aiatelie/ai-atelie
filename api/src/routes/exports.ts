@@ -11,7 +11,7 @@
 
 import { Hono } from "hono";
 import { renderElement, exportRendererAvailability } from "../services/exportRender.ts";
-import { buildOgrafBundle } from "../services/exportOgraf.ts";
+import { buildOgrafBundle, type OgrafProp } from "../services/exportOgraf.ts";
 import { recordAndEncode, videoRendererAvailability, type VideoArgs } from "../services/exportVideo.ts";
 import { saveArtifact, splitFilename } from "../services/exportArtifacts.ts";
 import { projectDirOf, internalBaseUrl } from "../services/projectStore.ts";
@@ -81,7 +81,9 @@ exportsRoutes.post("/api/export-ograf", async (c) => {
     route?: string;
     selector?: string;
     name?: string;
-    editableTitle?: boolean;
+    scope?: "element" | "page";
+    animated?: boolean;
+    props?: OgrafProp[];
   };
   let body: Body;
   try { body = await c.req.json(); }
@@ -98,7 +100,9 @@ exportsRoutes.post("/api/export-ograf", async (c) => {
       url: targetUrl(body.projectId, body.route),
       selector: body.selector,
       name: body.name ?? "graphic",
-      editableTitle: body.editableTitle ? "Title" : undefined,
+      scope: body.scope,
+      animated: body.animated,
+      props: body.props,
     });
     const { base, ext } = splitFilename(result.filename);
     const artifact = await saveArtifact({
