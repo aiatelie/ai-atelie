@@ -148,14 +148,17 @@ try {
       } catch { /* CORS-blocked sheet */ }
     }
 
-    // 5. Bounding rect — surfaced to the server so it can size the
-    //    OGraf graphic to the actual element dimensions.
+    // 5. Element size — surfaced to the server so it can size the OGraf
+    //    graphic. Use offsetWidth/offsetHeight (layout box) NOT
+    //    getBoundingClientRect: the latter is scaled by any ancestor CSS
+    //    `transform` (the design canvas fits the artboard to the viewport
+    //    with a scale transform), which would record a shrunk size.
     const r = el.getBoundingClientRect();
     const boundingRect = {
       x: Math.round(r.left),
       y: Math.round(r.top),
-      w: Math.round(r.width),
-      h: Math.round(r.height),
+      w: el.offsetWidth || Math.round(r.width),
+      h: el.offsetHeight || Math.round(r.height),
     };
 
     // 6. Best-effort title — used as the OGraf manifest's display name.

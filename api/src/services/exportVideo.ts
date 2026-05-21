@@ -107,7 +107,9 @@ function deriveScaleAndViewport(args: VideoArgs): { scale: number; viewport: { w
   if (args.resolution === "custom" && args.customWidth && args.customHeight) {
     target = { w: args.customWidth, h: args.customHeight };
   } else {
-    target = RESOLUTION_DIMS[(args.resolution ?? "1080p") as keyof typeof RESOLUTION_DIMS] ?? RESOLUTION_DIMS["1080p"];
+    // Default to 4K — AI Atelie's user works in 4K; high quality is the
+    // expected baseline, not an opt-in.
+    target = RESOLUTION_DIMS[(args.resolution ?? "4K") as keyof typeof RESOLUTION_DIMS] ?? RESOLUTION_DIMS["4K"];
   }
   // Default page viewport — most designs are authored for a 1920×1080
   // canvas. We don't reflow the page to match the target output; we
@@ -189,7 +191,7 @@ function buildFfmpegArgs(rec: RecordResult, args: VideoArgs): {
   crf?: number;
 } {
   const transparent = args.backgroundColor === "transparent";
-  const quality = args.quality ?? "standard";
+  const quality = args.quality ?? "high";
   const fps = rec.fps;
   const inputPattern = join(rec.dir, rec.framePattern);
 
@@ -285,7 +287,7 @@ export async function recordAndEncode(args: VideoArgs): Promise<VideoResult> {
       fps: rec.fps,
       metadata: {
         codec,
-        quality: args.quality ?? "standard",
+        quality: args.quality ?? "high",
         crf,
         backgroundColor: args.backgroundColor ?? "transparent",
         durationMode: rec.durationMode,
