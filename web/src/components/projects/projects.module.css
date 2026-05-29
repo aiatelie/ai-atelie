@@ -341,7 +341,7 @@
 }
 .formSkillsHint {
   font: var(--weight-regular) var(--text-xs) var(--font-system);
-  color: var(--ink-50);
+  color: var(--ink-65);
   letter-spacing: 0;
   padding: 0 2px;
 }
@@ -420,7 +420,7 @@
   transform: translateY(-50%);
   width: 14px;
   height: 14px;
-  color: var(--ink-44);
+  color: var(--ink-55);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -467,8 +467,8 @@
   width: 12px;
   height: 12px;
   /* Chevron drawn with borders — no hardcoded color, just current color */
-  border-right: 1.5px solid var(--ink-44);
-  border-bottom: 1.5px solid var(--ink-44);
+  border-right: 1.5px solid var(--ink-55);
+  border-bottom: 1.5px solid var(--ink-55);
   transform: translateY(-65%) rotate(45deg);
   pointer-events: none;
 }
@@ -512,7 +512,7 @@
   height: 36px;
   border-radius: var(--radius-lg);
   background: var(--ink-04);
-  color: var(--ink-50);
+  color: var(--ink-55);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -679,7 +679,7 @@
 }
 .cardRemixFrom {
   font-size: var(--text-xs);
-  color: var(--ink-50);
+  color: var(--ink-65);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

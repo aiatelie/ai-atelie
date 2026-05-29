@@ -36,7 +36,9 @@
      Cool/neutral fill so the pin reads as "out for review" rather than
      "still actionable". */
   background: var(--ink-strong);
-  color: var(--on-brand);
+  /* Dark fill in every theme, so the number needs an always-light token.
+   * --on-brand now goes dark on light-brand themes (would be dark-on-dark). */
+  color: var(--on-ink-soft-90);
 }
 .pinResolved {
   /* Terminal: nothing to do here anymore. Muted brand to keep the row

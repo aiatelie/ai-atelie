@@ -36,7 +36,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-40);
+  color: var(--ink-55);
   width: 22px;
   height: 22px;
   border-radius: var(--radius-sm);
@@ -76,7 +76,7 @@
 }
 .hint {
   font-size: var(--text-xs);
-  color: var(--ink-40);
+  color: var(--ink-65);
   flex-shrink: 0;
 }
 .modelPickerWrap {
@@ -202,11 +202,11 @@
   letter-spacing: var(--tracking-heading);
 }
 .statusHead .x {
-  color: var(--on-ink-55);
+  color: var(--on-ink-soft-65);
 }
 .statusHead .x:hover {
   background: var(--on-ink-08);
-  color: var(--on-ink);
+  color: var(--on-ink-soft-90);
 }
 .statusDot {
   width: 8px;
@@ -237,7 +237,7 @@
 }
 .eventPhase {
   font-size: var(--text-xs);
-  color: var(--on-ink-55);
+  color: var(--on-ink-soft-65);
   letter-spacing: var(--tracking-ui);
   font-family: var(--font-mono);
 }
@@ -257,7 +257,7 @@
   margin: 6px 0 0;
   font-size: var(--text-2xs);
   font-family: var(--font-mono);
-  color: var(--on-ink-65);
+  color: var(--on-ink-soft-80);
   white-space: pre-wrap;
   word-break: break-all;
 }

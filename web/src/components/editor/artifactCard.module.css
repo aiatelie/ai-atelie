@@ -114,7 +114,7 @@
   appearance: none;
   border: 0;
   background: var(--on-ink-08);
-  color: var(--on-ink);
+  color: var(--on-ink-soft-90);
   width: 36px;
   height: 36px;
   border-radius: 50%;

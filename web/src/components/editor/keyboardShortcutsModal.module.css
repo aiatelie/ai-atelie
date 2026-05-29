@@ -42,7 +42,7 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  color: var(--ink-44);
+  color: var(--ink-55);
   font-size: var(--text-xl);
   line-height: 1;
   padding: 4px 6px;
@@ -93,7 +93,7 @@
   text-align: center;
 }
 .plus {
-  color: var(--ink-44);
+  color: var(--ink-55);
   font-size: var(--text-xs);
 }
 
@@ -103,7 +103,7 @@
   padding: 8px 16px;
   border-top: 1px solid var(--ink-08);
   font-size: var(--text-xs);
-  color: var(--ink-44);
+  color: var(--ink-65);
 }
 .footer kbd {
   background: var(--ink-04);

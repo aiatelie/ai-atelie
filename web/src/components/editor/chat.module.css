@@ -104,7 +104,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-55);
   width: 16px;
   height: 16px;
   border-radius: var(--radius-xs);
@@ -133,7 +133,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-55);
   width: 28px;
   font-size: var(--text-xl);
   line-height: 1;
@@ -180,7 +180,7 @@
 .headInfo { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .headText { display: flex; flex-direction: column; min-width: 0; }
 .headText b { font-size: var(--text-md); font-weight: var(--weight-semi); letter-spacing: 0.01em; }
-.meta { font-size: var(--text-xs); color: var(--ink-44); }
+.meta { font-size: var(--text-xs); color: var(--ink-65); }
 .dot {
   width: 8px; height: 8px; border-radius: 50%; background: var(--placeholder-strong); flex-shrink: 0;
 }
@@ -332,7 +332,7 @@
   font: inherit;
   font-size: var(--text-md);
   line-height: 1;
-  color: var(--ink-44);
+  color: var(--ink-55);
   cursor: pointer;
 }
 .contextPillRemove:hover { color: var(--ink-92); }
@@ -344,15 +344,15 @@
   max-width: 100%;
   font: inherit;
   font-size: var(--text-xs);
-  color: var(--ink-44);
+  color: var(--ink-55);
   background: transparent;
   border: 1px dashed var(--ink-15);
   border-radius: var(--radius-full);
   cursor: pointer;
 }
 .contextPillAdd:hover { color: var(--ink-92); border-color: var(--ink-30); }
-.contextPillAdd svg { color: var(--ink-44); flex-shrink: 0; }
-.contextPill svg { color: var(--ink-44); flex-shrink: 0; }
+.contextPillAdd svg { color: var(--ink-55); flex-shrink: 0; }
+.contextPill svg { color: var(--ink-55); flex-shrink: 0; }
 .contextPill span {
   white-space: nowrap;
   overflow: hidden;
@@ -522,7 +522,7 @@
   font: var(--weight-medium) var(--text-xs) var(--font-system);
   cursor: pointer;
 }
-.restoreBtn:hover { background: var(--on-ink-08); color: var(--on-ink); }
+.restoreBtn:hover { background: var(--on-ink-08); color: var(--on-ink-soft-90); }
 
 .text {
   /* Conversational prose styling. INHERIT color from the parent bubble
@@ -560,7 +560,7 @@
   font-family: var(--font-mono);
   font-style: normal;
   font-size: var(--text-xs);
-  color: var(--ink-44);
+  color: var(--ink-65);
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--tracking-ui);
   flex-shrink: 0;
@@ -772,7 +772,7 @@
   font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
-  color: var(--ink-44);
+  color: var(--ink-65);
   font-weight: var(--weight-semi);
 }
 .toolDetailValue {
@@ -904,7 +904,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-40);
+  color: var(--ink-55);
   width: 26px;
   height: 26px;
   border-radius: var(--radius-sm);
@@ -916,7 +916,7 @@
 .copyBtn:hover { background: var(--ink-06); color: var(--ink-92); }
 .revertedTag {
   font-size: var(--text-2xs);
-  color: var(--ink-40);
+  color: var(--ink-65);
   font-style: italic;
 }
 
@@ -930,7 +930,7 @@
 }
 .bubbleMetaLeft {
   font-size: var(--text-2xs);
-  color: var(--ink-35);
+  color: var(--ink-65);
   margin-top: 4px;
   padding-left: 4px;
 }
@@ -942,7 +942,7 @@
   display: block;
   margin-top: 2px;
   font: var(--weight-regular) var(--text-2xs) var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
-  color: var(--ink-35);
+  color: var(--ink-65);
   letter-spacing: var(--tracking-ui);
   white-space: nowrap;
   overflow: hidden;
@@ -1072,7 +1072,9 @@
   height: 56px;
   border-radius: 50%;
   background: var(--success);
-  color: var(--on-brand);
+  /* --success is a light green in every theme, so white glyph was ~2:1.
+   * --ink-strong stays dark across themes -> a high-contrast check mark. */
+  color: var(--ink-strong);
   font-size: var(--text-h2);
   font-weight: var(--weight-semi);
   display: inline-flex;
@@ -1101,7 +1103,7 @@
 .wizardComposerHint {
   padding: 8px 12px 0;
   font: var(--weight-medium) var(--text-xs) var(--font-system);
-  color: var(--ink-44);
+  color: var(--ink-65);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
 }
@@ -1156,7 +1158,7 @@
   gap: 10px;
   margin: 4px 4px;
   user-select: none;
-  color: var(--ink-44);
+  color: var(--ink-65);
   font: var(--weight-medium) var(--text-2xs) var(--font-system);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
@@ -1198,7 +1200,7 @@
   font-size: var(--text-2xs);
   display: inline-block;
   transition: transform var(--motion-fast) var(--ease-out-expressive);
-  color: var(--ink-44);
+  color: var(--ink-55);
 }
 .reminderBlock[open] > .reminderSummary::before { transform: rotate(90deg); }
 .reminderTag {
@@ -1206,7 +1208,7 @@
   font-size: var(--text-2xs);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  color: var(--ink-50);
+  color: var(--ink-65);
   padding: 1px 5px;
   border-radius: var(--radius-xs);
   background: var(--ink-04);
@@ -1316,7 +1318,7 @@
 }
 .elicitTextareaHint {
   font-size: var(--text-2xs);
-  color: var(--ink-40);
+  color: var(--ink-65);
   padding-left: 4px;
 }
 .elicitNumberRow {
@@ -1405,7 +1407,7 @@
 
 .composerHint {
   font: var(--weight-medium) var(--text-2xs) var(--font-system);
-  color: var(--ink-44);
+  color: var(--ink-65);
   letter-spacing: var(--tracking-body);
   user-select: none;
   padding: 0 2px;
@@ -1474,7 +1476,7 @@
 }
 .composerAttachBtn:hover {
   background: var(--surface);
-  color: var(--ink-strong);
+  color: var(--ink-92);
   border-color: var(--ink-35);
 }
 .composerSend {
@@ -1571,7 +1573,7 @@
   align-items: center;
   gap: 6px;
   font-size: var(--text-2xs);
-  color: var(--ink-44);
+  color: var(--ink-65);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1624,7 +1626,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-55);
   padding: 3px 6px 3px 4px;
   font: var(--weight-medium) var(--text-2xs) var(--font-system);
   cursor: pointer;
@@ -1773,7 +1775,7 @@
 }
 .queuedCancel:hover {
   background: var(--ink-08);
-  color: var(--ink-strong);
+  color: var(--ink-92);
 }
 
 /* ─── Markdown rendering ───────────────────────────────────── */
@@ -2101,7 +2103,7 @@
 .threadSwitcherBtn:hover { background: var(--ink-04); }
 .threadChev {
   font-size: var(--text-2xs);
-  color: var(--ink-40);
+  color: var(--ink-55);
   flex-shrink: 0;
 }
 .threadMenu {
@@ -2150,7 +2152,7 @@
 .threadItemCount {
   font-size: var(--text-2xs);
   font-weight: var(--weight-semi);
-  color: var(--ink-40);
+  color: var(--ink-65);
   background: var(--ink-06);
   padding: 1px 6px;
   border-radius: var(--radius-full);
@@ -2158,7 +2160,7 @@
 }
 .threadItemDate {
   font-size: var(--text-xs);
-  color: var(--ink-40);
+  color: var(--ink-65);
 }
 .threadItemDelete {
   position: absolute;
@@ -2167,7 +2169,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-35);
+  color: var(--ink-55);
   width: 20px;
   height: 20px;
   border-radius: 5px;
@@ -2235,7 +2237,7 @@
   justify-content: center;
   padding: 0;
 }
-.deleteMsgBtn:hover { background: var(--on-ink-10); color: var(--on-ink); }
+.deleteMsgBtn:hover { background: var(--on-ink-10); color: var(--on-ink-soft-90); }
 
 /* ─── Retry button (assistant error bubbles) ───────────────── */
 
@@ -2480,7 +2482,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-55);
   width: 22px;
   height: 22px;
   border-radius: 5px;
@@ -2616,15 +2618,18 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--on-ink-50);
+  /* The code block sits on --surface-3 (light in light themes, dark in
+   * dark themes). The on-ink family flips the wrong way here (light-on-
+   * light / dark-on-dark); --ink-* tracks the surface correctly. */
+  color: var(--ink-65);
   font: var(--weight-medium) var(--text-xs) var(--font-system);
   cursor: pointer;
   padding: 3px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .codeBlockToggle:hover {
-  background: var(--on-ink-10);
-  color: var(--on-ink);
+  background: var(--ink-08);
+  color: var(--ink-92);
 }
 
 /* Respect reduced-motion: kill the looping/streaming animations and the
