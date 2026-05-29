@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import s from "./assets.module.css";
+import { EmptyState } from "../feedback";
 import {
   addColor,
   removeColor,
@@ -20,6 +21,8 @@ import {
   removeComponent,
   updateComponent,
   useSharedAssets,
+  useSharedAssetsError,
+  refreshSharedAssets,
   type SharedColor,
   type SharedLottie,
   type SharedComponent,
@@ -31,10 +34,28 @@ type Tab = "colors" | "lotties" | "components";
 export function AssetsDialog({ open, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("colors");
   const assets = useSharedAssets();
+  const loadError = useSharedAssetsError();
+
+  // Close on Escape while open. Mirrors the ConfirmDialog idiom.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div className={s.backdrop} onClick={onClose}>
-      <div className={s.dialog} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={s.dialog}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Shared assets"
+      >
         <div className={s.head}>
           <b>Shared assets</b>
           <span className={s.subhead}>Edit once, reflect across every project.</span>
@@ -46,9 +67,25 @@ export function AssetsDialog({ open, onClose }: Props) {
           <TabBtn id="components" cur={tab} onClick={setTab} count={assets.components.length}>Components</TabBtn>
         </div>
         <div className={s.body}>
-          {tab === "colors" && <ColorsPanel colors={assets.colors} />}
-          {tab === "lotties" && <LottiesPanel lotties={assets.lotties} />}
-          {tab === "components" && <ComponentsPanel components={assets.components} />}
+          {loadError ? (
+            <EmptyState
+              size="sm"
+              tone="error"
+              title="Couldn’t load shared assets"
+              body="Something went wrong reading the shared library."
+              action={
+                <button type="button" className={s.copyBtn} onClick={() => refreshSharedAssets()}>
+                  Retry
+                </button>
+              }
+            />
+          ) : (
+            <>
+              {tab === "colors" && <ColorsPanel colors={assets.colors} />}
+              {tab === "lotties" && <LottiesPanel lotties={assets.lotties} />}
+              {tab === "components" && <ComponentsPanel components={assets.components} />}
+            </>
+          )}
         </div>
         <div className={s.foot}>
           <span className={s.usage}>
@@ -95,10 +132,11 @@ function ColorsPanel({ colors }: { colors: SharedColor[] }) {
   return (
     <div className={s.colors}>
       {colors.length === 0 && (
-        <div className={s.empty}>
-          No shared colors yet. Add one — it'll be available as a CSS variable
-          on every project's iframe.
-        </div>
+        <EmptyState
+          size="sm"
+          title="No shared colors yet"
+          body="Add one — it'll be available as a CSS variable on every project's iframe."
+        />
       )}
       {colors.map((c) => (
         <ColorRow key={c.id} color={c} />
@@ -182,10 +220,16 @@ function LottiesPanel({ lotties }: { lotties: SharedLottie[] }) {
   return (
     <div className={s.lotties}>
       {lotties.length === 0 && (
-        <div className={s.empty}>
-          No lotties yet. Add a public <code>.json</code> or <code>.lottie</code> URL
-          (e.g. from LottieFiles) — preview renders inline.
-        </div>
+        <EmptyState
+          size="sm"
+          title="No lotties yet"
+          body={
+            <>
+              Add a public <code>.json</code> or <code>.lottie</code> URL
+              (e.g. from LottieFiles) — preview renders inline.
+            </>
+          }
+        />
       )}
       {lotties.map((l) => (
         <LottieRow key={l.id} lottie={l} />
@@ -274,10 +318,11 @@ function ComponentsPanel({ components }: { components: SharedComponent[] }) {
   return (
     <div className={s.components}>
       {components.length === 0 && (
-        <div className={s.empty}>
-          No components yet. Add an HTML snippet — copy it into a route or
-          dialog when you need it.
-        </div>
+        <EmptyState
+          size="sm"
+          title="No components yet"
+          body="Add an HTML snippet — copy it into a route or dialog when you need it."
+        />
       )}
       {components.map((c) => (
         <ComponentRow key={c.id} component={c} />

@@ -26,6 +26,7 @@ export function TweaksPreviewDialog({ open, initialPrompt, onClose, onConfirm }:
         </div>
         <div className={s.body}>
           <textarea
+            className={s.tweakTextarea}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             spellCheck={false}
@@ -40,15 +41,13 @@ export function TweaksPreviewDialog({ open, initialPrompt, onClose, onConfirm }:
               background: "var(--surface)",
               color: "var(--ink-92)",
               resize: "vertical",
-              outline: "none",
             }}
           />
         </div>
-        <div className={s.foot} style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <div className={`${s.foot} ${s.dialogActions}`}>
           <button className={s.copyBtn} onClick={onClose}>Cancel</button>
           <button
-            className={s.copyBtn}
-            style={{ background: "var(--brand)", color: "var(--on-brand)", borderColor: "var(--brand-fg)" }}
+            className={s.btnPrimary}
             onClick={() => { onConfirm(prompt); }}
             disabled={!prompt.trim()}
           >

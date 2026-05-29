@@ -14,7 +14,7 @@
   z-index: 1100;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--pad-md);
   max-width: min(420px, calc(100vw - 32px));
   pointer-events: none;
 }
@@ -25,7 +25,7 @@
   display: grid;
   grid-template-columns: 4px 1fr auto;
   align-items: stretch;
-  gap: 10px;
+  gap: var(--pad-lg);
   background: var(--surface);
   color: var(--ink-92);
   border: 1px solid var(--ink-08);
@@ -39,10 +39,10 @@
 }
 
 .accent { background: var(--ink-50); }
-.toastInfo .accent    { background: var(--ink-50); }
-.toastSuccess .accent { background: var(--success, var(--brand)); }
-.toastWarn .accent    { background: var(--brand-warm-strong, var(--brand)); }
-.toastError .accent   { background: var(--brand-warm-strong, var(--brand)); }
+.toastInfo .accent    { background: var(--info); }
+.toastSuccess .accent { background: var(--success); }
+.toastWarn .accent    { background: var(--warning); }
+.toastError .accent   { background: var(--danger); }
 
 .body {
   padding: 10px 4px 10px 0;
@@ -80,7 +80,7 @@
   width: 28px;
   align-self: stretch;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-lg);
   line-height: 1;
 }
 .close:hover { color: var(--ink-92); background: var(--ink-04); }

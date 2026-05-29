@@ -1,12 +1,12 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  background: var(--backdrop, rgba(0, 0, 0, 0.32));
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  animation: fadeIn 120ms ease-out;
+  animation: fadeIn var(--motion-fast) var(--ease-out-expressive);
 }
 
 @keyframes fadeIn {
@@ -17,8 +17,8 @@
 .dialog {
   background: var(--surface);
   color: var(--ink-92);
-  border-radius: 12px;
-  box-shadow: var(--shadow-pop);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-deep);
   width: min(720px, 94vw);
   height: min(540px, 86vh);
   display: flex;
@@ -46,7 +46,7 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--text-xl);
   line-height: 1;
   color: var(--ink-55);
   width: 28px;
@@ -123,7 +123,7 @@
 .sectionDesc {
   margin: 0;
   font-size: var(--text-sm);
-  line-height: 1.55;
+  line-height: var(--leading-normal);
   color: var(--ink-65);
 }
 .sectionDesc strong { color: var(--ink-85); font-weight: var(--weight-semi); }
@@ -136,7 +136,7 @@
   gap: 4px;
   padding: 4px;
   background: var(--ink-06);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--ink-10);
   margin-top: 4px;
 }
@@ -148,7 +148,7 @@
   font: var(--weight-medium) var(--text-sm) var(--font-system);
   color: var(--ink-64);
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease-out-expressive),
@@ -173,12 +173,12 @@
   padding: 8px 12px;
   background: var(--surface-warm);
   border: 1px solid var(--ink-08);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   margin-top: 4px;
 }
 
 .designStatusLabel {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-65);
 }
 .designStatusLabel strong { color: var(--ink-92); font-weight: var(--weight-semi); }
@@ -189,11 +189,11 @@
   background: var(--surface);
   color: var(--ink-92);
   font-family: inherit;
-  font-size: 11px;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.08em;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
   padding: 5px 12px;
-  border-radius: 100px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   flex-shrink: 0;
   transition: background-color var(--motion-fast) var(--ease-out-expressive);
@@ -209,10 +209,10 @@
 }
 
 .themeGroupLabel {
-  font-size: 11px;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.06em;
-  color: var(--ink-50);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--ink-65);
   font-weight: var(--weight-semi);
 }
 
@@ -259,7 +259,7 @@
   display: block;
   width: 100%;
   height: 44px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid;
   overflow: hidden;
 }
@@ -267,7 +267,7 @@
 .themeSwatchSurface {
   position: absolute;
   inset: 6px 32% 6px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .themeSwatchBrand {
   position: absolute;
@@ -303,7 +303,7 @@
   gap: 16px;
   padding: 10px 12px;
   border: 1px solid var(--ink-08);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-warm);
 }
 
@@ -316,15 +316,15 @@
 }
 
 .notifTitle {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
   color: var(--ink-92);
 }
 
 .notifDesc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--ink-65);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }
 
 .toggleBtn {
@@ -333,14 +333,16 @@
   background: var(--surface);
   color: var(--ink-65);
   font-family: inherit;
-  font-size: 11px;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.08em;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
   padding: 6px 14px;
-  border-radius: 100px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background-color 100ms ease, color 100ms ease;
+  transition:
+    background-color var(--motion-fast) var(--ease-out-expressive),
+    color var(--motion-fast) var(--ease-out-expressive);
 }
 .toggleBtn:hover:not(:disabled) {
   background: var(--ink-04);
@@ -358,10 +360,10 @@
 }
 
 .subLabel {
-  font-size: 11px;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.06em;
-  color: var(--ink-50);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--ink-65);
   margin-top: 4px;
 }
 
@@ -372,10 +374,10 @@
   background: var(--brand-bg);
   color: var(--brand-fg);
   border: 1px solid var(--brand-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   cursor: pointer;
   font-family: inherit;
 }
@@ -391,14 +393,14 @@
 }
 
 .empty {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-50);
   padding: 12px 0;
 }
 
 .card {
   border: 1px solid var(--ink-08);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -424,23 +426,23 @@
 .dot[data-status="missing"] { background: var(--ink-30); }
 
 .cardName {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
   color: var(--ink-92);
 }
 
 .cardStatus {
   margin-left: auto;
-  font-size: 11px;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.06em;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
   color: var(--ink-50);
 }
 .cardStatus[data-status="ok"]   { color: var(--success); }
 .cardStatus[data-status="auth"] { color: var(--warning); }
 
 .cardMeta {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--ink-50);
 }
 
@@ -452,16 +454,16 @@
 }
 
 .hintText {
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   color: var(--ink-65);
 }
 .hintText code {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 1px 4px;
   background: var(--ink-04);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .copyBtn {
@@ -472,21 +474,21 @@
   padding: 6px 10px;
   background: var(--surface);
   border: 1px solid var(--ink-12);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--ink-92);
 }
 .copyBtn:hover { background: var(--ink-04); }
 .copyBtn code {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .copyLabel {
-  font-size: 10px;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.08em;
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
   color: var(--ink-50);
 }
 
@@ -494,12 +496,12 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--pad-md);
   padding-top: 8px;
 }
 
 .notice {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--ink-50);
 }
 
@@ -507,9 +509,9 @@
   background: var(--surface);
   color: var(--ink-92);
   border: 1px solid var(--ink-12);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 .rescanBtn:hover:not(:disabled) { background: var(--ink-04); }
@@ -526,7 +528,7 @@
   padding: 12px 14px;
   background: var(--surface-warm);
   border: 1px solid var(--ink-08);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .aboutRow {
@@ -534,30 +536,30 @@
 }
 
 .aboutRow dt {
-  font-size: 11px;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.06em;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
   color: var(--ink-50);
 }
 
 .aboutRow dd {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-92);
   font-family: var(--font-mono);
   word-break: break-all;
 }
 
 .aboutLong {
-  font-size: 11px !important;
-  line-height: 1.5;
+  font-size: var(--text-xs) !important;
+  line-height: var(--leading-normal);
 }
 
 .aboutLinks {
   display: flex;
   gap: 16px;
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .aboutLinks a {
   color: var(--brand-fg);
@@ -582,11 +584,11 @@
 }
 .skillsGroup:last-child { margin-bottom: 0; }
 .skillsGroupLabel {
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-caps);
   color: var(--ink-65);
-  font-weight: 600;
+  font-weight: var(--weight-semi);
   margin-bottom: 8px;
   padding: 0 2px;
 }
@@ -603,9 +605,11 @@
   gap: 12px;
   align-items: flex-start;
   padding: 12px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
   border: 1px solid var(--ink-08);
   background: var(--surface-2);
   position: relative;
@@ -631,17 +635,23 @@
   width: 18px;
   height: 18px;
   margin-top: 1px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   border: 1.5px solid var(--ink-25);
   background: var(--surface);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background var(--motion-fast) var(--ease-out-expressive),
+    border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .skillRow:has(input:checked) .skillCheck {
   background: var(--brand);
   border-color: var(--brand);
+}
+.skillRow:has(input:focus-visible) .skillCheck {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 .skillCheckMark {
   width: 11px;
@@ -649,7 +659,9 @@
   color: var(--on-brand);
   opacity: 0;
   transform: scale(0.6);
-  transition: opacity 0.12s, transform 0.12s;
+  transition:
+    opacity var(--motion-fast) var(--ease-out-expressive),
+    transform var(--motion-fast) var(--ease-out-expressive);
 }
 .skillRow:has(input:checked) .skillCheckMark {
   opacity: 1;
@@ -658,9 +670,9 @@
 .skillBody { flex: 1; min-width: 0; }
 .skillName {
   display: block;
-  font-weight: 600;
+  font-weight: var(--weight-semi);
   color: var(--ink-92);
-  font-size: 14px;
+  font-size: var(--text-lg);
   letter-spacing: -0.005em;
 }
 .skillRow:has(input:checked) .skillName {
@@ -669,9 +681,9 @@
 .skillDesc {
   display: block;
   color: var(--ink-65);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   margin-top: 4px;
-  line-height: 1.45;
+  line-height: var(--leading-normal);
 }
 .skillRow:has(input:checked) .skillDesc {
   color: var(--ink-78);
@@ -685,21 +697,38 @@
   gap: 12px;
   align-items: flex-start;
   padding: 11px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--ink-08);
   background: var(--surface-warm);
 }
 .capabilityBadge {
   flex-shrink: 0;
   margin-top: 1px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--ink-50);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-caps);
+  color: var(--ink-65);
   text-transform: uppercase;
   padding: 4px 7px;
   background: var(--ink-04);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--ink-08);
   white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop {
+    animation: none;
+  }
+  .closeBtn,
+  .navBtn,
+  .segBtn,
+  .designResetBtn,
+  .themeCard,
+  .toggleBtn,
+  .skillRow,
+  .skillCheck,
+  .skillCheckMark {
+    transition: none;
+  }
 }

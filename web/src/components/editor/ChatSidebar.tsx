@@ -1163,6 +1163,10 @@ function ChatBody({
   return (
     <div className={s.bodyWrap}>
     <div className={s.body} ref={bodyRef} onScroll={onScroll}>
+      {/* INTENTIONAL onboarding-specific surface: this chat hero carries
+        * interactive starter chips (STARTER_PROMPTS) and bespoke copy, so
+        * it is deliberately NOT migrated to the generic shared EmptyState.
+        * Keep it hand-rolled. */}
       {!thread || visible.length === 0 ? (
         <div className={s.empty}>
           <div className={s.emptyIcon}>

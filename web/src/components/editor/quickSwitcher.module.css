@@ -3,7 +3,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--backdrop);
   z-index: 200;
   display: flex;
   align-items: flex-start;
@@ -28,11 +28,15 @@
   outline: none;
   background: transparent;
   padding: 14px 16px;
-  font: var(--weight-medium) 16px var(--font-system);
+  font: var(--weight-medium) var(--text-xl) var(--font-system);
   color: var(--ink-92);
   border-bottom: 1px solid var(--ink-08);
 }
-.input::placeholder { color: var(--ink-44); }
+.input:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -1px;
+}
+.input::placeholder { color: var(--placeholder); }
 
 .list {
   max-height: 50vh;
@@ -75,10 +79,10 @@
   min-width: 0;
 }
 .kind {
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  color: var(--ink-44);
+  color: var(--ink-65);
   font-weight: var(--weight-semi);
 }
 .rowActive .kind { color: var(--brand-fg); }
@@ -94,10 +98,10 @@
 .footer kbd {
   background: var(--ink-04);
   border: 1px solid var(--ink-10);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   padding: 0 4px;
   margin-right: 2px;
   font-family: ui-monospace, monospace;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--ink-64);
 }

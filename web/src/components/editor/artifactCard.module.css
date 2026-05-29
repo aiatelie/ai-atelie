@@ -84,10 +84,10 @@
 .btn svg { width: 12px; height: 12px; }
 .btnPrimary {
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   border-color: transparent;
 }
-.btnPrimary:hover { background: var(--brand-strong); }
+.btnPrimary:hover { background: var(--brand-fg); }
 .btnPrimary svg { width: 12px; height: 12px; }
 
 /* Lightbox: covers the full editor surface, fades in, dismissed by
@@ -96,12 +96,12 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(8, 8, 8, 0.86);
+  background: var(--backdrop-strong);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 32px;
-  animation: lightboxFade 140ms ease-out;
+  animation: lightboxFade var(--motion-default) var(--ease-out-expressive);
 }
 @keyframes lightboxFade {
   from { opacity: 0; }
@@ -113,8 +113,8 @@
   right: 20px;
   appearance: none;
   border: 0;
-  background: rgba(255,255,255,0.08);
-  color: white;
+  background: var(--on-ink-08);
+  color: var(--on-ink-soft-90);
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -125,12 +125,18 @@
   align-items: center;
   justify-content: center;
 }
-.lightboxClose:hover { background: rgba(255,255,255,0.16); }
+.lightboxClose:hover { background: var(--on-ink-15); }
 
 .lightboxImg, .lightboxVideo {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   border-radius: 6px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-deep);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbox {
+    animation: none;
+  }
 }

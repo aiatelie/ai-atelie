@@ -26,7 +26,7 @@
   vertical-align: middle;
 }
 .skeletonRect { border-radius: var(--radius-sm); }
-.skeletonCircle { border-radius: 999px; }
+.skeletonCircle { border-radius: var(--radius-full); }
 .skeletonText { border-radius: var(--radius-xs); }
 
 .spinner {
@@ -35,7 +35,7 @@
   height: 16px;
   border: 2px solid var(--ink-10);
   border-top-color: var(--ink-65);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   animation: feedbackSpin 0.7s linear infinite;
   flex-shrink: 0;
 }
@@ -46,7 +46,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--pad-lg);
   min-height: 80px;
   color: var(--ink-55);
   font-size: var(--text-sm);
@@ -69,9 +69,9 @@
   font-family: var(--font-system);
 }
 
-.emptyStateSm { gap: 6px; padding: 24px 16px; }
-.emptyStateMd { gap: 10px; padding: 40px 20px; }
-.emptyStateLg { gap: 14px; padding: 64px 24px; }
+.emptyStateSm { gap: var(--pad-sm); padding: 24px 16px; }
+.emptyStateMd { gap: var(--pad-lg); padding: 40px 20px; }
+.emptyStateLg { gap: var(--pad-xl); padding: 64px 24px; }
 
 .emptyStateIcon {
   display: inline-flex;
@@ -79,7 +79,7 @@
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--ink-04);
   color: var(--ink-55);
   margin-bottom: 4px;
@@ -90,17 +90,29 @@
 .emptyStateTitle {
   font: var(--weight-semi) var(--text-md) var(--font-system);
   color: var(--ink-78);
-  letter-spacing: 0.005em;
+  letter-spacing: var(--tracking-body);
 }
 .emptyStateLg .emptyStateTitle { font-size: var(--text-lg); }
 
 .emptyStateBody {
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
   color: var(--ink-55);
   max-width: 36ch;
 }
 
 .emptyStateAction {
   margin-top: 4px;
+}
+
+.emptyStateError .emptyStateIcon {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.emptyStateFramed {
+  background: var(--surface);
+  border: 1px solid var(--ink-08);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
 }

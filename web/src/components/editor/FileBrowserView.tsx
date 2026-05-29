@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import s from "./fileBrowserView.module.css";
 import { readRecents, pushRecent, writeRecents } from "./recents";
 import { readFolderState, writeFolderState } from "./folderState";
-import { EmptyState } from "../feedback";
+import { EmptyState, CenteredLoader } from "../feedback";
 import { toast } from "../toast";
 import { PasteAsFileDialog } from "./PasteAsFileDialog";
 
@@ -43,6 +43,11 @@ type Props = {
 
 export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRoute, revealRequest }: Props) {
   const [tree, setTree] = useState<FileTree | null>(null);
+  // Surface fetch state so a failed/loading initial read isn't an
+  // indistinguishable empty tree (the old behavior silently swallowed
+  // both `!r.ok` and network errors).
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [selected, setSelected] = useState<SandboxFile | null>(null);
   // Folder-collapse state is per-project: a user who collapsed "uploads"
   // expects it to stay collapsed on the next reopen of the same project.
@@ -70,9 +75,15 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
 
   const refresh = useCallback(async () => {
     if (!projectId) { setTree(null); return; }
+    setLoading(true);
+    setError(false);
     try {
       const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`);
-      if (!r.ok) return;
+      if (!r.ok) {
+        setError(true);
+        toast.error(`Couldn't load files: HTTP ${r.status}`);
+        return;
+      }
       const next: FileTree = await r.json();
       setTree(next);
       // Re-resolve the current selection by path so deleted files clear and
@@ -97,7 +108,12 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
         writeRecents(projectId, pruned);
         return pruned;
       });
-    } catch { /* ignore */ }
+    } catch (err) {
+      setError(true);
+      toast.error(`Couldn't load files: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLoading(false);
+    }
   }, [projectId]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -345,6 +361,28 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
           />
         </div>
 
+        {/* Initial fetch state — only when the tree has never loaded.
+         * A failed read used to fall through to an empty tree, making a
+         * transport error indistinguishable from an empty project. */}
+        {tree === null && loading && <CenteredLoader label="Loading files…" />}
+        {tree === null && error && !loading && (
+          <EmptyState
+            tone="error"
+            size="sm"
+            title="Couldn’t load files"
+            body="Something went wrong reading this project."
+            action={
+              <button type="button" className={s.crumbAction} onClick={() => refresh()}>
+                Retry
+              </button>
+            }
+          />
+        )}
+
+        {/* File sections — suppressed during the initial loading/error
+         * state above so we don't double-render an empty tree under the
+         * loader or error card. */}
+        {!(tree === null && (loading || error)) && (<>
         {/* Recent — only shown when no filter is active. */}
         {!query.trim() && (() => {
           const seen = new Set<string>();
@@ -514,6 +552,7 @@ export function FileBrowserView({ projectId, onOpenRoute, openRoutes, activeRout
           <span className={s.dropHintLabel}>↑ Drop files here</span>
           <span className={s.dropHintBody}>Images, docs, references, Figma links, or folders — Claude will use them as context.</span>
         </div>
+        </>)}
       </div>
 
       <FilePreview

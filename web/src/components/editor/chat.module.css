@@ -39,8 +39,8 @@
 .tabBadge {
   background: var(--ink-04);
   color: var(--ink-65);
-  font: var(--weight-medium) 10px var(--font-system);
-  border-radius: 999px;
+  font: var(--weight-medium) var(--text-2xs) var(--font-system);
+  border-radius: var(--radius-full);
   padding: 1px 6px;
   min-width: 16px;
   text-align: center;
@@ -104,12 +104,12 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-55);
   width: 16px;
   height: 16px;
   border-radius: var(--radius-xs);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -133,9 +133,9 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-55);
   width: 28px;
-  font-size: 16px;
+  font-size: var(--text-xl);
   line-height: 1;
   cursor: pointer;
   border-radius: var(--radius-sm);
@@ -164,7 +164,8 @@
   min-width: 120px;
   max-width: 200px;
 }
-.threadTabInput:focus { border-color: var(--brand); }
+.threadTabInput:focus { border-color: var(--brand-strong); }
+.threadTabInput:focus-visible { outline: 2px solid var(--brand); outline-offset: -1px; }
 .threadTitle { font: var(--weight-semi) var(--text-sm) var(--font-system); color: var(--ink-92); }
 .threadTitleDim { font: var(--weight-medium) var(--text-sm) var(--font-system); color: var(--ink-44); font-style: italic; }
 
@@ -179,11 +180,11 @@
 .headInfo { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .headText { display: flex; flex-direction: column; min-width: 0; }
 .headText b { font-size: var(--text-md); font-weight: var(--weight-semi); letter-spacing: 0.01em; }
-.meta { font-size: 11px; color: var(--ink-44); }
+.meta { font-size: var(--text-xs); color: var(--ink-65); }
 .dot {
   width: 8px; height: 8px; border-radius: 50%; background: var(--placeholder-strong); flex-shrink: 0;
 }
-.dot[data-state="run"] { background: var(--brand); animation: chatPulse 1.4s ease-out infinite; }
+.dot[data-state="run"] { background: var(--brand); animation: chatPulse 1.4s var(--ease-out-expressive) infinite; }
 .dot[data-state="ok"] { background: var(--success); }
 .dot[data-state="err"] { background: var(--brand-warm-strong); }
 @keyframes chatPulse {
@@ -197,9 +198,9 @@
   background: transparent;
   color: var(--ink-55);
   width: 28px; height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--text-xl);
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -234,14 +235,14 @@
   gap: 6px;
   padding: 6px 12px 6px 10px;
   background: var(--ink-92);
-  color: var(--canvas);
+  color: var(--on-ink);
   border: 1px solid var(--ink-92);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font: var(--weight-medium) var(--text-xs) var(--font-system);
-  letter-spacing: 0.01em;
+  letter-spacing: var(--tracking-ui);
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.08);
-  transition: transform 120ms ease, opacity 120ms ease;
+  box-shadow: var(--shadow-card);
+  transition: transform var(--motion-fast) var(--ease-out-expressive), opacity var(--motion-fast) var(--ease-out-expressive);
   opacity: 0.94;
   z-index: 2;
 }
@@ -268,11 +269,11 @@
   color: var(--ink-30);
 }
 .emptyTitle {
-  font: 600 14px var(--font-system);
+  font: var(--weight-semi) var(--text-lg) var(--font-system);
   color: var(--ink-92);
 }
 .emptyText {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   max-width: 260px;
 }
@@ -296,7 +297,7 @@
   cursor: pointer;
   text-align: left;
   line-height: 1.3;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: border-color var(--motion-fast) var(--ease-out-expressive), background var(--motion-fast) var(--ease-out-expressive);
   box-shadow: var(--shadow-card);
 }
 .starterChip:hover {
@@ -320,7 +321,7 @@
   color: var(--ink-64);
   background: var(--ink-04);
   border: 1px solid var(--ink-08);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 .contextPillRemove {
   appearance: none;
@@ -329,9 +330,9 @@
   padding: 0 0 0 2px;
   margin: 0;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1;
-  color: var(--ink-44);
+  color: var(--ink-55);
   cursor: pointer;
 }
 .contextPillRemove:hover { color: var(--ink-92); }
@@ -343,21 +344,21 @@
   max-width: 100%;
   font: inherit;
   font-size: var(--text-xs);
-  color: var(--ink-44);
+  color: var(--ink-55);
   background: transparent;
   border: 1px dashed var(--ink-15);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   cursor: pointer;
 }
 .contextPillAdd:hover { color: var(--ink-92); border-color: var(--ink-30); }
-.contextPillAdd svg { color: var(--ink-44); flex-shrink: 0; }
-.contextPill svg { color: var(--ink-44); flex-shrink: 0; }
+.contextPillAdd svg { color: var(--ink-55); flex-shrink: 0; }
+.contextPill svg { color: var(--ink-55); flex-shrink: 0; }
 .contextPill span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
 }
 
 .slashMenu {
@@ -424,11 +425,14 @@
 
 .bubbleUser {
   background: var(--ink-strong);
-  color: var(--surface-4);
+  /* Fixed-dark pill in every theme, so text must be an always-light
+   * on-ink token. --surface-4 flips to near-black on dark themes
+   * (invisible dark-on-dark); --on-ink-soft-90 stays cream everywhere. */
+  color: var(--on-ink-soft-90);
   border-radius: 14px 14px 4px 14px;
   padding: 10px 14px;
   max-width: 88%;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 .bubbleAssistant {
@@ -438,7 +442,7 @@
   border-radius: 14px 14px 14px 4px;
   padding: 12px 14px;
   max-width: 92%;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.55;
 }
 
@@ -447,7 +451,7 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--on-ink-soft-65);
 }
 .refThumb {
@@ -469,7 +473,7 @@
   cursor: zoom-in;
   flex-shrink: 0;
   border-radius: 5px;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition: transform var(--motion-fast) var(--ease-out-expressive), box-shadow var(--motion-fast) var(--ease-out-expressive);
 }
 .refThumbBtn:hover { transform: scale(1.05); box-shadow: 0 0 0 1px var(--brand); }
 .refThumbBtn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand); }
@@ -484,12 +488,12 @@
   font-family: var(--font-mono);
   background: var(--on-ink-10);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   align-self: flex-start;
 }
 .refSnippet {
   font-family: var(--font-system);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-style: italic;
   color: var(--on-ink-soft-80);
   overflow: hidden;
@@ -499,7 +503,7 @@
 }
 .refPath {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   opacity: 0.7;
 }
 
@@ -513,21 +517,21 @@
   border: 1px solid var(--on-ink-18);
   background: transparent;
   color: var(--on-ink-soft-90);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 3px 9px;
-  font: 500 11px var(--font-system);
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
   cursor: pointer;
 }
-.restoreBtn:hover { background: var(--on-ink-08); color: var(--surface); }
+.restoreBtn:hover { background: var(--on-ink-08); color: var(--on-ink-soft-90); }
 
 .text {
   /* Conversational prose styling. INHERIT color from the parent bubble
-   *  (.bubbleAssistant uses --ink-92, .bubbleUser uses --surface-4 on
-   *  dark) so the same class works for both sides. The previous explicit
+   *  (.bubbleAssistant uses --ink-92, .bubbleUser uses --on-ink-soft-90)
+   *  so the same class works for both sides. The previous explicit
    *  `color: var(--ink)` here forced dark text on the user bubble's dark
    *  background — invisible. Don't add color back unless you scope it. */
   word-break: break-word;
-  font-size: 13.5px;
+  font-size: var(--text-md);
   line-height: 1.55;
 }
 
@@ -540,7 +544,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--ink-60);
   font-style: italic;
 }
@@ -555,13 +559,13 @@
 .liveStatusElapsed {
   font-family: var(--font-mono);
   font-style: normal;
-  font-size: 11px;
-  color: var(--ink-44);
+  font-size: var(--text-xs);
+  color: var(--ink-65);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  letter-spacing: var(--tracking-ui);
   flex-shrink: 0;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--ink-04);
   transition: color var(--motion-fast) var(--ease-out-expressive),
               background var(--motion-fast) var(--ease-out-expressive);
@@ -576,7 +580,7 @@
 .errText {
   color: var(--ink-78);
   background: var(--brand-warm-soft);
-  border: 1px solid var(--brand-warm-border, var(--ink-08));
+  border: 1px solid var(--brand-border);
   padding: 8px 12px;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
@@ -605,7 +609,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--brand);
-  animation: streamBounce 1.4s ease-in-out infinite both;
+  animation: streamBounce 1.4s var(--ease-standard) infinite both;
 }
 .streamingDots span:nth-child(1) { animation-delay: -0.32s; }
 .streamingDots span:nth-child(2) { animation-delay: -0.16s; }
@@ -632,7 +636,7 @@
   opacity: 0.78;
 }
 .tools[data-compact="true"] .toolChip {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   padding: 1px 7px;
   width: auto;
   justify-content: flex-start;
@@ -656,19 +660,19 @@
   color: var(--brand-fg);
   opacity: 0.7;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   appearance: none;
-  transition: opacity 120ms ease, background 120ms ease;
+  transition: opacity var(--motion-fast) var(--ease-out-expressive), background var(--motion-fast) var(--ease-out-expressive);
 }
 .toolFooterToggle:hover {
   opacity: 1;
   background: var(--brand-soft);
 }
 .toolFooterChev {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   opacity: 0.7;
 }
 .toolChipWrap {
@@ -692,9 +696,9 @@
   border: 1px solid var(--kind-other-border, var(--brand-border));
   color: var(--kind-other-fg, var(--brand-fg));
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   appearance: none;
   text-align: left;
@@ -702,7 +706,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background var(--motion-fast) var(--ease-out-expressive), border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .toolChip[data-kind="read"]    { background: var(--kind-read-bg);    border-color: var(--kind-read-border);    color: var(--kind-read-fg); }
 .toolChip[data-kind="edit"]    { background: var(--kind-edit-bg);    border-color: var(--kind-edit-border);    color: var(--kind-edit-fg); }
@@ -735,9 +739,9 @@
   text-overflow: ellipsis;
 }
 .toolChipChev {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   opacity: 0.85;
-  transition: transform 140ms ease;
+  transition: transform var(--motion-default) var(--ease-out-expressive);
   flex: 0 0 auto;
 }
 .toolChipOpen .toolChipChev {
@@ -748,12 +752,12 @@
   margin-top: 4px;
   background: var(--brand-soft);
   border: 1px solid var(--brand-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--ink-78);
   max-width: 100%;
 }
@@ -765,11 +769,11 @@
 }
 .toolDetailLabel {
   flex: 0 0 auto;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-44);
-  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  color: var(--ink-65);
+  font-weight: var(--weight-semi);
 }
 .toolDetailValue {
   flex: 1 1 auto;
@@ -778,7 +782,7 @@
 }
 .toolDetailMono {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .toolCodeBlock {
@@ -797,25 +801,25 @@
   appearance: none;
   background: transparent;
   border: 1px solid var(--ink-12);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   padding: 1px 8px;
   font: inherit;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--ink-60);
   cursor: pointer;
 }
 .toolCodeBlockAction:hover {
   border-color: var(--ink-30);
-  color: var(--ink-90);
+  color: var(--ink-92);
 }
 .toolCode {
   margin: 0;
   background: var(--ink-04);
   border: 1px solid var(--ink-06);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.4;
   color: var(--ink-78);
   white-space: pre-wrap;
@@ -839,7 +843,7 @@
 
 .toolImageWrap {
   margin-top: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--ink-04);
   border: 1px solid var(--ink-06);
@@ -854,7 +858,7 @@
 }
 .toolImageMissing {
   padding: 12px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--ink-50);
   font-style: italic;
   text-align: center;
@@ -870,7 +874,7 @@
   width: 56px;
   height: 56px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--on-ink-10);
   cursor: pointer;
 }
@@ -887,9 +891,9 @@
   border: 1px solid var(--ink-10);
   background: transparent;
   color: var(--ink-55);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 4px 10px;
-  font: 500 11px var(--font-system);
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -900,10 +904,10 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-40);
+  color: var(--ink-55);
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -911,22 +915,22 @@
 }
 .copyBtn:hover { background: var(--ink-06); color: var(--ink-92); }
 .revertedTag {
-  font-size: 10.5px;
-  color: var(--ink-40);
+  font-size: var(--text-2xs);
+  color: var(--ink-65);
   font-style: italic;
 }
 
 .bubbleMetaRight {
   /* Renders INSIDE the dark .bubbleUser (see ChatSidebar.tsx) — needs an
    *  on-ink token, not --ink-35 (dark ink on dark bg = invisible). */
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--on-ink-soft-65);
   margin-top: 4px;
   padding-right: 4px;
 }
 .bubbleMetaLeft {
-  font-size: 10.5px;
-  color: var(--ink-35);
+  font-size: var(--text-2xs);
+  color: var(--ink-65);
   margin-top: 4px;
   padding-left: 4px;
 }
@@ -937,9 +941,9 @@
 .costBadge {
   display: block;
   margin-top: 2px;
-  font: 400 10px var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
-  color: var(--ink-35);
-  letter-spacing: 0.01em;
+  font: var(--weight-regular) var(--text-2xs) var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  color: var(--ink-65);
+  letter-spacing: var(--tracking-ui);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -968,18 +972,18 @@
   border: 0;
   background: transparent;
   color: var(--ink-55);
-  font: 500 12px var(--font-system);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
   cursor: pointer;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .onboardBack:hover { background: var(--ink-05); color: var(--ink-92); }
 .onboardTitle {
   flex: 1;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
   color: var(--ink-92);
-  letter-spacing: -0.1px;
+  letter-spacing: var(--tracking-heading);
 }
 .onboardMain {
   flex: 1;
@@ -1021,11 +1025,11 @@
   color: var(--ink-55);
 }
 .wizardLoadingTitle {
-  font: 600 15px var(--font-system);
+  font: var(--weight-semi) var(--text-lg) var(--font-system);
   color: var(--ink-92);
 }
 .wizardLoadingSub {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   max-width: 320px;
   line-height: 1.5;
 }
@@ -1037,7 +1041,8 @@
   background: var(--surface);
   border: 1px solid var(--ink-08);
   border-radius: 12px;
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
   line-height: 1.5;
   color: var(--ink-92);
 }
@@ -1067,19 +1072,22 @@
   height: 56px;
   border-radius: 50%;
   background: var(--success);
-  color: var(--surface);
-  font-size: 28px;
-  font-weight: 700;
+  /* --success is a light green in every theme, so white glyph was ~2:1.
+   * --ink-strong stays dark across themes -> a high-contrast check mark. */
+  color: var(--ink-strong);
+  font-size: var(--text-h2);
+  font-weight: var(--weight-semi);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .wizardReadyTitle {
-  font: 600 18px var(--font-system);
+  font: var(--weight-semi) var(--text-h3)/var(--leading-tight) var(--font-display);
+  letter-spacing: var(--tracking-heading);
   color: var(--ink-92);
 }
 .wizardReadySub {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--ink-60);
   max-width: 480px;
   line-height: 1.55;
@@ -1094,9 +1102,9 @@
 }
 .wizardComposerHint {
   padding: 8px 12px 0;
-  font: var(--weight-medium) 11px var(--font-system);
-  color: var(--ink-44);
-  letter-spacing: 0.04em;
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
+  color: var(--ink-65);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
 }
 
@@ -1104,7 +1112,7 @@
 .thinkingBlock {
   margin-bottom: 8px;
   border: 1px solid var(--ink-06);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--ink-02);
   overflow: hidden;
 }
@@ -1112,11 +1120,11 @@
   cursor: pointer;
   list-style: none;
   padding: 6px 10px;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
   color: var(--ink-50);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: var(--tracking-caps);
   user-select: none;
   display: flex;
   align-items: center;
@@ -1125,16 +1133,16 @@
 .thinkingSummary::-webkit-details-marker { display: none; }
 .thinkingSummary::before {
   content: "▸";
-  font-size: 9px;
+  font-size: var(--text-2xs);
   display: inline-block;
-  transition: transform 0.15s ease;
+  transition: transform var(--motion-default) var(--ease-out-expressive);
 }
 .thinkingBlock[open] > .thinkingSummary::before {
   transform: rotate(90deg);
 }
 .thinkingBody {
   padding: 0 12px 10px;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-family: var(--font-mono);
   color: var(--ink-55);
   white-space: pre-wrap;
@@ -1150,9 +1158,9 @@
   gap: 10px;
   margin: 4px 4px;
   user-select: none;
-  color: var(--ink-44);
-  font: var(--weight-medium) 10.5px var(--font-system);
-  letter-spacing: 0.06em;
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-2xs) var(--font-system);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
 }
 .daySeparator::before,
@@ -1183,26 +1191,26 @@
   align-items: center;
   gap: 8px;
   user-select: none;
-  font: var(--weight-medium) 11px var(--font-system);
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
   color: var(--ink-55);
 }
 .reminderSummary::-webkit-details-marker { display: none; }
 .reminderSummary::before {
   content: "▸";
-  font-size: 9px;
+  font-size: var(--text-2xs);
   display: inline-block;
   transition: transform var(--motion-fast) var(--ease-out-expressive);
-  color: var(--ink-44);
+  color: var(--ink-55);
 }
 .reminderBlock[open] > .reminderSummary::before { transform: rotate(90deg); }
 .reminderTag {
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  color: var(--ink-50);
+  color: var(--ink-65);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--ink-04);
   flex-shrink: 0;
 }
@@ -1216,7 +1224,7 @@
 .reminderBody {
   padding: 0 12px 10px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--ink-55);
   white-space: pre-wrap;
   line-height: 1.5;
@@ -1230,7 +1238,7 @@
   padding: 14px 14px 12px;
   background: var(--surface-3);
   border: 1px solid var(--brand-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 1px 0 var(--ink-02), 0 4px 14px var(--brand-soft);
 }
 .elicitHeader {
@@ -1246,8 +1254,8 @@
   flex-shrink: 0;
 }
 .elicitTitle {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
   color: var(--ink-85);
   line-height: 1.35;
 }
@@ -1265,11 +1273,11 @@
   gap: 8px;
   padding: 8px 10px;
   border: 1px solid var(--ink-10);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
-  font-size: 13px;
+  font-size: var(--text-md);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-out-expressive), border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .elicitOption:hover { background: var(--surface-4); }
 .elicitOptionOn {
@@ -1279,15 +1287,16 @@
 .elicitOption input { accent-color: var(--brand); }
 .elicitInput, .elicitTextarea {
   width: 100%;
-  border: 1px solid var(--ink-15);
-  border-radius: 6px;
+  border: 1px solid var(--ink-10);
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-family: inherit;
   background: var(--surface);
   outline: none;
 }
-.elicitInput:focus, .elicitTextarea:focus { border-color: var(--brand); }
+.elicitInput:focus, .elicitTextarea:focus { border-color: var(--brand-strong); }
+.elicitInput:focus-visible, .elicitTextarea:focus-visible { outline: 2px solid var(--brand); outline-offset: -1px; }
 .elicitTextarea {
   resize: none;
   min-height: 60px;
@@ -1299,17 +1308,17 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 2px;
-  transition: background 0.12s ease, box-shadow 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-out-expressive), box-shadow var(--motion-fast) var(--ease-out-expressive);
 }
 .elicitTextareaDrag {
   background: var(--brand-bg);
   box-shadow: 0 0 0 2px var(--brand-strong);
 }
 .elicitTextareaHint {
-  font-size: 10.5px;
-  color: var(--ink-40);
+  font-size: var(--text-2xs);
+  color: var(--ink-65);
   padding-left: 4px;
 }
 .elicitNumberRow {
@@ -1320,32 +1329,32 @@
 .elicitSlider { flex: 1; accent-color: var(--brand); }
 .elicitNumber {
   width: 80px;
-  border: 1px solid var(--ink-15);
-  border-radius: 6px;
+  border: 1px solid var(--ink-10);
+  border-radius: var(--radius-sm);
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: var(--text-md);
   text-align: right;
 }
 .elicitDropzone {
   border: 1.5px dashed var(--ink-20);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 18px;
   text-align: center;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--ink-55);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background var(--motion-default) var(--ease-out-expressive), border-color var(--motion-default) var(--ease-out-expressive);
 }
 .elicitDropzone:hover { background: var(--surface-4); }
 .elicitDropzoneActive { background: var(--brand-bg); border-color: var(--brand); }
 .elicitDropzonePath {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-70);
   word-break: break-all;
 }
 .elicitError {
   margin-top: 8px;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--danger);
 }
 .elicitActions {
@@ -1356,7 +1365,7 @@
 .elicitActionsSpacer { flex: 1; }
 .elicitTextToggle {
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--ink-50);
   background: none;
   border: none;
@@ -1370,9 +1379,9 @@
 .elicitTextToggle:disabled { opacity: 0.4; cursor: not-allowed; }
 .elicitBtn {
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--ink-12);
   background: var(--surface);
   cursor: pointer;
@@ -1381,10 +1390,10 @@
 .elicitBtn:disabled { opacity: 0.45; cursor: not-allowed; }
 .elicitPrimary {
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   border-color: var(--brand);
 }
-.elicitPrimary:hover:not(:disabled) { background: var(--brand-strong-fg); }
+.elicitPrimary:hover:not(:disabled) { background: var(--brand-fg); }
 
 /* ─── Composer (bottom of sidebar) ──────────────────────────── */
 .composer {
@@ -1397,20 +1406,20 @@
 }
 
 .composerHint {
-  font: var(--weight-medium) 10.5px var(--font-system);
-  color: var(--ink-44);
-  letter-spacing: 0.005em;
+  font: var(--weight-medium) var(--text-2xs) var(--font-system);
+  color: var(--ink-65);
+  letter-spacing: var(--tracking-body);
   user-select: none;
   padding: 0 2px;
 }
 .kbd {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   line-height: 1;
   padding: 2px 5px;
   border: 1px solid var(--ink-12);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--ink-04);
   color: var(--ink-65);
   vertical-align: 1px;
@@ -1418,11 +1427,11 @@
 .composerDrag { outline: 2px dashed var(--brand); outline-offset: -4px; }
 .composerField {
   width: 100%;
-  border: 1px solid var(--ink-12);
-  border-radius: 8px;
+  border: 1px solid var(--ink-10);
+  border-radius: var(--radius-md);
   padding: 8px 36px 8px 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.4;
   background: var(--surface-4);
   color: var(--ink-92);
@@ -1436,7 +1445,8 @@
   border-color: var(--brand-strong);
   background: var(--surface);
 }
-.composerField::placeholder { color: var(--ink-35); }
+.composerField:focus-visible { outline: 2px solid var(--brand); outline-offset: -1px; }
+.composerField::placeholder { color: var(--placeholder); }
 .composerActions {
   display: flex;
   align-items: center;
@@ -1456,35 +1466,35 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--ink-15);
   background: transparent;
   color: var(--ink-65);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-out-expressive), color var(--motion-fast) var(--ease-out-expressive), border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .composerAttachBtn:hover {
   background: var(--surface);
-  color: var(--ink-strong);
+  color: var(--ink-92);
   border-color: var(--ink-35);
 }
 .composerSend {
   appearance: none;
   border: 0;
-  background: var(--ink-strong);
-  color: var(--surface);
+  background: var(--brand);
+  color: var(--on-brand);
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  font-size: 14px;
+  font-size: var(--text-lg);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.composerSend:hover { background: var(--ink-strong-hover); }
+.composerSend:hover { background: var(--brand-fg); }
 .composerSend:disabled {
   background: var(--ink-10);
   color: var(--ink-44);
@@ -1497,32 +1507,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--brand-strong);
   background: var(--surface);
   color: var(--brand);
   font: inherit;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-out-expressive), color var(--motion-fast) var(--ease-out-expressive), border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .composerStop:hover {
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   border-color: var(--brand);
 }
 
 /* Comments panel — list of saved annotations */
 .commentItem {
   border: 1px solid var(--ink-08);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   cursor: pointer;
-  transition: border-color 0.12s, box-shadow 0.12s;
+  transition: border-color var(--motion-fast) var(--ease-out-expressive), box-shadow var(--motion-fast) var(--ease-out-expressive);
 }
 .commentItem:hover { border-color: var(--brand-strong); }
 .commentItemSelected {
@@ -1542,8 +1552,8 @@
   height: 22px;
   border-radius: 50%;
   background: var(--brand);
-  color: var(--surface);
-  font: 700 11px var(--font-system);
+  color: var(--on-brand);
+  font: var(--weight-semi) var(--text-xs) var(--font-system);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1562,8 +1572,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
-  color: var(--ink-44);
+  font-size: var(--text-2xs);
+  color: var(--ink-65);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1580,7 +1590,7 @@
   min-width: 0;
 }
 .commentBody {
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.4;
   color: var(--ink-92);
   white-space: pre-wrap;
@@ -1597,7 +1607,7 @@
   background: transparent;
   color: var(--ink-50);
   padding: 3px 7px;
-  font: 500 11px var(--font-system);
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
   border-radius: 5px;
   cursor: pointer;
 }
@@ -1616,9 +1626,9 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-55);
   padding: 3px 6px 3px 4px;
-  font: 500 10px var(--font-system);
+  font: var(--weight-medium) var(--text-2xs) var(--font-system);
   cursor: pointer;
   border-left: 1px solid var(--ink-08);
 }
@@ -1630,8 +1640,8 @@
   margin-top: 4px;
   background: var(--surface);
   border: 1px solid var(--ink-08);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px var(--ink-08);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-pop);
   min-width: 180px;
   z-index: 5;
   overflow: hidden;
@@ -1643,7 +1653,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  font: 500 12px var(--font-system);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
   color: var(--ink-92);
   padding: 8px 12px;
   cursor: pointer;
@@ -1672,7 +1682,7 @@
   position: relative;
   width: 48px;
   height: 48px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--ink-10);
 }
@@ -1684,11 +1694,11 @@
   appearance: none;
   border: 0;
   background: var(--ink-70);
-  color: var(--surface);
+  color: var(--on-ink);
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1;
   cursor: pointer;
   padding: 0;
@@ -1707,7 +1717,7 @@
   display: block;
   width: 64px;
   height: 64px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--ink-15);
   background: var(--ink-04);
@@ -1723,21 +1733,21 @@
   margin: 6px 12px 0;
   padding: 8px 10px;
   border: 1px dashed var(--ink-15);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface-4);
   color: var(--ink-65);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
   opacity: 0.85;
 }
 .queuedTag {
   flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--ink-12);
   color: var(--ink-65);
 }
@@ -1756,16 +1766,16 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  font-size: 14px;
+  font-size: var(--text-lg);
   line-height: 1;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-out-expressive), color var(--motion-fast) var(--ease-out-expressive);
 }
 .queuedCancel:hover {
   background: var(--ink-08);
-  color: var(--ink-strong);
+  color: var(--ink-92);
 }
 
 /* ─── Markdown rendering ───────────────────────────────────── */
@@ -1780,10 +1790,10 @@
 
 .inlineCode {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   background: var(--ink-06);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--brand-fg);
 }
 
@@ -1828,8 +1838,8 @@
   height: 14px;
   flex-shrink: 0;
   margin-top: 4px;
-  border: 1.5px solid var(--ink-30);
-  border-radius: 3px;
+  border: 1.5px solid var(--ink-25);
+  border-radius: var(--radius-xs);
   background: var(--surface);
   cursor: default;
   position: relative;
@@ -1861,13 +1871,13 @@
   margin: 10px 0;
   overflow-x: auto;
   border: 1px solid var(--ink-08);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 .markdownTable {
   border-collapse: collapse;
   width: 100%;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 .markdownTable th,
@@ -1881,10 +1891,10 @@
   background: var(--surface-2);
 }
 .markdownTable th {
-  font-weight: 600;
+  font-weight: var(--weight-semi);
   color: var(--ink-92);
-  font-size: 11.5px;
-  letter-spacing: 0.02em;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-ui);
 }
 .markdownTable tbody tr:nth-child(even) {
   background: var(--ink-02);
@@ -1895,7 +1905,7 @@
 
 .codeBlock {
   margin: 10px 0;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--ink-10);
   background: var(--surface-3);
@@ -1909,10 +1919,10 @@
   border-bottom: 1px solid var(--ink-06);
 }
 .codeBlockLang {
-  font: 500 10.5px var(--font-mono);
+  font: var(--weight-medium) var(--text-2xs) var(--font-mono);
   color: var(--ink-55);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps);
 }
 .codeBlockCopy {
   appearance: none;
@@ -1935,7 +1945,7 @@
   margin: 0;
   padding: 10px 12px;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--ink-85);
 }
@@ -1954,7 +1964,7 @@
 .codeBlockShiki :global(pre.shiki) {
   margin: 0;
   padding: 10px 12px;
-  font: 12px/1.5 var(--font-mono);
+  font: var(--text-sm)/1.5 var(--font-mono);
   background: transparent !important;
 }
 .codeBlockShiki :global(pre.shiki code) {
@@ -1969,12 +1979,12 @@
 
 .diffBlock {
   margin: 10px 0;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--ink-10);
   background: var(--surface);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.55;
 }
 .diffBlockHeader {
@@ -1987,7 +1997,7 @@
   border-bottom: 1px solid var(--ink-06);
 }
 .diffBlockFilename {
-  font: 500 11px var(--font-mono);
+  font: var(--weight-medium) var(--text-xs) var(--font-mono);
   color: var(--ink-78);
   white-space: nowrap;
   overflow: hidden;
@@ -2000,15 +2010,15 @@
   flex: 0 0 auto;
 }
 .diffBlockStat {
-  font: 500 10.5px var(--font-mono);
+  font: var(--weight-medium) var(--text-2xs) var(--font-mono);
   color: var(--ink-55);
 }
 .diffStatAdd {
-  font: 600 10.5px var(--font-mono);
+  font: var(--weight-semi) var(--text-2xs) var(--font-mono);
   color: var(--success-fg);
 }
 .diffStatDel {
-  font: 600 10.5px var(--font-mono);
+  font: var(--weight-semi) var(--text-2xs) var(--font-mono);
   color: var(--danger-fg);
 }
 .diffBlockBody {
@@ -2029,7 +2039,7 @@
 }
 .diffHunkText {
   padding: 2px 8px;
-  font: 500 11px var(--font-mono);
+  font: var(--weight-medium) var(--text-xs) var(--font-mono);
 }
 .diffGutter {
   flex: 0 0 auto;
@@ -2083,7 +2093,7 @@
   border: 0;
   background: transparent;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2092,8 +2102,8 @@
 }
 .threadSwitcherBtn:hover { background: var(--ink-04); }
 .threadChev {
-  font-size: 9px;
-  color: var(--ink-40);
+  font-size: var(--text-2xs);
+  color: var(--ink-55);
   flex-shrink: 0;
 }
 .threadMenu {
@@ -2103,8 +2113,8 @@
   z-index: 80;
   background: var(--surface);
   border: 1px solid var(--ink-10);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px var(--ink-15), 0 1px 3px var(--ink-06);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
   min-width: 260px;
   max-width: 320px;
   padding: 6px;
@@ -2119,7 +2129,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   position: relative;
 }
@@ -2132,7 +2142,7 @@
   gap: 8px;
 }
 .threadItemTitle {
-  font: 500 12.5px var(--font-system);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
   color: var(--ink-92);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2140,17 +2150,17 @@
   min-width: 0;
 }
 .threadItemCount {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--ink-40);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  color: var(--ink-65);
   background: var(--ink-06);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 .threadItemDate {
-  font-size: 11px;
-  color: var(--ink-40);
+  font-size: var(--text-xs);
+  color: var(--ink-65);
 }
 .threadItemDelete {
   position: absolute;
@@ -2159,12 +2169,12 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-35);
+  color: var(--ink-55);
   width: 20px;
   height: 20px;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1;
   display: none;
   align-items: center;
@@ -2177,14 +2187,14 @@
 /* ─── Comment promoted badge & model picker ────────────────── */
 
 .promotedBadge {
-  font-size: 9.5px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps);
   background: var(--brand-bg);
   color: var(--brand-fg);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 .commentModelPicker {
@@ -2196,16 +2206,18 @@
 /* ─── Thread title inline edit ─────────────────────────────── */
 
 .threadTitleInput {
-  font: 600 12px var(--font-system);
+  font: var(--weight-semi) var(--text-sm) var(--font-system);
   color: var(--ink-92);
   border: 1px solid var(--brand-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 3px 8px;
   background: var(--surface);
   outline: none;
   flex: 1;
   min-width: 0;
 }
+.threadTitleInput:focus-visible { outline: 2px solid var(--brand); outline-offset: -1px; }
+.threadTitleInput::placeholder { color: var(--placeholder); }
 
 /* ─── Delete message button (user bubbles) ─────────────────── */
 
@@ -2225,7 +2237,7 @@
   justify-content: center;
   padding: 0;
 }
-.deleteMsgBtn:hover { background: var(--on-ink-10); color: var(--surface); }
+.deleteMsgBtn:hover { background: var(--on-ink-10); color: var(--on-ink-soft-90); }
 
 /* ─── Retry button (assistant error bubbles) ───────────────── */
 
@@ -2275,7 +2287,7 @@
   color: var(--ink-64);
   font: var(--weight-medium) var(--text-sm) var(--font-system);
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2296,7 +2308,7 @@
   color: var(--brand-fg);
 }
 .cpFilterChipCount {
-  font: var(--weight-semi) 10.5px var(--font-mono);
+  font: var(--weight-semi) var(--text-2xs) var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: inherit;
   opacity: 0.7;
@@ -2311,7 +2323,7 @@
   gap: 6px;
   padding: 8px 10px;
   margin-bottom: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--brand-bg);
   border: 1px solid var(--brand-strong);
   box-shadow: var(--shadow-card);
@@ -2330,7 +2342,7 @@
   gap: 6px;
 }
 .cpSelectionCount {
-  font: 600 12px var(--font-system);
+  font: var(--weight-semi) var(--text-sm) var(--font-system);
   color: var(--brand-fg);
   flex: 1 1 auto;
   white-space: nowrap;
@@ -2342,9 +2354,9 @@
   border: 1px solid var(--brand-strong);
   background: var(--surface);
   color: var(--brand-fg);
-  font: 500 11.5px var(--font-system);
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
   padding: 4px 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2367,31 +2379,31 @@
 }
 .cpSelectionBtnPrimary {
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   border-color: var(--brand);
 }
 .cpSelectionBtnPrimary:hover {
-  filter: brightness(0.95);
+  background: var(--brand-fg);
 }
 .cpSelectionMenuWrap {
   position: relative;
   display: inline-flex;
   align-items: stretch;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 .cpSelectionSplitChev {
   appearance: none;
   border: 1px solid var(--brand);
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   cursor: pointer;
   padding: 0 8px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   border-radius: 0 6px 6px 0;
   margin-left: -1px;
 }
-.cpSelectionSplitChev:hover { filter: brightness(0.95); }
+.cpSelectionSplitChev:hover { background: var(--brand-fg); }
 .cpSelectionMenuWrap > .cpSelectionBtnPrimary { border-radius: 6px 0 0 6px; }
 .cpSelectionMenu {
   position: absolute;
@@ -2400,7 +2412,7 @@
   margin-top: 4px;
   background: var(--surface);
   border: 1px solid var(--ink-10);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-pop);
   min-width: 240px;
   padding: 4px;
@@ -2421,30 +2433,31 @@
   border-radius: 5px;
   cursor: pointer;
   color: var(--ink-92);
-  font: 500 12px var(--font-system);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
   gap: 2px;
 }
 .cpSelectionMenuItem:hover { background: var(--ink-04); }
 .cpSelectionMenuItemDesc {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--ink-50);
-  font-weight: 400;
+  font-weight: var(--weight-regular);
 }
 
 .cpRowCheckbox {
   appearance: none;
   width: 16px;
   height: 16px;
-  border: 1.5px solid var(--ink-20);
-  border-radius: 4px;
+  border: 1.5px solid var(--ink-25);
+  border-radius: var(--radius-xs);
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
   background: var(--surface);
   margin: 0;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-out-expressive), border-color var(--motion-fast) var(--ease-out-expressive);
 }
 .cpRowCheckbox:hover { border-color: var(--brand-strong); }
+.cpRowCheckbox:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .cpRowCheckbox:checked {
   background: var(--brand);
   border-color: var(--brand);
@@ -2456,7 +2469,7 @@
   top: 1px;
   width: 4px;
   height: 8px;
-  border: solid var(--surface);
+  border: solid var(--on-brand);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -2469,12 +2482,12 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-44);
+  color: var(--ink-55);
   width: 22px;
   height: 22px;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-lg);
   line-height: 1;
 }
 .cpRowMenuBtn:hover { background: var(--ink-06); color: var(--ink-92); }
@@ -2485,7 +2498,7 @@
   margin-top: 2px;
   background: var(--surface);
   border: 1px solid var(--ink-10);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-pop);
   min-width: 160px;
   padding: 4px;
@@ -2500,7 +2513,7 @@
   padding: 6px 10px;
   border-radius: 5px;
   cursor: pointer;
-  font: 500 12px var(--font-system);
+  font: var(--weight-medium) var(--text-sm) var(--font-system);
   color: var(--ink-92);
 }
 .cpRowMenuItem:hover { background: var(--ink-04); }
@@ -2508,12 +2521,12 @@
 /* Item state badges (Promoted / Resolved) — rendered inline next to
    the snippet. */
 .cpStateBadge {
-  font-size: 9.5px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 .cpStateBadgePromoted {
@@ -2535,8 +2548,8 @@
   margin-bottom: 10px;
   background: var(--success-alt-bg, var(--brand-bg));
   border: 1px solid var(--success-alt-border, var(--brand-strong));
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
   color: var(--ink-92);
 }
 .cpAutoResolveStripText { flex: 1; }
@@ -2544,10 +2557,10 @@
   appearance: none;
   border: 1px solid var(--brand-strong);
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   border-radius: 5px;
   padding: 4px 10px;
-  font: 600 11.5px var(--font-system);
+  font: var(--weight-semi) var(--text-xs) var(--font-system);
   cursor: pointer;
 }
 .cpAutoResolveStripDismiss {
@@ -2556,7 +2569,7 @@
   border: 0;
   color: var(--ink-50);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-lg);
   padding: 0 4px;
 }
 .cpAutoResolveStripDismiss:hover { color: var(--ink-92); }
@@ -2573,7 +2586,7 @@
     radial-gradient(circle, var(--ink-20) 1px, transparent 1px);
   background-size: 4px 4px;
   background-position: 0 0;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--motion-fast) var(--ease-out-expressive);
 }
 .commentItem:hover .cpRowDragHandle { opacity: 0.6; }
 
@@ -2585,7 +2598,7 @@
   color: var(--ink-55);
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2605,13 +2618,53 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--on-ink-50);
-  font: 500 11px var(--font-system);
+  /* The code block sits on --surface-3 (light in light themes, dark in
+   * dark themes). The on-ink family flips the wrong way here (light-on-
+   * light / dark-on-dark); --ink-* tracks the surface correctly. */
+  color: var(--ink-65);
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
   cursor: pointer;
   padding: 3px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .codeBlockToggle:hover {
-  background: var(--on-ink-10);
-  color: var(--surface);
+  background: var(--ink-08);
+  color: var(--ink-92);
+}
+
+/* Respect reduced-motion: kill the looping/streaming animations and the
+   hover/entrance transitions for users who opt out. */
+@media (prefers-reduced-motion: reduce) {
+  .dot[data-state="run"],
+  .caret,
+  .streamingDots span {
+    animation: none;
+  }
+  .threadTab,
+  .threadTabClose,
+  .threadTabAdd,
+  .jumpBtn,
+  .starterChip,
+  .liveStatusElapsed,
+  .toolFooterToggle,
+  .toolChip,
+  .toolChipChev,
+  .thinkingSummary::before,
+  .reminderSummary::before,
+  .elicitOption,
+  .elicitTextareaWrap,
+  .elicitDropzone,
+  .composerField,
+  .composerAttachBtn,
+  .composerSend,
+  .composerStop,
+  .commentItem,
+  .queuedCancel,
+  .cpFilterChip,
+  .cpRowCheckbox,
+  .cpRowDragHandle,
+  .refThumbBtn,
+  .retryBtn {
+    transition: none;
+  }
 }

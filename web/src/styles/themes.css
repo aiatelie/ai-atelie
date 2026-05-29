@@ -120,6 +120,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.6);
 
   --backdrop: rgba(6, 27, 49, 0.45);
+  --backdrop-strong: rgba(6, 27, 49, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(6, 27, 49, 0.06);
   --shadow-pop:  0 8px 24px rgba(6, 27, 49, 0.12), 0 1px 2px rgba(6, 27, 49, 0.06);
   --shadow-deep: 0 24px 64px rgba(6, 27, 49, 0.4);
@@ -240,6 +241,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.6);
 
   --backdrop: rgba(23, 23, 23, 0.45);
+  --backdrop-strong: rgba(23, 23, 23, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(23, 23, 23, 0.06);
   --shadow-pop:  0 8px 24px rgba(23, 23, 23, 0.12), 0 1px 2px rgba(23, 23, 23, 0.06);
   --shadow-deep: 0 24px 64px rgba(23, 23, 23, 0.4);
@@ -360,6 +362,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.6);
 
   --backdrop: rgba(55, 53, 47, 0.45);
+  --backdrop-strong: rgba(55, 53, 47, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(55, 53, 47, 0.06);
   --shadow-pop:  0 8px 24px rgba(55, 53, 47, 0.12), 0 1px 2px rgba(55, 53, 47, 0.06);
   --shadow-deep: 0 24px 64px rgba(55, 53, 47, 0.4);
@@ -480,6 +483,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.6);
 
   --backdrop: rgba(30, 57, 50, 0.45);
+  --backdrop-strong: rgba(30, 57, 50, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(30, 57, 50, 0.06);
   --shadow-pop:  0 8px 24px rgba(30, 57, 50, 0.12), 0 1px 2px rgba(30, 57, 50, 0.06);
   --shadow-deep: 0 24px 64px rgba(30, 57, 50, 0.4);
@@ -600,6 +604,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.6);
 
   --backdrop: rgba(33, 25, 34, 0.45);
+  --backdrop-strong: rgba(33, 25, 34, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(33, 25, 34, 0.06);
   --shadow-pop:  0 8px 24px rgba(33, 25, 34, 0.12), 0 1px 2px rgba(33, 25, 34, 0.06);
   --shadow-deep: 0 24px 64px rgba(33, 25, 34, 0.4);
@@ -720,6 +725,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.6);
 
   --backdrop: rgba(38, 37, 30, 0.45);
+  --backdrop-strong: rgba(38, 37, 30, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(38, 37, 30, 0.06);
   --shadow-pop:  0 8px 24px rgba(38, 37, 30, 0.12), 0 1px 2px rgba(38, 37, 30, 0.06);
   --shadow-deep: 0 24px 64px rgba(38, 37, 30, 0.4);
@@ -766,7 +772,7 @@
   --ink-deep: #050402;
 
   --on-ink: #121212;
-  --on-brand: #ffffff;
+  --on-brand: #1c1813;
   --on-ink-10: rgba(18, 18, 18, 0.1);
   --on-ink-12: rgba(18, 18, 18, 0.12);
   --on-ink-15: rgba(18, 18, 18, 0.15);
@@ -840,6 +846,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.1);
 
   --backdrop: rgba(0, 0, 0, 0.65);
+  --backdrop-strong: rgba(0, 0, 0, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
   --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);
   --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.70);
@@ -960,6 +967,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.1);
 
   --backdrop: rgba(0, 0, 0, 0.65);
+  --backdrop-strong: rgba(0, 0, 0, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
   --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);
   --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.70);
@@ -1080,6 +1088,7 @@
   --icon-bg-light: rgba(247, 248, 248, 0.1);
 
   --backdrop: rgba(0, 0, 0, 0.65);
+  --backdrop-strong: rgba(0, 0, 0, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
   --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);
   --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.70);
@@ -1126,7 +1135,7 @@
   --ink-deep: #050402;
 
   --on-ink: #000000;
-  --on-brand: #ffffff;
+  --on-brand: #1c1813;
   --on-ink-10: rgba(0, 0, 0, 0.1);
   --on-ink-12: rgba(0, 0, 0, 0.12);
   --on-ink-15: rgba(0, 0, 0, 0.15);
@@ -1200,6 +1209,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.1);
 
   --backdrop: rgba(0, 0, 0, 0.65);
+  --backdrop-strong: rgba(0, 0, 0, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
   --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);
   --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.70);
@@ -1246,7 +1256,7 @@
   --ink-deep: #050402;
 
   --on-ink: #000000;
-  --on-brand: #ffffff;
+  --on-brand: #1c1813;
   --on-ink-10: rgba(0, 0, 0, 0.1);
   --on-ink-12: rgba(0, 0, 0, 0.12);
   --on-ink-15: rgba(0, 0, 0, 0.15);
@@ -1320,6 +1330,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.1);
 
   --backdrop: rgba(0, 0, 0, 0.65);
+  --backdrop-strong: rgba(0, 0, 0, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
   --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);
   --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.70);
@@ -1440,6 +1451,7 @@
   --icon-bg-light: rgba(255, 255, 255, 0.1);
 
   --backdrop: rgba(0, 0, 0, 0.65);
+  --backdrop-strong: rgba(0, 0, 0, 0.82);
   --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
   --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);
   --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.70);

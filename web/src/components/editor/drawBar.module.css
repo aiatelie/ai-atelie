@@ -29,7 +29,7 @@
   appearance: none;
   width: 30px;
   height: 30px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
   color: var(--ink-65);
@@ -38,7 +38,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
 }
 .iconBtn:hover { background: var(--ink-04); color: var(--ink-92); }
 .iconBtn:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -60,7 +60,7 @@
   appearance: none;
   width: 30px;
   height: 30px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
@@ -68,7 +68,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
 }
 .swatchBtn:hover { background: var(--ink-04); border-color: var(--ink-10); }
 .swatchBtn:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -76,7 +76,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
+  box-shadow: 0 0 0 1px var(--ink-20) inset;
 }
 .palette {
   position: absolute;
@@ -85,11 +85,11 @@
   transform: translateX(-50%);
   background: var(--surface);
   border: 1px solid var(--ink-10);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-pop);
-  padding: 6px;
+  padding: var(--pad-sm);
   display: flex;
-  gap: 6px;
+  gap: var(--pad-sm);
   z-index: 1;
 }
 .swatch {
@@ -99,12 +99,12 @@
   border-radius: 50%;
   border: 0;
   cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  box-shadow: 0 0 0 1px var(--ink-20) inset;
+  transition: transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
 }
 .swatch:hover { transform: scale(1.12); }
 .swatchActive {
-  box-shadow: 0 0 0 2px var(--ink-strong) inset, 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
+  box-shadow: 0 0 0 2px var(--ink-strong) inset, 0 0 0 1px var(--ink-20) inset;
 }
 
 .input {
@@ -124,20 +124,29 @@
   max-height: 84px;
   overflow-y: auto;
 }
-.input::placeholder { color: var(--ink-44); }
+.input::placeholder { color: var(--placeholder); }
 .input:disabled { opacity: 0.6; }
 
 .sendBtn {
   appearance: none;
   border: 0;
-  background: var(--ink-strong);
-  color: var(--surface);
+  background: var(--brand);
+  color: var(--on-brand);
   font: var(--weight-semi) var(--text-md) var(--font-system);
   padding: 7px 14px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.12s ease, opacity 0.12s ease;
+  transition: background var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
 }
-.sendBtn:hover { background: var(--ink-strong-hover); }
+.sendBtn:hover { background: var(--brand-fg); }
 .sendBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (prefers-reduced-motion: reduce) {
+  .iconBtn,
+  .swatchBtn,
+  .swatch,
+  .sendBtn {
+    transition: none;
+  }
+}
