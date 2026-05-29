@@ -46,9 +46,13 @@ type CacheEntry = {
   etag: string | null;
   loaded: boolean;
   loading: Promise<void> | null;
+  /** Set when the last server read failed (!res.ok or threw). Lets the
+   *  AssetsDialog distinguish "genuinely empty" from "fetch failed"
+   *  instead of silently showing an empty library. */
+  error: boolean;
 };
 
-const entry: CacheEntry = { data: emptyAssets(), etag: null, loaded: false, loading: null };
+const entry: CacheEntry = { data: emptyAssets(), etag: null, loaded: false, loading: null, error: false };
 let subscribed = false;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -64,6 +68,13 @@ async function fetchFromServer(): Promise<void> {
     let changed = false;
     try {
       const r = await fetch(`/api/shared/${SHARED_KEY}`);
+      if (!r.ok && r.status !== 404) {
+        // A real transport/server failure — surface it. (404 is the
+        // benign "no assets file yet" case handled just below.)
+        entry.error = true;
+      } else {
+        entry.error = false;
+      }
       if (r.status === 404) {
         const legacy = readLegacyLocalStorage();
         if (legacy) {
@@ -88,11 +99,12 @@ async function fetchFromServer(): Promise<void> {
       }
       entry.loaded = true;
     } catch {
+      entry.error = true;
       entry.loaded = true;
     } finally {
       entry.loading = null;
     }
-    if (changed || !wasLoaded) emitChange();
+    if (changed || !wasLoaded || entry.error) emitChange();
   })();
   return entry.loading;
 }
@@ -162,6 +174,19 @@ export function getSharedAssets(): SharedAssets {
     ensureSubscribed();
   }
   return entry.data;
+}
+
+/** Whether the last server read failed. Pairs with `refreshSharedAssets()`
+ *  so callers can offer a Retry affordance. */
+export function getSharedAssetsError(): boolean {
+  return entry.error;
+}
+
+/** Force a re-fetch from the server (used by Retry). Clears the cached
+ *  etag so the next read isn't short-circuited. */
+export function refreshSharedAssets(): void {
+  entry.etag = null;
+  void fetchFromServer();
 }
 
 function commit(next: SharedAssets) {
@@ -254,6 +279,19 @@ export function useSharedAssets(): SharedAssets {
     return () => window.removeEventListener("shared-assets:change", refresh);
   }, []);
   return assets;
+}
+
+/** Reactive read of the last-fetch error flag. Re-renders on the same
+ *  `shared-assets:change` event that drives `useSharedAssets`. */
+export function useSharedAssetsError(): boolean {
+  const [err, setErr] = useState<boolean>(() => getSharedAssetsError());
+  useEffect(() => {
+    const refresh = () => setErr(getSharedAssetsError());
+    window.addEventListener("shared-assets:change", refresh);
+    refresh();
+    return () => window.removeEventListener("shared-assets:change", refresh);
+  }, []);
+  return err;
 }
 
 /* ─── Applying to an iframe ───────────────────────────────── */

@@ -17,7 +17,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import s from "../components/projects/projects.module.css";
 import { NewProjectForm } from "../components/projects/NewProjectForm";
 import { ConfirmDialog } from "../components/projects/ConfirmDialog";
-import { Skeleton } from "../components/feedback";
+import { Skeleton, EmptyState as SharedEmptyState } from "../components/feedback";
 import {
   createProject,
   deleteProject,
@@ -185,9 +185,22 @@ export default function Projects() {
             {loading && visible.length === 0 ? (
               <LoadingSkeleton />
             ) : visible.length === 0 && query.trim() ? (
-              <NoSearchResults query={query.trim()} />
+              <SharedEmptyState
+                size="md"
+                title={`No projects match “${query.trim()}”. Try a different search.`}
+              />
             ) : visible.length === 0 ? (
-              <EmptyState />
+              <SharedEmptyState
+                framed
+                size="lg"
+                icon={
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 7 V18 H21 V9 H12 L10 7 Z" />
+                  </svg>
+                }
+                title="Your atelier is empty"
+                body="A project is a workspace for one banner system, prototype, or design exploration. It owns its own tabs, comments, and chat history. Shared assets — colors, lotties, components — are global across projects. Name your first one on the left to get started."
+              />
             ) : (
               <div className={s.grid}>
                 {visible.map((p) => (
@@ -243,42 +256,6 @@ function LoadingSkeleton() {
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className={s.empty}>
-      <span className={s.emptyMark} aria-hidden="true">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 7 V18 H21 V9 H12 L10 7 Z" />
-        </svg>
-      </span>
-      <div className={s.emptyTitle}>Your atelier is empty</div>
-      <div className={s.emptyBody}>
-        A project is a workspace for one banner system, prototype, or design
-        exploration. It owns its own tabs, comments, and chat history. Shared
-        assets — colors, lotties, components — are global across projects.
-        Name your first one on the left to get started.
-      </div>
-    </div>
-  );
-}
-
-function NoSearchResults({ query }: { query: string }) {
-  return (
-    <div className={s.noResults}>
-      <span className={s.noResultsIcon} aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="6.5" cy="6.5" r="4.5" />
-          <line x1="10.5" y1="10.5" x2="14" y2="14" />
-          <line x1="5" y1="6.5" x2="8" y2="6.5" />
-        </svg>
-      </span>
-      <p className={s.noResultsText}>
-        No projects match &ldquo;{query}&rdquo;. Try a different search.
-      </p>
     </div>
   );
 }

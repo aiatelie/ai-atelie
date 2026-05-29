@@ -456,6 +456,7 @@ function genTheme(p) {
   // Backdrop + shadows
   if (p.kind === "dark") {
     lines.push(`  --backdrop: rgba(0, 0, 0, 0.65);`);
+    lines.push(`  --backdrop-strong: rgba(0, 0, 0, 0.82);`);
     lines.push(`  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);`);
     lines.push(`  --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);`);
     lines.push(`  --shadow-deep: 0 24px 64px rgba(0, 0, 0, 0.70);`);
@@ -463,6 +464,7 @@ function genTheme(p) {
     lines.push(`  --shadow-md:   0 8px 24px rgba(0, 0, 0, 0.55);`);
   } else {
     lines.push(`  --backdrop: ${rgba(p.ink, 0.45)};`);
+    lines.push(`  --backdrop-strong: ${rgba(p.ink, 0.82)};`);
     lines.push(`  --shadow-card: 0 1px 2px 0 ${rgba(p.ink, 0.06)};`);
     lines.push(`  --shadow-pop:  0 8px 24px ${rgba(p.ink, 0.12)}, 0 1px 2px ${rgba(p.ink, 0.06)};`);
     lines.push(`  --shadow-deep: 0 24px 64px ${rgba(p.ink, 0.40)};`);

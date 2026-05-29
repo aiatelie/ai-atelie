@@ -26,12 +26,12 @@
   cursor: col-resize;
   z-index: 2;
   background: transparent;
-  transition: background-color 120ms ease;
+  transition: background-color var(--motion-fast) var(--ease-out-expressive);
   user-select: none;
 }
 .resizeHandle:hover,
 .resizeHandleActive {
-  background: var(--brand-bg, rgba(80, 120, 240, 0.25));
+  background: var(--brand-bg);
 }
 
 /* Applied to <body> while the user is dragging. Prevents text-selection
@@ -89,8 +89,8 @@
 .tabBadge {
   background: var(--ink-04);
   color: var(--ink-65);
-  font: var(--weight-medium) 10px var(--font-system);
-  border-radius: 999px;
+  font: var(--weight-medium) var(--text-2xs) var(--font-system);
+  border-radius: var(--radius-full);
   padding: 1px 6px;
   min-width: 16px;
   text-align: center;
@@ -129,7 +129,7 @@
   height: 60px;
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   align-self: flex-start;
   margin-top: 16px;
   display: flex;
@@ -137,3 +137,11 @@
   justify-content: center;
 }
 .collapseHandle:hover { background: var(--surface); color: var(--ink-92); }
+
+@media (prefers-reduced-motion: reduce) {
+  .resizeHandle,
+  .tab,
+  .headIcon {
+    transition: none;
+  }
+}

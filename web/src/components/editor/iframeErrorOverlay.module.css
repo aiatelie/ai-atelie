@@ -23,12 +23,12 @@
   appearance: none;
   border: 1px solid var(--ink-12);
   background: var(--surface);
-  color: var(--ink-72);
-  padding: 4px 10px;
-  border-radius: 999px;
+  color: var(--ink-70);
+  padding: var(--pad-xs) var(--pad-lg);
+  border-radius: var(--radius-full);
   font: var(--weight-semi) var(--text-xs) / 1 var(--font-system);
   cursor: pointer;
-  box-shadow: 0 2px 6px var(--ink-08);
+  box-shadow: var(--shadow-pop);
 }
 .overflow:hover {
   background: var(--surface-2);
@@ -39,14 +39,14 @@
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--ink-12);
-  border-left: 3px solid var(--danger, #d23f3f);
+  border-left: 3px solid var(--danger);
   border-radius: var(--radius-xs);
-  box-shadow: 0 8px 24px var(--ink-12), 0 1px 2px var(--ink-08);
-  font: var(--weight-reg) var(--text-sm) / 1.4 var(--font-system);
+  box-shadow: var(--shadow-card);
+  font: var(--weight-regular) var(--text-sm) / 1.4 var(--font-system);
   color: var(--ink);
   overflow: hidden;
   /* Subtle slide-in from the side so a fresh error reads as new. */
-  animation: errorIn 160ms ease-out;
+  animation: errorIn var(--motion-default) var(--ease-out-expressive);
 }
 @keyframes errorIn {
   from { opacity: 0; transform: translateX(8px); }
@@ -64,9 +64,9 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--danger, #d23f3f);
-  color: white;
-  font: var(--weight-bold) 12px / 18px var(--font-system);
+  background: var(--danger);
+  color: var(--danger-fg);
+  font: var(--weight-semi) var(--text-sm) / 18px var(--font-system);
   text-align: center;
   user-select: none;
 }
@@ -96,8 +96,8 @@
 .count {
   flex: 0 0 auto;
   background: var(--ink-08);
-  color: var(--ink-72);
-  border-radius: 999px;
+  color: var(--ink-70);
+  border-radius: var(--radius-full);
   padding: 1px 6px;
   font: var(--weight-semi) var(--text-xs) / 1.2 var(--font-system);
 }
@@ -106,11 +106,11 @@
   appearance: none;
   background: transparent;
   border: 0;
-  color: var(--ink-72);
-  font: var(--weight-bold) 18px / 1 var(--font-system);
+  color: var(--ink-70);
+  font: var(--weight-semi) var(--text-xl) / 1 var(--font-system);
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   margin-top: -2px;
 }
@@ -122,12 +122,12 @@
 .body {
   padding: 0 10px 10px 10px;
   border-top: 1px solid var(--ink-08);
-  background: var(--surface-2, var(--surface));
+  background: var(--surface-2);
 }
 .where {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: var(--text-xs);
-  color: var(--ink-72);
+  color: var(--ink-70);
   padding: 8px 0 6px 0;
   word-break: break-all;
 }
@@ -139,9 +139,9 @@
   max-height: 180px;
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
-  color: var(--ink-72);
+  color: var(--ink-70);
   white-space: pre;
 }
 .actions {
@@ -162,6 +162,12 @@
 }
 .sendBtn:hover {
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   border-color: var(--brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
 }

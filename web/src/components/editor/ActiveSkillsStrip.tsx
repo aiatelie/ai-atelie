@@ -100,17 +100,17 @@ export function ActiveSkillsStrip({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "6px",
+        gap: "var(--pad-sm)",
         flexWrap: "wrap",
         margin: "8px 12px 4px",
         padding: "5px 8px 5px 10px",
         border: "1px solid var(--ink-08)",
-        borderRadius: "6px",
+        borderRadius: "var(--radius-sm)",
         background: "var(--surface-warm)",
         cursor: "pointer",
         fontFamily: "inherit",
         textAlign: "left",
-        transition: "background 0.12s, border-color 0.12s",
+        transition: "background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard)",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = "var(--ink-04)";
@@ -123,10 +123,10 @@ export function ActiveSkillsStrip({
     >
       <span
         style={{
-          fontSize: "10px",
+          fontSize: "var(--text-2xs)",
           textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          fontWeight: 600,
+          letterSpacing: "var(--tracking-caps)",
+          fontWeight: "var(--weight-semi)",
           color: "var(--ink-55)",
         }}
       >
@@ -138,12 +138,12 @@ export function ActiveSkillsStrip({
           <span
             key={name}
             style={{
-              fontSize: "11px",
+              fontSize: "var(--text-xs)",
               padding: "2px 7px",
-              borderRadius: "999px",
+              borderRadius: "var(--radius-full)",
               background: "var(--brand-bg)",
               color: "var(--brand-fg)",
-              fontWeight: 500,
+              fontWeight: "var(--weight-medium)",
               whiteSpace: "nowrap",
             }}
           >
@@ -154,9 +154,9 @@ export function ActiveSkillsStrip({
       <span
         style={{
           marginLeft: "auto",
-          fontSize: "11px",
+          fontSize: "var(--text-xs)",
           color: "var(--ink-55)",
-          fontWeight: 500,
+          fontWeight: "var(--weight-medium)",
         }}
       >
         Edit ›

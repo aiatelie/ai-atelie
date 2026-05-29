@@ -181,6 +181,9 @@
 
   /* ─── Surfaces over content (modals, drawers) ──────────────*/
   --backdrop: rgba(20, 16, 12, 0.45);
+  /* Heavier scrim for full-bleed media viewers (image / artifact lightbox)
+   * where the content wants to read against near-darkness regardless of theme. */
+  --backdrop-strong: rgba(20, 16, 12, 0.82);
 
   /* ─── Shadows ───────────────────────────────────────────── */
   --shadow-card: 0 1px 2px 0 rgba(20, 20, 19, 0.04);
@@ -193,6 +196,7 @@
   --font-system: -apple-system, "system-ui", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 
+  --text-2xs: 10px;  /* micro labels only: tiny badges, dropdown chevron glyphs */
   --text-xs: 11px;
   --text-sm: 12px;
   --text-md: 13px;
@@ -238,6 +242,7 @@
   --radius-md: 8px;
   --radius-lg: 10px;
   --radius-xl: 14px;
+  --radius-full: 999px;  /* fully-rounded pills (the canonical full-round value) */
 
   --pad-xs: 4px;
   --pad-sm: 6px;
@@ -380,6 +385,7 @@
   --icon-bg-light: rgba(255, 250, 240, 0.7);
 
   --backdrop: rgba(28, 34, 58, 0.55);
+  --backdrop-strong: rgba(28, 34, 58, 0.82);
 
   --shadow-card: 0 1px 2px 0 rgba(28, 34, 58, 0.06);
   --shadow-pop:  0 8px 24px rgba(28, 34, 58, 0.14), 0 1px 2px rgba(28, 34, 58, 0.08);
@@ -515,6 +521,7 @@
   --icon-bg-light: rgba(245, 242, 235, 0.10);
 
   --backdrop: rgba(0, 0, 0, 0.65);
+  --backdrop-strong: rgba(0, 0, 0, 0.82);
 
   --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
   --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.50), 0 1px 2px rgba(0, 0, 0, 0.40);

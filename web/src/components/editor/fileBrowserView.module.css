@@ -123,7 +123,7 @@
 }
 .crumbAction:focus-visible {
   outline: 2px solid var(--brand);
-  outline-offset: -1px;
+  outline-offset: 2px;
 }
 .search {
   margin-left: auto;
@@ -137,8 +137,12 @@
   width: 200px;
   outline: none;
 }
-.search::placeholder { color: var(--ink-44); }
-.search:focus { border-color: var(--brand); }
+.search::placeholder { color: var(--placeholder); }
+.search:focus {
+  border-color: var(--brand);
+  outline: 2px solid var(--brand);
+  outline-offset: -1px;
+}
 
 .section {
   padding-top: 2px;
@@ -146,9 +150,9 @@
 .sectionLabel {
   padding: 18px 24px 6px;
   font-size: var(--text-xs);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  color: var(--ink-50);
+  color: var(--ink-65);
   font-weight: var(--weight-semi);
   display: flex;
   align-items: center;
@@ -162,7 +166,7 @@
   color: var(--ink-55);
   background: var(--ink-04);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-variant-numeric: tabular-nums;
 }
 
@@ -221,14 +225,14 @@
 .dotOpen {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--brand);
   display: inline-block;
   margin-right: 8px;
   flex-shrink: 0;
 }
 .rowIndent { padding-left: 53px; /* 56 - 3 */ }
-.rowPulse { animation: rowPulse 1.4s ease-out; }
+.rowPulse { animation: rowPulse 1.4s var(--ease-out-expressive); }
 @keyframes rowPulse {
   0%   { background: var(--brand-bg); box-shadow: inset 3px 0 0 var(--brand); }
   60%  { background: var(--brand-bg); box-shadow: inset 3px 0 0 var(--brand); }
@@ -277,7 +281,7 @@
 }
 .icon[data-kind="pdf"] {
   background: var(--brand-warm-soft, var(--ink-04));
-  border-color: var(--brand-warm-border, var(--ink-10));
+  border-color: var(--brand-border);
   color: var(--brand-warm-strong, var(--brand));
 }
 
@@ -411,7 +415,7 @@
   z-index: 2;
   appearance: none;
   border: 1px solid var(--ink-10);
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface);
   color: var(--ink-64);
   width: 26px;
   height: 26px;
@@ -422,7 +426,7 @@
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 120ms ease-out;
+  transition: opacity var(--motion-fast) var(--ease-out-expressive);
 }
 .previewBody:hover .previewRefresh { opacity: 1; }
 .previewRefresh:hover { color: var(--ink-92); background: var(--surface); }
@@ -481,9 +485,9 @@
 .previewCrumbs {
   font-size: var(--text-xs);
   color: var(--ink-44);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--tracking-ui);
 }
-.previewCrumbSep { color: var(--ink-22, var(--ink-10)); padding: 0 2px; }
+.previewCrumbSep { color: var(--ink-20); padding: 0 2px; }
 
 .previewNameRow {
   display: flex;
@@ -499,14 +503,14 @@
   word-break: break-word;
 }
 .previewPill {
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   font-weight: var(--weight-semi);
   color: var(--brand-fg);
   background: var(--brand-bg);
   border: 1px solid var(--brand-border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 2px 8px;
   white-space: nowrap;
 }
@@ -548,11 +552,11 @@
 }
 .menuItem:hover { background: var(--ink-04); }
 .menuItemDanger {
-  color: var(--brand-warm-strong, var(--brand));
+  color: var(--danger);
 }
 .menuItemDanger:hover {
-  background: var(--brand-warm-soft);
-  color: var(--brand-warm-strong, var(--brand));
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 .menuDivider {
   height: 1px;
@@ -592,4 +596,19 @@
   visibility: visible;
   outline: 2px solid var(--brand);
   outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropOverlay,
+  .rowPulse {
+    animation: none;
+  }
+  .crumbAction,
+  .showMore,
+  .row,
+  .dropHint,
+  .previewRefresh,
+  .kebab {
+    transition: none;
+  }
 }

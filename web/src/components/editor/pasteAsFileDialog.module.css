@@ -5,13 +5,13 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  background: var(--backdrop, rgba(0, 0, 0, 0.32));
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1050;
   padding: 24px;
-  animation: pasteFade 120ms ease-out;
+  animation: pasteFade var(--motion-fast) var(--ease-out-expressive);
 }
 @keyframes pasteFade {
   from { opacity: 0; }
@@ -23,7 +23,7 @@
   color: var(--ink-92);
   border: 1px solid var(--ink-08);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-pop);
+  box-shadow: var(--shadow-deep);
   width: min(640px, 100%);
   max-height: 80vh;
   display: flex;
@@ -50,7 +50,7 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: var(--text-xl);
   line-height: 1;
   cursor: pointer;
   display: inline-flex;
@@ -58,6 +58,10 @@
   justify-content: center;
 }
 .close:hover { background: var(--ink-04); color: var(--ink-92); }
+.close:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 
 .body {
   display: flex;
@@ -89,8 +93,8 @@
 }
 .textarea {
   font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   min-height: 220px;
   resize: vertical;
 }
@@ -111,15 +115,15 @@
   background: var(--surface);
 }
 .hint {
-  font: var(--weight-medium) 11px var(--font-system);
+  font: var(--weight-medium) var(--text-xs) var(--font-system);
   color: var(--ink-50);
 }
 .kbd {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   padding: 1px 5px;
   border: 1px solid var(--ink-12);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--ink-04);
   color: var(--ink-65);
   vertical-align: 1px;
@@ -144,12 +148,27 @@
 }
 .btnGhost:hover { background: var(--ink-04); }
 .btnPrimary {
-  background: var(--ink-strong);
-  color: var(--surface);
-  border-color: var(--ink-strong);
+  background: var(--brand);
+  color: var(--on-brand);
+  border-color: var(--brand);
 }
-.btnPrimary:hover:not(:disabled) { background: var(--ink-strong-hover); border-color: var(--ink-strong-hover); }
+.btnPrimary:hover:not(:disabled) { background: var(--brand-fg); border-color: var(--brand-fg); }
 .btnPrimary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.btnGhost:focus-visible,
+.btnPrimary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop {
+    animation: none;
+  }
+  .btnGhost,
+  .btnPrimary {
+    transition: none;
+  }
 }

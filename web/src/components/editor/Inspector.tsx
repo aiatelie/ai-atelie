@@ -95,9 +95,9 @@ export function Inspector({ selected, selectionCount, doc, onChange, onApplyColo
                 color: "var(--ink-50)",
                 width: 22,
                 height: 22,
-                borderRadius: 4,
+                borderRadius: "var(--radius-sm)",
                 cursor: "pointer",
-                fontSize: 14,
+                fontSize: "var(--text-lg)",
                 lineHeight: 1,
               }}
             >
@@ -156,10 +156,10 @@ function AskKimiComposer({ onSubmit }: { onSubmit: (text: string, modelId: strin
         padding: "8px 10px",
         background: "var(--brand-soft)",
         border: "1px solid var(--brand-border)",
-        borderRadius: 9,
+        borderRadius: "var(--radius-lg)",
       }}
     >
-      <div style={{ fontSize: 10.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-55)", fontWeight: 600 }}>
+      <div style={{ fontSize: "var(--text-xs)", letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--ink-55)", fontWeight: "var(--weight-semi)" }}>
         Ask AI · about this selection
       </div>
       <textarea
@@ -171,15 +171,17 @@ function AskKimiComposer({ onSubmit }: { onSubmit: (text: string, modelId: strin
         }}
         rows={1}
         placeholder="Question, refactor request, design idea…  ⌘↵ to send"
+        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--brand)"; e.currentTarget.style.boxShadow = "0 0 0 2px var(--brand-soft)"; }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--ink-10)"; e.currentTarget.style.boxShadow = "none"; }}
         style={{
           appearance: "none",
           border: "1px solid var(--ink-10)",
           background: "var(--surface)",
           color: "var(--ink-92)",
-          font: "12px var(--font-system)",
+          font: "var(--text-sm) var(--font-system)",
           lineHeight: 1.4,
           padding: "6px 8px",
-          borderRadius: 6,
+          borderRadius: "var(--radius-sm)",
           outline: "none",
           resize: "none",
           minHeight: 28,
@@ -200,9 +202,9 @@ function AskKimiComposer({ onSubmit }: { onSubmit: (text: string, modelId: strin
             border: 0,
             background: text.trim() ? "var(--brand)" : "var(--ink-10)",
             color: text.trim() ? "var(--on-brand)" : "var(--ink-40)",
-            font: "600 11px var(--font-system)",
+            font: "var(--weight-semi) var(--text-xs) var(--font-system)",
             padding: "5px 10px",
-            borderRadius: 6,
+            borderRadius: "var(--radius-sm)",
             cursor: text.trim() ? "pointer" : "not-allowed",
             flexShrink: 0,
           }}
@@ -383,9 +385,9 @@ function InspectorBody({
               color: "var(--ink-50)",
               width: 26,
               height: 26,
-              borderRadius: 6,
+              borderRadius: "var(--radius-sm)",
               cursor: "pointer",
-              fontSize: 16,
+              fontSize: "var(--text-xl)",
               lineHeight: 1,
               marginLeft: 4,
             }}
@@ -404,9 +406,9 @@ function InspectorBody({
             border: "1px solid var(--ink-10)",
             background: "transparent",
             color: "var(--ink-60)",
-            borderRadius: 7,
+            borderRadius: "var(--radius-sm)",
             padding: "5px 10px",
-            font: "500 11px var(--font-system)",
+            font: "var(--weight-medium) var(--text-xs) var(--font-system)",
             cursor: "pointer",
             alignSelf: "flex-start",
           }}
@@ -462,7 +464,7 @@ function InspectorBody({
               type="text"
               value={vals.color}
               onChange={(e) => update("color", e.target.value)}
-              style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}
+              style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}
             />
           </div>
           <div className={s.field}>
@@ -712,7 +714,7 @@ function InspectorBody({
               type="text"
               value={vals["background-color"]}
               onChange={(e) => update("background-color", e.target.value)}
-              style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}
+              style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}
             />
           </div>
           <div className={s.field}>
@@ -721,7 +723,7 @@ function InspectorBody({
               <img
                 src={vals["background-image"]}
                 alt="bg"
-                style={{ width: 22, height: 22, objectFit: "cover", borderRadius: 4, border: "1px solid rgba(0,0,0,0.1)" }}
+                style={{ width: 22, height: 22, objectFit: "cover", borderRadius: "var(--radius-xs)", border: "1px solid var(--ink-10)" }}
               />
             ) : null}
           </div>
