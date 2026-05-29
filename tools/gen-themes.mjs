@@ -34,6 +34,20 @@ function rgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/* Relative luminance (WCAG) of a hex color, 0–1. */
+function relLum(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+/* Text/icon color for a brand fill. White on a light brand (vinyl green,
+ * hornet yellow, phosphor lime) drops below ~2.5:1 — use a dark ink there.
+ * Threshold luminance > 0.30 ⇒ white contrast < 3:1. */
+function onBrandFor(brandHex) {
+  return relLum(brandHex) > 0.30 ? "#1c1813" : "#ffffff";
+}
+
 /* The alpha scale used for `--ink-XX`. On light themes the suffix
  * matches the alpha (ink-02 = 0.02). On dark themes the perceptual
  * weight of a dark overlay shifts, so we use a bumped scale that
@@ -348,7 +362,7 @@ function genTheme(p) {
 
   // On-ink (overlays drawn on dark/brand surfaces)
   lines.push(`  --on-ink: ${p.onInk};`);
-  lines.push(`  --on-brand: #ffffff;`);
+  lines.push(`  --on-brand: ${onBrandFor(p.brand)};`);
   for (const [k, a] of Object.entries(ON_INK_ALPHAS)) {
     lines.push(`  --on-ink-${k}: ${rgba(p.onInk, a)};`);
   }

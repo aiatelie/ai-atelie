@@ -443,7 +443,10 @@
   /* on-ink family flips to dark — overlays drawn on top of bright (brand)
    * surfaces still want to read as dark ink. */
   --on-ink: #14110d;
-  --on-brand: #ffffff;
+  /* Brand is a light salmon in dark theme — white text on it fails contrast
+   * (~2.5:1). Dark on-brand reads ~7:1. See tools/gen-themes.mjs for the
+   * per-palette luminance rule applied to the generated themes. */
+  --on-brand: #1c1813;
   --on-ink-06: rgba(15, 12, 8, 0.10);
   --on-ink-08: rgba(15, 12, 8, 0.12);
   --on-ink-10: rgba(15, 12, 8, 0.16);

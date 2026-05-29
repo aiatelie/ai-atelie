@@ -64,9 +64,13 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--danger);
+  /* Danger-chip pairing: dark/light --danger-fg on the faint --danger-bg
+   * tint stays legible in every theme. Solid --danger here gave red-on-red
+   * (~1.4:1) since --danger-fg tracks the same hue. */
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
   color: var(--danger-fg);
-  font: var(--weight-semi) var(--text-sm) / 18px var(--font-system);
+  font: var(--weight-semi) var(--text-sm) / 16px var(--font-system);
   text-align: center;
   user-select: none;
 }
