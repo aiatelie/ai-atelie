@@ -425,7 +425,10 @@
 
 .bubbleUser {
   background: var(--ink-strong);
-  color: var(--surface-4);
+  /* Fixed-dark pill in every theme, so text must be an always-light
+   * on-ink token. --surface-4 flips to near-black on dark themes
+   * (invisible dark-on-dark); --on-ink-soft-90 stays cream everywhere. */
+  color: var(--on-ink-soft-90);
   border-radius: 14px 14px 4px 14px;
   padding: 10px 14px;
   max-width: 88%;
@@ -523,8 +526,8 @@
 
 .text {
   /* Conversational prose styling. INHERIT color from the parent bubble
-   *  (.bubbleAssistant uses --ink-92, .bubbleUser uses --surface-4 on
-   *  dark) so the same class works for both sides. The previous explicit
+   *  (.bubbleAssistant uses --ink-92, .bubbleUser uses --on-ink-soft-90)
+   *  so the same class works for both sides. The previous explicit
    *  `color: var(--ink)` here forced dark text on the user bubble's dark
    *  background — invisible. Don't add color back unless you scope it. */
   word-break: break-word;

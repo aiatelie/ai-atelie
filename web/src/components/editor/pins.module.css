@@ -10,13 +10,13 @@
 .pin {
   position: absolute;
   appearance: none;
-  border: 2px solid var(--surface);
+  border: 2px solid var(--on-brand);
   background: var(--brand);
-  color: var(--surface);
+  color: var(--on-brand);
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  font: 700 11px var(--font-system);
+  font: var(--weight-semi) var(--text-xs) var(--font-system);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -24,7 +24,7 @@
   pointer-events: auto;
   transform: translate(-50%, -50%);
   box-shadow: 0 2px 6px var(--ink-25), 0 0 0 1px var(--ink-05);
-  transition: transform 0.12s, background-color 0.12s;
+  transition: transform var(--motion-fast), background-color var(--motion-fast);
 }
 .pin:hover { transform: translate(-50%, -50%) scale(1.15); }
 .pinSelected {
@@ -36,7 +36,7 @@
      Cool/neutral fill so the pin reads as "out for review" rather than
      "still actionable". */
   background: var(--ink-strong);
-  color: var(--surface);
+  color: var(--on-brand);
 }
 .pinResolved {
   /* Terminal: nothing to do here anymore. Muted brand to keep the row
