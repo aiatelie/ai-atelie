@@ -8,6 +8,53 @@ Version policy while in alpha: minor bumps are reserved for user-visible
 features or breaking changes; everything else is patch.
 
 
+## v0.2.0
+
+[compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.8...v0.2.0)
+
+### Features
+
+- **web:** Composer polish — /compress, @-file mentions, text-file drops ([#87](https://github.com/aiatelie/ai-atelie/pull/87))
+- Design intelligence — per-project skill selection + DESIGN.md ([#88](https://github.com/aiatelie/ai-atelie/pull/88))
+- **repo:** Add OpenCode compatibility layer ([#94](https://github.com/aiatelie/ai-atelie/pull/94))
+- **api,web:** Fork projects — one-click remix with origin tracking ([374ea8e](https://github.com/aiatelie/ai-atelie/commit/374ea8e))
+- **web:** Add project search and sort to home page ([f910185](https://github.com/aiatelie/ai-atelie/commit/f910185))
+- Window.ai.complete() — provider-neutral artifact AI calls ([#104](https://github.com/aiatelie/ai-atelie/pull/104))
+- ⚠️  Rewrite OGraf export pipeline for DaVinci Resolve 21 ([#108](https://github.com/aiatelie/ai-atelie/pull/108))
+- **chat:** Event-sourced canonical log, Codex app-server, live reasoning + plan UX ([fca1e3c](https://github.com/aiatelie/ai-atelie/commit/fca1e3c))
+
+### Bug Fixes
+
+- Harden communication layer, shutdown safety, and storage integrity ([#95](https://github.com/aiatelie/ai-atelie/pull/95))
+- **docs:** Restore hero.png image in bilingual README ([493158f](https://github.com/aiatelie/ai-atelie/commit/493158f))
+- **web:** Unify chrome on design tokens; fix theme + state gaps ([abd1e36](https://github.com/aiatelie/ai-atelie/commit/abd1e36))
+- **web:** Keep dark-pill/brand text legible in dark themes ([ca921cc](https://github.com/aiatelie/ai-atelie/commit/ca921cc))
+- **web:** Legible on-brand text on light-brand themes ([2951eaf](https://github.com/aiatelie/ai-atelie/commit/2951eaf))
+- **web:** Raise secondary UI to WCAG AA across themes ([8627626](https://github.com/aiatelie/ai-atelie/commit/8627626))
+
+### Docs
+
+- **repo:** Add the canonical contributor workflow doc ([#86](https://github.com/aiatelie/ai-atelie/pull/86))
+- **repo:** Add bilingual Chinese/English README and CONTRIBUTING ([#107](https://github.com/aiatelie/ai-atelie/pull/107))
+
+### Chores
+
+- **repo:** Support PLAYWRIGHT_BASE_URL env var in playwright.config ([c2f6925](https://github.com/aiatelie/ai-atelie/commit/c2f6925))
+
+### Style
+
+- **web:** Polish home page search/sort/remix UI to match app aesthetic ([dc0eca5](https://github.com/aiatelie/ai-atelie/commit/dc0eca5))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Rewrite OGraf export pipeline for DaVinci Resolve 21 ([#108](https://github.com/aiatelie/ai-atelie/pull/108))
+
+### ❤️ Contributors
+
+- Kadu-maverickk <kadumaverick1314@gmail.com>
+- Kadu Maverick ([@whatiskadudoing](https://github.com/whatiskadudoing))
+- Ai-atelie-bot
+
 ## v0.1.8
 
 [compare changes](https://github.com/aiatelie/ai-atelie/compare/v0.1.7...v0.1.8)
