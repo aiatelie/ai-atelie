@@ -148,6 +148,19 @@ export function killAllChildren(): void {
 
 /* ─── Replay buffer helpers ─────────────────────────────────────── */
 
+/** True when a buffered event carries recoverable interior content that's
+ *  safe to evict first under memory pressure — legacy `agent` text deltas
+ *  and canonical `text-delta`/`reasoning-delta`. Structural envelopes
+ *  (tool/tool-result, block start/end, reasoning-meta, usage, status) are
+ *  NOT evictable preferentially: dropping them would leave a resumed
+ *  projection with orphaned chips or a vanished block. Matched on the raw
+ *  JSON string to avoid parsing on the hot eviction path. */
+function isEvictableContent(e: BufferedEvent): boolean {
+  if (e.event === "agent") return /"type":"text"/.test(e.data);
+  if (e.event === "canon") return /"kind":"(?:text-delta|reasoning-delta)"/.test(e.data);
+  return false;
+}
+
 /** Initialize the buffer fields on a fresh ActiveRun. Callers building
  *  the run object inline should spread the result, e.g.:
  *
@@ -172,11 +185,16 @@ export function appendBufferedEvent(streamId: string, event: string, data: strin
   run.bufferBytes += size;
   getSlot().totalBufferBytes.v += size;
 
-  // Per-stream eviction: prefer dropping `text` events (recoverable from
-  // the SDK's terminal `finalText`) over tool envelopes (without which
-  // a result chip would appear orphaned in the resumed UI).
+  // Per-stream eviction: prefer dropping recoverable *interior content*
+  // over structural envelopes. For the legacy wire that's `agent` `text`
+  // (recoverable from the SDK's terminal `finalText`); for the canonical
+  // log it's `text-delta`/`reasoning-delta` (the block's start/end bound it
+  // and the durable runs/canonical/<id>.jsonl backstops the bytes). NEVER
+  // preferentially drop a `tool`/`tool-result`/block-start/-end/-meta
+  // envelope — without those a resumed projection would show orphan chips
+  // or lose a whole reasoning/text block, diverging from the live render.
   while (run.bufferBytes > RING_MAX_BYTES && run.buffer.length > 1) {
-    const idx = run.buffer.findIndex((e) => e.event === "agent" && /"type":"text"/.test(e.data));
+    const idx = run.buffer.findIndex((e) => isEvictableContent(e));
     const evictAt = idx >= 0 ? idx : 0; // fallback: drop oldest record
     const dropped = run.buffer.splice(evictAt, 1)[0];
     const dropSize = dropped.data.length + dropped.event.length + 32;

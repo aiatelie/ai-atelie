@@ -21,6 +21,7 @@ export const claudeAdapter: AgentAdapter = {
     bashAllowedInSandbox: false,
     supportsPrewarmPool: false,
     supportsCompletion: true,
+    reasoning: { mode: "streams", enablement: "adaptive thinking on every turn" },
   },
   async run({ payload, send, abortSignal, baseUrl, streamId }) {
     return runClaude(payload, send, abortSignal, baseUrl, streamId);

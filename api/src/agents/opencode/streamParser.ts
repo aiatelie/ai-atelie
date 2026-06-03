@@ -129,6 +129,11 @@ export function createOpenCodeStreamParser(cb: OpenCodeParserCallbacks) {
 
     if (t === "step_start") return;
 
+    if (t === "reasoning" && typeof part.text === "string" && part.text.length > 0) {
+      cb.onAgent({ type: "thinking", chunk: part.text });
+      return;
+    }
+
     if (t === "text" && typeof part.text === "string" && part.text.length > 0) {
       cb.onAgent({ type: "text", chunk: part.text });
       return;

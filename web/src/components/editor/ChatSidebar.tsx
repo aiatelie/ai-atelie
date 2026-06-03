@@ -12,7 +12,8 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactElement } fro
 import s from "./chat.module.css";
 import type { Attachment } from "./CommentBubble";
 import { ModelPicker, loadModelId, saveModelId, useModelPickerFlag } from "./ModelPicker";
-import { getModel } from "../../data/modelPresets";
+import { getModel, providerOf } from "../../data/modelPresets";
+import { CodexSignInButton } from "./CodexSignInButton";
 import { Markdown, DiffBlock } from "./Markdown";
 import { previewReminder, splitSystemReminders } from "./systemReminder";
 import { ELAPSED_TICK_MS, SLOW_RUN_THRESHOLD_MS, formatElapsed } from "./elapsed";
@@ -21,7 +22,8 @@ import { ElicitForm } from "./ElicitForm";
 import { ActiveSkillsStrip } from "./ActiveSkillsStrip";
 import { ArtifactCard, parseArtifact } from "./ArtifactCard";
 import { ImageLightbox } from "./ImageLightbox";
-import { getStreamState, type ElicitRequest, type ToolCall, type TurnUsage } from "../../lib/chatStream";
+import { getStreamState, type ElicitRequest, type ToolCall, type TimelineEntry, type TurnUsage } from "../../lib/chatStream";
+import { reduce, type CanonicalEvent, type Block } from "../../lib/canonicalEvents";
 import { kindOf, KIND_VERB, type ToolKind } from "../../lib/toolKind";
 import { smartLabel } from "../../lib/smartLabel";
 
@@ -135,11 +137,19 @@ export type ChatMessage =
       content: string;       // accumulated text
       thinking?: string;     // accumulated extended-thinking content (collapsible)
       tools: ToolCall[];     // tool calls made during this turn (expandable in UI)
+      timeline?: TimelineEntry[]; // legacy chronological think→act→answer (fallback render)
+      /** Phase 4: the canonical, seq-stamped turn log. When present this is
+       *  the authoritative turn shape — the render derives its timeline from
+       *  `project(reduce(events))`, so live == persisted == reconnected by
+       *  construction. `timeline`/`thinking`/`tools` remain for legacy
+       *  threads, usage badges, copy, and the artifact strip. */
+      events?: CanonicalEvent[];
       ts: number;
       pending?: boolean;     // still streaming
       error?: string;
       turnId?: string;       // server-side snapshot id for undo
       reverted?: boolean;    // edits for this turn have been undone
+      reconnected?: boolean; // resumed a live backend run after a reload
     };
 
 export type ChatThread = {
@@ -391,8 +401,10 @@ function ThreadTabs({
 }
 
 function isAssistantPending(thread: ChatThread): boolean {
-  const last = thread.messages[thread.messages.length - 1];
-  return !!(last && last.role === "assistant" && last.pending);
+  // Any ongoing turn (not just the last message) keeps the composer in
+  // "Stop" mode — a thread can hold more than one in-flight turn after
+  // reloads, and all of them should be stoppable.
+  return thread.messages.some((m) => m.role === "assistant" && m.pending);
 }
 
 function Composer({
@@ -1462,6 +1474,34 @@ function Bubble({
     return -1;
   })();
 
+  // When a codex turn fails on an auth error, offer one-click sign-in
+  // right here (the most contextual place to recover). Gate on the
+  // turn's provider AND an auth-ish message so we don't show it for
+  // unrelated codex failures.
+  const prevUserModelId = prevUserIndex >= 0
+    ? (messages[prevUserIndex] as { modelId?: string }).modelId
+    : undefined;
+  const isCodexAuthError =
+    !!m.error &&
+    providerOf(prevUserModelId) === "codex" &&
+    /sign in again|log ?out|refresh token|access token|token (was|has been|could not|is)|unauthor|not (logged|signed) in|codex login/i.test(m.error);
+
+  // Hybrid timeline: reasoning + tool steps render as inline strips; each
+  // prose segment is its own bubble; the whole think→act→answer flow is
+  // preserved in order. `tlUnits` is empty only when nothing has arrived
+  // yet (fresh pending turn) → the turn-level LiveStatus covers that.
+  const tlUnits = groupUnits(deriveTimeline(m));
+  const plan = derivePlan(m);
+  let lastTextUnitIdx = -1;
+  for (let i = 0; i < tlUnits.length; i++) if (tlUnits[i].kind === "text") lastTextUnitIdx = i;
+  const lastUnit = tlUnits[tlUnits.length - 1];
+  // Turn-level "what's happening now" indicator. Suppressed when the last
+  // unit already conveys live state itself: prose is streaming (text), or
+  // the reasoning capsule is showing its own "Thinking… M:SS" timer
+  // (reasoning) — otherwise we'd double up two "Thinking…" affordances.
+  const showLiveStatus =
+    !!m.pending && !m.error && lastUnit?.kind !== "text" && lastUnit?.kind !== "reasoning";
+
   return (
     <div className={`${s.row} ${s.rowAssistant}`}>
       <div className={s.assistantMeta}>
@@ -1475,47 +1515,68 @@ function Bubble({
         </div>
         <AssistantLabel messages={messages} index={index} />
       </div>
-      <div className={s.bubbleAssistant}>
-        {m.thinking && (
-          <ThinkingBlock text={m.thinking} pending={!!m.pending} />
+      <div className={s.assistantTurn}>
+        {m.pending && m.reconnected && (
+          <div className={s.reconnectedHint}>↻ Reconnected — still working on the backend…</div>
         )}
-        {/* Visual hierarchy: the model's prose is the *headline*. Tool
-         *  chips and any rendered artifacts sit below as subordinate
-         *  detail. Earlier this was inverted (chips dominated the
-         *  bubble, the prose was a tiny line at the bottom) and the UI
-         *  felt like a build log instead of a conversation.
-         *
-         *  When pending AND no text has streamed yet, we show a live
-         *  status line ("Reading X…") so the user always sees forward
-         *  motion — without it the bubble shows just dots + tool chips
-         *  and feels frozen. */}
-        {m.error ? (
-          <div className={s.errText}>⚠ {m.error}</div>
-        ) : (
-          <div className={s.text}>
-            {m.content ? (
-              <AssistantContent text={m.content} />
-            ) : m.pending ? (
-              <LiveStatus tools={m.tools} since={m.ts} />
-            ) : (
-              <span className={s.dim}>(no response)</span>
-            )}
-            {m.pending && m.content && <span className={s.caret} />}
+
+        {/* The agent's live plan (TodoWrite), as a checklist that updates
+         *  in place — the user watches items flip pending → in-progress →
+         *  done. Pinned at the top of the turn; collapses once complete. */}
+        {plan && <PlanStrip todos={plan} pending={!!m.pending} />}
+
+        {/* Chronological think → act → answer. Reasoning + tool steps
+         *  render as collapsible inline strips (dimmed reasoning, live
+         *  while pending, auto-collapsed once done); each prose segment
+         *  is its own bubble. The whole flow stays visible in history. */}
+        {tlUnits.map((u, ui) =>
+          u.kind === "tools" ? (
+            <StepsStrip key={ui} entries={u.entries} pending={!!m.pending} />
+          ) : u.kind === "reasoning" ? (
+            <ReasoningCapsule
+              key={ui}
+              text={u.text}
+              done={u.done}
+              withheld={u.withheld}
+              tokens={u.tokens}
+              pending={!!m.pending}
+            />
+          ) : (
+            <div key={ui} className={s.bubbleAssistant}>
+              <AssistantContent text={u.text} />
+              {m.pending && ui === lastTextUnitIdx && <span className={s.caret} />}
+            </div>
+          ),
+        )}
+
+        {m.error && (
+          <div className={s.bubbleAssistant}>
+            <div className={s.errText}>⚠ {m.error}</div>
           </div>
         )}
+
+        {/* Live "what's happening now" indicator while the turn is in
+         *  flight and the latest activity isn't prose still streaming. */}
+        {showLiveStatus && (
+          <div className={s.bubbleAssistant}>
+            <LiveStatus tools={m.tools} since={m.ts} />
+          </div>
+        )}
+
+        {!m.pending && !m.error && tlUnits.length === 0 && (
+          <div className={s.bubbleAssistant}>
+            <span className={s.dim}>(no response)</span>
+          </div>
+        )}
+
         {/* Artifacts (real visual outputs from export tools) stay
          *  prominent — the user wants to *see* what was rendered. */}
         {m.tools.map((t, i) => {
           const a = parseArtifact(t.result);
           return a ? <ArtifactCard key={`art-${i}`} artifact={a} /> : null;
         })}
-        {/* Tool chips: collapsed-by-default footer when there are >2
-         *  calls AFTER the turn finishes; while pending we always
-         *  expand so the user sees chips appearing live as the model
-         *  works. */}
-        {m.tools.length > 0 && (
-          <ToolFooter tools={m.tools} pending={!!m.pending} />
-        )}
+
+        {/* Turn-level actions, once the turn settles. */}
         {!m.pending && (
           <div className={s.bubbleActions}>
             {m.error && prevUserIndex >= 0 && (
@@ -1526,6 +1587,12 @@ function Bubble({
               >
                 ↻ Retry
               </button>
+            )}
+            {isCodexAuthError && (
+              <CodexSignInButton
+                className={s.retryBtn}
+                onAuthed={() => onRetry(threadId, prevUserIndex)}
+              />
             )}
             {!m.error && m.turnId && (
               <>
@@ -1623,22 +1690,6 @@ function SystemReminderBlock({ body }: { body: string }) {
   );
 }
 
-function ThinkingBlock({ text, pending }: { text: string; pending: boolean }) {
-  const [open, setOpen] = useState(pending);
-  return (
-    <details
-      className={s.thinkingBlock}
-      open={open}
-      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
-    >
-      <summary className={s.thinkingSummary}>
-        {pending ? "Thinking…" : "Thought process"}
-      </summary>
-      <div className={s.thinkingBody}>{text}</div>
-    </details>
-  );
-}
-
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 
 function pickFilePath(input: Record<string, unknown> | undefined): string | undefined {
@@ -1651,56 +1702,312 @@ function basename(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
-/** Subordinate-by-default tool footer.
+/** The chronological entries to render for a turn.
  *
- *  • While `pending` (turn still in flight): always render chips
- *    expanded, regardless of count. The user needs to see chips
- *    appearing one-by-one to know the model is making forward progress.
- *  • Once the turn finishes:
- *      - 1–2 calls → small inline pills beneath the prose
- *      - 3+ calls  → collapsed "N steps · file, file +rest" summary
- *
- *  This is what makes the bubble feel like a conversation: the AI's
- *  prose is the headline, "what I did" is a subtle footer the user can
- *  drill into if they're curious — but during the work itself, every
- *  tool call is visible feedback that something is happening. */
-function ToolFooter({ tools, pending }: { tools: ToolCall[]; pending: boolean }) {
+ *  Priority (Phase 4): the canonical, seq-stamped event log is
+ *  authoritative when present — `project(reduce(events))` is pure over a
+ *  seq-ordered array, so the live, persisted, and reconnected renders are
+ *  byte-identical and interleave (think→act→answer→act→…) is native.
+ *  Legacy threads with no `events[]` fall back to `m.timeline`; the very
+ *  oldest (no timeline either) derive a coarse reasoning→tools→text order
+ *  from the flat accumulators so history still renders. */
+function deriveTimeline(m: Extract<ChatMessage, { role: "assistant" }>): TimelineEntry[] {
+  if (m.events && m.events.length > 0) {
+    const tl = canonicalToTimeline(m.events);
+    if (tl.length > 0) return tl;
+  }
+  if (m.timeline && m.timeline.length > 0) return m.timeline.filter((e) => !(e.kind === "tool" && isTodoTool(e.tool.name)));
+  const out: TimelineEntry[] = [];
+  if (m.thinking) out.push({ kind: "thinking", text: m.thinking });
+  for (const t of m.tools) if (!isTodoTool(t.name)) out.push({ kind: "tool", tool: t });
+  if (m.content) out.push({ kind: "text", text: m.content });
+  return out;
+}
+
+/** One item of the agent's live plan (Claude SDK TodoWrite). */
+type TodoItem = { content: string; status: "pending" | "in_progress" | "completed"; activeForm?: string };
+
+/** TodoWrite is the agent's plan tool — match case-insensitively so it
+ *  works across adapters/casing (Claude "TodoWrite", snake variants). */
+function isTodoTool(name: string): boolean {
+  return /todo.?write|^todo$/i.test(name);
+}
+
+/** Validate a TodoWrite tool input into a typed todo list, or null. */
+function parseTodos(input: unknown): TodoItem[] | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = (input as { todos?: unknown }).todos;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out: TodoItem[] = [];
+  for (const t of raw) {
+    if (!t || typeof t !== "object") continue;
+    const o = t as Record<string, unknown>;
+    const content = typeof o.content === "string" ? o.content : typeof o.activeForm === "string" ? o.activeForm : null;
+    if (!content) continue;
+    const status = o.status === "in_progress" || o.status === "completed" ? o.status : "pending";
+    out.push({ content, status, activeForm: typeof o.activeForm === "string" ? o.activeForm : undefined });
+  }
+  return out.length ? out : null;
+}
+
+/** The agent's CURRENT plan for this turn (latest TodoWrite todos), or
+ *  null. TodoWrite is rewritten in full on each call, so the last one in
+ *  `m.tools` (maintained live for every turn) is the live state. */
+function derivePlan(m: Extract<ChatMessage, { role: "assistant" }>): TodoItem[] | null {
+  for (let i = m.tools.length - 1; i >= 0; i--) {
+    if (isTodoTool(m.tools[i].name)) {
+      const parsed = parseTodos(m.tools[i].input);
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
+/** Build the chip label for a canonical tool block. Mirrors
+ *  `makeToolCall` in chatStream.ts ("Name · file.ext" / "Name · command")
+ *  so canonical-rendered turns keep chips identical to legacy ones. */
+function canonToolLabel(name: string, input?: Record<string, unknown>): string {
+  let label = name;
+  if (input && typeof input === "object") {
+    const path = (input.file_path ?? input.path ?? input.file) as string | undefined;
+    if (typeof path === "string") label += ` · ${basename(path)}`;
+    else if (typeof input.command === "string") label += ` · ${input.command.slice(0, 40)}`;
+  }
+  return label;
+}
+
+/** Fold a canonical event log into the chronological `TimelineEntry[]`
+ *  the existing render (`groupUnits` → ReasoningCapsule/StepsStrip/bubbles)
+ *  already knows how to draw. `reduce()` sorts by seq + dedups, so the
+ *  block order here is the true chronological order regardless of how the
+ *  events arrived (live deltas, replay suffix, reconnect overlap). Empty
+ *  reasoning/text blocks are dropped; a provider-withheld reasoning block
+ *  (codex agentic turns) renders an honest one-line note instead of a
+ *  silently empty capsule. */
+function canonicalToTimeline(events: CanonicalEvent[]): TimelineEntry[] {
+  const out: TimelineEntry[] = [];
+  for (const b of reduce(events).blocks as Block[]) {
+    if (b.kind === "reasoning") {
+      // Emit a reasoning entry when there's text OR an honest withheld
+      // marker (codex spent tokens but streamed no summary). The capsule
+      // renders the timer/withheld header from these flags.
+      if (b.text || b.withheld) {
+        out.push({ kind: "thinking", text: b.text, done: b.done, withheld: b.withheld, tokens: b.tokens });
+      }
+    } else if (b.kind === "text") {
+      if (b.text) out.push({ kind: "text", text: b.text });
+    } else if (!isTodoTool(b.name)) {
+      // TodoWrite is rendered as a dedicated live PlanStrip (derivePlan),
+      // not as a tool chip — skip it here so it isn't shown twice.
+      out.push({
+        kind: "tool",
+        tool: {
+          name: b.name,
+          label: canonToolLabel(b.name, b.input),
+          input: b.input,
+          result: b.result,
+          isError: b.isError,
+          id: b.id,
+        },
+      });
+    }
+  }
+  return out;
+}
+
+type TimelineUnit =
+  | { kind: "reasoning"; text: string; done?: boolean; withheld?: boolean; tokens?: number }
+  | { kind: "tools"; entries: TimelineEntry[] }
+  | { kind: "text"; text: string };
+
+/** Group a timeline into render units, chronological order preserved:
+ *   - reasoning → its own visible (dimmed) block — the model's thoughts
+ *     stay readable, not buried.
+ *   - consecutive tool calls → one collapsible "N steps" strip.
+ *   - each prose segment → its own bubble. */
+function groupUnits(entries: TimelineEntry[]): TimelineUnit[] {
+  const units: TimelineUnit[] = [];
+  let tools: TimelineEntry[] = [];
+  const flushTools = () => { if (tools.length) { units.push({ kind: "tools", entries: tools }); tools = []; } };
+  for (const e of entries) {
+    if (e.kind === "tool") { tools.push(e); continue; }
+    flushTools();
+    if (e.kind === "thinking") units.push({ kind: "reasoning", text: e.text, done: e.done, withheld: e.withheld, tokens: e.tokens });
+    else units.push({ kind: "text", text: e.text });
+  }
+  flushTools();
+  return units;
+}
+
+/** The agent's live plan — TodoWrite rendered as a checklist that updates
+ *  in place (CLI / open-design "live agent panel" style). While the turn
+ *  is in flight it's open so the user watches items flip pending →
+ *  in-progress → done; once finished it collapses to a scannable
+ *  "Plan · N/N ✓" toggle. The in-progress item shows its present-tense
+ *  `activeForm` ("Adding a footer…") with a pulsing marker. */
+function PlanStrip({ todos, pending }: { todos: TodoItem[]; pending: boolean }) {
+  const total = todos.length;
+  const done = todos.filter((t) => t.status === "completed").length;
+  const allDone = done === total;
   const [open, setOpen] = useState(false);
-  if (tools.length === 0) return null;
-  // Pending OR few tools: always expanded.
-  const expanded = pending || tools.length <= 2 || open;
-  if (pending || tools.length <= 2) {
-    return (
-      <div className={s.tools} data-compact={tools.length <= 2 ? "true" : "false"}>
-        {tools.map((t, i) => <ToolChip key={i} tool={t} />)}
-      </div>
-    );
-  }
-  // Done + 3+ tools: collapsible summary footer.
-  const fileSet = new Set<string>();
-  for (const t of tools) {
-    const m = (t.label || "").match(/·\s+(.+)/);
-    if (m && m[1]) fileSet.add(m[1].trim());
-  }
-  const files = Array.from(fileSet);
-  const summary = files.length > 0
-    ? `${tools.length} steps · ${files.slice(0, 2).join(", ")}${files.length > 2 ? ` +${files.length - 2}` : ""}`
-    : `${tools.length} steps`;
+  // Force-open while the turn runs; once done it's collapsible (default
+  // collapsed when every item finished, else open to surface what stalled).
+  const expanded = pending ? true : open || !allDone;
+  const summary = `Plan · ${done}/${total}${allDone ? " ✓" : ""}`;
   return (
-    <div className={s.toolFooter}>
+    <div className={`${s.planStrip} ${pending ? s.planActive : ""}`} data-complete={allDone ? "true" : undefined}>
       <button
         type="button"
-        className={s.toolFooterToggle}
-        onClick={() => setOpen((o) => !o)}
+        className={s.planToggle}
+        onClick={() => { if (!pending) setOpen((o) => !o); }}
         aria-expanded={expanded}
-        title={expanded ? "Collapse steps" : "Show all steps"}
+        disabled={pending}
+        title={pending ? "Plan (in progress)" : expanded ? "Hide plan" : "Show plan"}
       >
-        <span>{expanded ? "Hide steps" : summary}</span>
-        <span className={s.toolFooterChev} aria-hidden="true">{expanded ? "▴" : "▾"}</span>
+        <span className={s.planTitle}>{summary}</span>
+        {!pending && <span className={s.stepsChev} aria-hidden="true">{expanded ? "▴" : "▾"}</span>}
       </button>
       {expanded && (
-        <div className={s.tools} data-compact="false">
-          {tools.map((t, i) => <ToolChip key={i} tool={t} />)}
+        <ul className={s.planList}>
+          {todos.map((t, i) => (
+            <li key={i} className={s.planItem} data-status={t.status}>
+              <span className={s.planCheck} aria-hidden="true">
+                {t.status === "completed" ? "✓" : t.status === "in_progress" ? "▸" : "○"}
+              </span>
+              <span className={s.planText}>
+                {t.status === "in_progress" && t.activeForm ? t.activeForm : t.content}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** The model's reasoning, as a timed capsule (CLI / Claude-app style).
+ *
+ *  While the model is actively thinking this block (turn pending + block
+ *  not yet closed) the capsule is FORCE-OPEN and dimmed with a live
+ *  "Thinking… M:SS" timer — you watch it reason in real time. Once the
+ *  block closes it auto-collapses to "Thought for Ns ▾" (the duration is
+ *  measured live; a reloaded already-done turn shows just "Reasoning ▾").
+ *  When the provider withheld the summary but spent reasoning tokens
+ *  (codex), the header is an honest "Reasoned · ~N tok · hidden by
+ *  provider" with no body — so the reasoning layer is never silently
+ *  empty. Long reasoning scrolls inside a capped box. */
+function ReasoningCapsule({
+  text,
+  done,
+  withheld,
+  tokens,
+  pending,
+}: {
+  text: string;
+  done?: boolean;
+  withheld?: boolean;
+  tokens?: number;
+  pending: boolean;
+}) {
+  // Actively thinking right now = the turn is in flight and this block
+  // hasn't closed. (Legacy turns have done===undefined → treated closed.)
+  const active = pending && done === false;
+  const [mountedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  const [frozenMs, setFrozenMs] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const wasActive = useRef(active);
+
+  useEffect(() => { if (active) wasActive.current = true; }, [active]);
+
+  // Tick a live timer only while actively thinking.
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), ELAPSED_TICK_MS);
+    return () => clearInterval(id);
+  }, [active]);
+
+  // Freeze the elapsed once, when thinking stops — but only if we watched
+  // it think live (otherwise a reloaded done turn would show a bogus
+  // "Thought for <time-since-mount>").
+  useEffect(() => {
+    if (!active && wasActive.current && frozenMs === null) {
+      setFrozenMs(Date.now() - mountedAt);
+    }
+  }, [active, frozenMs, mountedAt]);
+
+  const expanded = active || open;
+  const elapsedS = (active ? now - mountedAt : (frozenMs ?? 0)) / 1000;
+
+  let label: string;
+  if (active) label = `Thinking… ${formatElapsed(elapsedS)}`;
+  else if (withheld) label = `Reasoned${tokens ? ` · ~${tokens} tok` : ""} · hidden by provider`;
+  else if (frozenMs !== null) label = `Thought for ${formatElapsed(elapsedS)}`;
+  else label = "Reasoning";
+
+  // Withheld marker has no body to show.
+  const hasBody = !withheld && text.length > 0;
+
+  return (
+    <div className={`${s.reasoning} ${active ? s.reasoningActive : ""}`}>
+      <button
+        type="button"
+        className={s.reasoningToggle}
+        onClick={() => { if (!active) setOpen((o) => !o); }}
+        aria-expanded={expanded}
+        aria-busy={active}
+        title={active ? "Thinking…" : expanded ? "Hide reasoning" : "Show reasoning"}
+        disabled={active && !hasBody}
+      >
+        <span className={s.reasoningDot} aria-hidden="true">{active ? "✳" : "💭"}</span>
+        <span>{label}</span>
+        {hasBody && !active && <span className={s.stepsChev} aria-hidden="true">{expanded ? "▴" : "▾"}</span>}
+      </button>
+      {expanded && hasBody && <div className={s.stepThinking}>{text}</div>}
+    </div>
+  );
+}
+
+/** Reasoning + tool steps for one stretch of a turn. While the turn is
+ *  pending it's force-expanded — you watch it think (dimmed) and act
+ *  live; once done it auto-collapses to a "✓ N steps" toggle so history
+ *  stays scannable but the whole process is one click away. */
+function StepsStrip({ entries, pending }: { entries: TimelineEntry[]; pending: boolean }) {
+  const [open, setOpen] = useState(false);
+  const expanded = pending || open;
+  const files: string[] = [];
+  for (const e of entries) {
+    if (e.kind === "tool") {
+      const f = (e.tool.label || "").match(/·\s+(.+)/)?.[1]?.trim();
+      if (f && !files.includes(f)) files.push(f);
+    }
+  }
+  const summary =
+    `${entries.length} step${entries.length === 1 ? "" : "s"}` +
+    (files.length ? ` · ${files.slice(0, 2).join(", ")}${files.length > 2 ? ` +${files.length - 2}` : ""}` : "");
+  return (
+    <div className={s.stepsStrip}>
+      {!pending && (
+        <button
+          type="button"
+          className={s.stepsToggle}
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={expanded}
+          title={expanded ? "Hide steps" : "Show steps"}
+        >
+          <span>{expanded ? "Hide steps" : `✓ ${summary}`}</span>
+          <span className={s.stepsChev} aria-hidden="true">{expanded ? "▴" : "▾"}</span>
+        </button>
+      )}
+      {expanded && (
+        <div className={s.stepsBody}>
+          {entries.map((e, i) =>
+            e.kind === "thinking" ? (
+              <div key={i} className={s.stepThinking}>{e.text}</div>
+            ) : e.kind === "tool" ? (
+              <ToolChip key={i} tool={e.tool} />
+            ) : null,
+          )}
         </div>
       )}
     </div>

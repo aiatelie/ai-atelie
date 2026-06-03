@@ -377,6 +377,7 @@ export const opencodeAdapter: AgentAdapter = {
     silentTimeoutMs: OPENCODE_SILENT_LIMIT_MS,
     supportsPrewarmPool: false,
     supportsCompletion: true,
+    reasoning: { mode: "streams", enablement: "model-dependent; reasoning parts forwarded when present" },
   },
   async run({ payload, send, abortSignal, baseUrl, streamId }) {
     return runOpenCode(payload, send, abortSignal, baseUrl, streamId);

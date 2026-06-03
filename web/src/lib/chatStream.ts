@@ -12,7 +12,18 @@
  *      dead (HMR-only remounts no longer get false interruptions).
  *
  * Event types mirror what the SSE wire emits, but typed.
+ *
+ * Phase 4 (event-sourced canonical log): the server now ALSO emits each
+ * turn as an ordered, seq-stamped CanonicalEvent log on a `canon` SSE
+ * channel (alongside the legacy flat `agent` wire, which is untouched).
+ * We accumulate those into `StreamState.events` and the UI prefers
+ * `project(reduce(events))` when present, falling back to the legacy
+ * `timeline`/`thinking`/`tools` path otherwise. This makes
+ * live == persisted == reconnected by construction. See
+ * web/src/lib/canonicalEvents.ts (hand-mirrored from the api module).
  */
+
+import type { CanonicalEvent } from "./canonicalEvents.ts";
 
 export type ElicitRequest = {
   id: string;
@@ -46,6 +57,27 @@ export type ToolCall = {
   isError?: boolean;
 };
 
+/** One entry in a turn's chronological timeline: a run of reasoning, a
+ *  tool call, or a segment of assistant prose. Built from the stream
+ *  events in arrival order so the UI can replay think → act → answer
+ *  instead of collapsing everything into one bubble. */
+export type TimelineEntry =
+  | {
+      kind: "thinking";
+      text: string;
+      /** Reasoning block closed (model finished this thought). Drives the
+       *  capsule's "Thinking… M:SS" → "Thought for Ns" transition. Absent
+       *  on legacy turns → treated as done. */
+      done?: boolean;
+      /** Provider spent reasoning tokens but withheld the summary text
+       *  (codex). The capsule shows an honest "Reasoned · ~N tok" marker
+       *  instead of an empty body. */
+      withheld?: boolean;
+      tokens?: number;
+    }
+  | { kind: "text"; text: string }
+  | { kind: "tool"; tool: ToolCall };
+
 /** Per-turn usage telemetry parsed off the SDK's `result` message. The
  *  chat UI surfaces this as a small badge under the assistant timestamp
  *  (input/output tokens, wall-clock duration, model id). All fields are
@@ -77,6 +109,9 @@ export type StreamEvent =
   | { type: "elicit"; request: ElicitRequest }
   | { type: "elicitClear"; id: string }
   | { type: "usage"; usage: TurnUsage }
+  /** One event of the canonical, seq-stamped turn log (Phase 4). Carried
+   *  on the `canon` SSE channel parallel to the legacy flat events. */
+  | { type: "canon"; event: CanonicalEvent }
   | { type: "error"; message: string }
   | { type: "done" };
 
@@ -86,6 +121,16 @@ export type StreamState = {
    *  as a dimmed/collapsible block above the main reply. */
   thinking: string;
   tools: ToolCall[];
+  /** Chronological think → act → answer timeline, built in arrival
+   *  order. The canonical source for the timeline UI; content/thinking/
+   *  tools above are kept for usage badges, copy, and legacy fallback. */
+  timeline: TimelineEntry[];
+  /** Canonical, seq-stamped turn log (Phase 4). When non-empty this is the
+   *  authoritative turn shape — the UI renders `project(reduce(events))`.
+   *  Accumulated from the `canon` SSE channel; deduped by seq so reconnect
+   *  overlaps are idempotent. Falls back to `timeline` when empty (legacy
+   *  threads / an older server that doesn't emit the canon channel). */
+  events: CanonicalEvent[];
   turnId?: string;
   /** Currently-pending elicitation, if Claude called ask_user during this
    *  turn. Cleared when the user submits a response. */
@@ -97,6 +142,54 @@ export type StreamState = {
   error?: string;
   done: boolean;
 };
+
+/** Fold one stream event into the chronological timeline. Consecutive
+ *  thinking/text chunks coalesce into the trailing entry; a tool pushes a
+ *  new entry; toolResult patches the matching tool entry by id. Pure —
+ *  returns a fresh array so React sees a new ref. Unrelated events
+ *  (turnId/usage/done/…) pass the timeline through unchanged. */
+export function appendTimeline(tl: TimelineEntry[], e: StreamEvent): TimelineEntry[] {
+  const last = tl[tl.length - 1];
+  switch (e.type) {
+    case "thinking":
+      if (!e.chunk) return tl;
+      if (last && last.kind === "thinking") return [...tl.slice(0, -1), { kind: "thinking", text: last.text + e.chunk }];
+      return [...tl, { kind: "thinking", text: e.chunk }];
+    case "text":
+      if (!e.chunk) return tl;
+      if (last && last.kind === "text") return [...tl.slice(0, -1), { kind: "text", text: last.text + e.chunk }];
+      return [...tl, { kind: "text", text: e.chunk }];
+    case "finalText":
+      // Mirror state.text dedup: only adopt the SDK's final text when no
+      // streamed text entry already exists this turn.
+      if (!e.chunk || tl.some((x) => x.kind === "text")) return tl;
+      return [...tl, { kind: "text", text: e.chunk }];
+    case "tool":
+      return [...tl, { kind: "tool", tool: e.tool }];
+    case "toolResult":
+      return tl.map((x) =>
+        x.kind === "tool" && x.tool.id === e.id
+          ? { kind: "tool", tool: { ...x.tool, result: e.content, isError: e.isError } }
+          : x,
+      );
+    default:
+      return tl;
+  }
+}
+
+/** Append a canonical event to the per-stream log, idempotent by seq.
+ *  A single SSE connection delivers events in order, but reconnect
+ *  (Phase 5) replays a suffix that may overlap what we already have — so
+ *  drop any event whose seq we've already incorporated. Mutates in place
+ *  (the array lives on the long-lived stream.state); `project(reduce())`
+ *  sorts at render time so order is never relied on here. */
+function appendCanonical(events: CanonicalEvent[], e: CanonicalEvent): void {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].seq === e.seq) return; // already seen → idempotent
+    if (events[i].seq < e.seq) break;    // common case: strictly increasing
+  }
+  events.push(e);
+}
 
 type Listener = (e: StreamEvent) => void;
 
@@ -182,14 +275,21 @@ type StartArgs = {
 /** Spawn a fetch and pump SSE blocks into listeners. Returns when the
  *  stream finishes (or errors). Safe to call from any Editor instance. */
 export async function startStream({ streamId, body, listener, listeners }: StartArgs): Promise<void> {
-  if (streams.has(streamId)) return; // dedupe — caller already started this
+  // Dedupe a genuinely in-flight stream (HMR remount, two callers racing
+  // the same id). But a FINISHED entry lingers in the map (we never delete
+  // — getStreamState/resume need it), and the retry path deliberately
+  // reuses the user message's streamId. A bare has()-check would then make
+  // retry a silent no-op and strand the new pending bubble forever, so
+  // allow restarting a stream whose prior turn already completed.
+  const prior = streams.get(streamId);
+  if (prior && !prior.state.done) return;
   const controller = new AbortController();
   const initial = new Set<Listener>();
   if (listener) initial.add(listener);
   if (listeners) for (const l of listeners) initial.add(l);
   const stream: ActiveStream = {
     controller,
-    state: { text: "", thinking: "", tools: [], done: false },
+    state: { text: "", thinking: "", tools: [], timeline: [], events: [], done: false },
     listeners: initial,
     lastEventAt: Date.now(),
     lastEventIndex: -1,
@@ -221,6 +321,7 @@ export async function startStream({ streamId, body, listener, listeners }: Start
         if (stream.state.elicit?.id === e.id) stream.state.elicit = undefined;
         break;
       case "usage":       stream.state.usage = e.usage;       break;
+      case "canon":       appendCanonical(stream.state.events, e.event); break;
       case "error":       stream.state.error = e.message;     break;
       case "done":
         stream.state.done = true;
@@ -236,6 +337,7 @@ export async function startStream({ streamId, body, listener, listeners }: Start
         }
         break;
     }
+    stream.state.timeline = appendTimeline(stream.state.timeline, e);
     for (const l of stream.listeners) {
       try { l(e); } catch { /* a stale listener shouldn't kill the stream */ }
     }
@@ -374,6 +476,10 @@ export async function resumeStream(streamId: string, listeners: Listener[]): Pro
           if (!existing.listeners.has(l)) continue;
           try {
             if (s.turnId) l({ type: "turnId", turnId: s.turnId });
+            // Canonical log first — when present it's the authoritative turn
+            // shape the new listener will render. The legacy replays below
+            // keep the fallback path (and usage badges) populated too.
+            for (const ev of s.events) l({ type: "canon", event: ev });
             if (s.thinking) l({ type: "thinking", chunk: s.thinking });
             if (s.text) l({ type: "text", chunk: s.text });
             for (const t of s.tools) l({ type: "tool", tool: t });
@@ -393,7 +499,7 @@ export async function resumeStream(streamId: string, listeners: Listener[]): Pro
   const controller = new AbortController();
   const stream: ActiveStream = {
     controller,
-    state: { text: "", thinking: "", tools: [], done: false },
+    state: { text: "", thinking: "", tools: [], timeline: [], events: [], done: false },
     listeners: new Set(listeners),
     lastEventAt: Date.now(),
     lastEventIndex: -1,
@@ -439,6 +545,7 @@ export async function resumeStream(streamId: string, listeners: Listener[]): Pro
         if (stream.state.elicit?.id === e.id) stream.state.elicit = undefined;
         break;
       case "usage":       stream.state.usage = e.usage;       break;
+      case "canon":       appendCanonical(stream.state.events, e.event); break;
       case "error":       stream.state.error = e.message;     break;
       case "done":
         stream.state.done = true;
@@ -451,6 +558,7 @@ export async function resumeStream(streamId: string, listeners: Listener[]): Pro
         }
         break;
     }
+    stream.state.timeline = appendTimeline(stream.state.timeline, e);
     for (const l of stream.listeners) {
       try { l(e); } catch { /* a stale listener shouldn't kill the stream */ }
     }
@@ -552,6 +660,16 @@ function parseSseBlock(block: string): { events: StreamEvent[]; eventIndex: numb
   if (event === "text") {
     const p = parsed as { text?: string };
     return p.text ? wrap([{ type: "text", chunk: p.text }]) : wrap([]);
+  }
+  if (event === "canon") {
+    // One CanonicalEvent (Phase 4). The server stamps `seq` + `id`; we
+    // fold it into StreamState.events. Validate the minimum shape so a
+    // malformed frame can't poison the log.
+    const p = parsed as CanonicalEvent;
+    if (p && typeof p === "object" && typeof p.kind === "string" && typeof p.seq === "number") {
+      return wrap([{ type: "canon", event: p }]);
+    }
+    return wrap([]);
   }
   if (event === "agent") {
     const e = parsed as WireAgentEvent;

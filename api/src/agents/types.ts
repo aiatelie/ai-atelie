@@ -47,6 +47,19 @@ export type AgentCapabilities = {
    *  false, /api/artifacts/complete returns 501 for projects routed
    *  to this adapter. */
   supportsCompletion: boolean;
+  /** How this adapter surfaces the model's reasoning. Declared data (not
+   *  branches) so the UI can advertise reasoning quality per adapter and
+   *  render an honest capsule. `streams` = thoughts arrive as deltas;
+   *  `hidden-but-present` = the model reasons but the provider withholds
+   *  the text (codex on a ChatGPT account, agentic turns); `none` = no
+   *  reasoning surface. */
+  reasoning: {
+    mode: "streams" | "hidden-but-present" | "none";
+    /** How it's enabled, for maintainers (e.g. "adaptive thinking"). */
+    enablement?: string;
+    /** Short user-facing note (e.g. "hidden by provider on tool turns"). */
+    note?: string;
+  };
 };
 
 export type AgentCompleteArgs = {

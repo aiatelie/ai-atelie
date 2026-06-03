@@ -142,6 +142,17 @@ export function attachStreamToThread(args: {
    *  module-level reference; expensive only if called per-frame at
    *  high event rates — but the same archive write debounce (300ms in
    *  saveThreads) coalesces network PATCHes anyway. */
+  /** Snapshot of the seq-stamped canonical log (Phase 4/5). Returns
+   *  undefined (not []) when empty so the `?? m.events` copies never wipe a
+   *  previously-persisted log. Persisting this in the shadow matters for
+   *  turns that complete while the user is on ANOTHER project — the React
+   *  handler is torn down then, so the shadow is the only writer; without
+   *  this the turn would fall back to the legacy timeline render. */
+  const evSnap = () => {
+    const s = getStreamState(streamId);
+    return s && s.events.length > 0 ? s.events.slice() : undefined;
+  };
+
   const snapshotFromState = () => {
     const state = getStreamState(streamId);
     if (!state) return;
@@ -150,6 +161,7 @@ export function attachStreamToThread(args: {
       content: state.text,
       thinking: state.thinking,
       tools: state.tools.map((t) => ({ ...t })),
+      events: state.events.length > 0 ? state.events.slice() : m.events,
     }));
   };
 
@@ -173,6 +185,7 @@ export function attachStreamToThread(args: {
       ...m,
       content: t ? m.content + t : m.content,
       thinking: k ? (m.thinking ?? "") + k : m.thinking,
+      events: evSnap() ?? m.events,
     }));
   };
 
@@ -210,12 +223,12 @@ export function attachStreamToThread(args: {
               const summary = files.length > 0
                 ? `Made ${m.tools.length} tool call${m.tools.length === 1 ? "" : "s"}, touching: ${files.join(", ")}.`
                 : `Made ${m.tools.length} tool call${m.tools.length === 1 ? "" : "s"}.`;
-              return { ...m, content: summary, pending: false };
+              return { ...m, content: summary, pending: false, events: evSnap() ?? m.events };
             }
             if (!m.content && !m.error) {
-              return { ...m, error: "No reply received from AI (process exited without output).", pending: false };
+              return { ...m, error: "No reply received from AI (process exited without output).", pending: false, events: evSnap() ?? m.events };
             }
-            return { ...m, pending: false };
+            return { ...m, pending: false, events: evSnap() ?? m.events };
           });
           detachStream(streamId);
           return;
@@ -232,7 +245,7 @@ export function attachStreamToThread(args: {
         flushBuffers();
         // Mirrors the React handler: only adopt the SDK's final result
         // text when nothing arrived as deltas this turn.
-        mutateAssistant(entry, (m) => (m.content ? m : { ...m, content: e.chunk }));
+        mutateAssistant(entry, (m) => (m.content ? m : { ...m, content: e.chunk, events: evSnap() ?? m.events }));
         return;
       }
       case "thinking":
@@ -241,7 +254,7 @@ export function attachStreamToThread(args: {
         return;
       case "tool":
         flushBuffers();
-        mutateAssistant(entry, (m) => ({ ...m, tools: [...m.tools, e.tool] }));
+        mutateAssistant(entry, (m) => ({ ...m, tools: [...m.tools, e.tool], events: evSnap() ?? m.events }));
         return;
       case "toolResult":
         // Attach the tool's response text to the matching ToolCall in the
@@ -253,6 +266,7 @@ export function attachStreamToThread(args: {
           tools: m.tools.map((t) =>
             t.id === e.id ? { ...t, result: e.content, isError: e.isError } : t,
           ),
+          events: evSnap() ?? m.events,
         }));
         return;
       case "turnId":

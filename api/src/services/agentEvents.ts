@@ -136,8 +136,9 @@ export function sdkMessageToAgentEvents(msg: unknown): AgentEvent[] {
 }
 
 /** Map one kimi --print stream-json line to zero or more AgentEvents.
- *  Kimi only emits assistant messages with text or tool_use content;
- *  `think` parts are intentionally dropped (too verbose for chat).
+ *  Kimi emits assistant messages with text, tool_use, or `think` content.
+ *  We now FORWARD `think` as reasoning (capture is never the place to
+ *  discard — verbosity is a UI concern; the reasoning capsule collapses).
  *  Kimi --print does NOT emit tool_use_id, so toolResult matching is
  *  best-effort; we leave `id` undefined and rely on order. */
 export function kimiLineToAgentEvents(obj: unknown): AgentEvent[] {
@@ -151,8 +152,9 @@ export function kimiLineToAgentEvents(obj: unknown): AgentEvent[] {
     } else if (c.type === "tool_use" && c.name) {
       const input = (c as { input?: Record<string, unknown> }).input ?? undefined;
       out.push({ type: "tool", tool: { name: c.name, input } });
+    } else if (c.type === "think" && c.think) {
+      out.push({ type: "thinking", chunk: c.think });
     }
-    // skip "think" parts — internal reasoning.
   }
   return out;
 }

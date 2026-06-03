@@ -20,6 +20,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { resolveClaudeModel } from "../../services/claude.ts";
 import type { AgentCompleteArgs, AgentCompleteResult } from "../types.ts";
 
 function buildClaudeEnv(): NodeJS.ProcessEnv {
@@ -61,6 +62,9 @@ export async function claudeComplete(
   if (messages.length === 0) {
     throw new Error("messages must contain at least one entry");
   }
+  // Strip a possible "-ultra" suffix — completions stay minimal (no
+  // effort/thinking/workflow), but the model id must still be real.
+  const { model } = resolveClaudeModel(modelId);
   const prompt = flattenMessages(messages);
 
   const abortController = new AbortController();
@@ -71,7 +75,7 @@ export async function claudeComplete(
     options: {
       env: buildClaudeEnv(),
       executable: "bun" as const,
-      model: modelId || undefined,
+      model: model || undefined,
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       settingSources: [],

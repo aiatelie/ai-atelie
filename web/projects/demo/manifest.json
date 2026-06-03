@@ -13,8 +13,22 @@
     }
   ],
   "components": [
-    { "file": "design-canvas.jsx", "name": "DesignCanvas" },
-    { "file": "Banner.jsx", "name": "Banner" }
+    {
+      "file": "design-canvas.jsx",
+      "name": "DesignCanvas"
+    },
+    {
+      "file": "Banner.jsx",
+      "name": "Banner"
+    }
   ],
-  "entry": "index.html"
+  "entry": "index.html",
+  "design": {
+    "active_skills": [
+      "frontend-design",
+      "design-aesthetic-presets",
+      "design-critique",
+      "design-md-author"
+    ]
+  }
 }

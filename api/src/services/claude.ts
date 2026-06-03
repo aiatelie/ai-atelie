@@ -49,6 +49,52 @@ function buildClaudeEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
+/* ── Ultra mode ──────────────────────────────────────────────────────
+ * The "Claude Opus 4.8 Ultra" picker preset rides as a model id with a
+ * `-ultra` suffix (the chat wire only carries modelId). We strip the
+ * suffix back to the real model and flip on workflow + xhigh effort:
+ *   - allow Task/TaskOutput/TaskStop so the agent can spawn subagents
+ *   - effort "xhigh" (matches the `ultracode` harness level)
+ *   - adaptive thinking + forwardSubagentText, so the nested subagent
+ *     transcript surfaces through the same agentEvents mappers.
+ * Normal turns keep the tighter, no-subagent toolbox unchanged. */
+const ULTRA_SUFFIX = "-ultra";
+
+export function resolveClaudeModel(modelId?: string): { model?: string; ultra: boolean } {
+  if (!modelId) return { ultra: false };
+  if (modelId.endsWith(ULTRA_SUFFIX)) {
+    return { model: modelId.slice(0, -ULTRA_SUFFIX.length), ultra: true };
+  }
+  return { model: modelId, ultra: false };
+}
+
+/** Subagent-spawning / background-task tools. Disallowed on normal
+ *  turns; allowed only in Ultra mode. */
+const WORKFLOW_TOOLS = ["Task", "TaskOutput", "TaskStop"];
+
+/** Minimal subagent menu for Ultra mode. The Task tool needs at least
+ *  one agent definition to spawn — settingSources:[] means no built-in
+ *  subagents are inherited. A read-only researcher covers the common
+ *  "go look across the project, then come back" workflow without
+ *  letting a subagent mutate files behind the main turn's back. */
+const ULTRA_AGENTS = {
+  explore: {
+    description:
+      "Read-only research subagent. Use to search across the project's files and report findings; it cannot edit.",
+    prompt:
+      "You are a read-only research subagent inside a web-design editor. Search the project's files to answer the delegated question, then report concise findings with file paths and short excerpts. Never edit, create, or delete files.",
+    tools: ["Read", "Grep", "Glob"],
+  },
+};
+
+/** Extra query() options merged in only for Ultra turns. */
+const ULTRA_OPTIONS = {
+  effort: "xhigh" as const,
+  thinking: { type: "adaptive" as const },
+  agents: ULTRA_AGENTS,
+  forwardSubagentText: true,
+};
+
 export async function runClaude(
   payload: CommentPayload,
   send: Emitter,
@@ -58,6 +104,23 @@ export async function runClaude(
 ): Promise<void> {
   const { prompt, rootDir } = await preparePromptForPayload(payload);
   const isSandbox = !!payload.projectId;
+  const { model: claudeModel, ultra } = resolveClaudeModel(payload.modelId);
+  // Disallowed tools — force MCP ask-user, tighten the toolbox. The
+  // workflow tools (Task*) are stripped only on normal turns; Ultra
+  // mode keeps them so the agent can orchestrate the `explore` subagent.
+  const disallowedTools: string[] = [
+    "AskUserQuestion",
+    "CronCreate", "CronDelete", "CronList",
+    "EnterWorktree", "ExitWorktree",
+    "Monitor",
+    "NotebookEdit",
+    "PushNotification",
+    "RemoteTrigger",
+    "ScheduleWakeup",
+    "LSP",
+    ...(ultra ? [] : WORKFLOW_TOOLS),
+    ...(isSandbox ? ["Bash"] : []),
+  ];
   const originalSid = payload.sessionId && UUID_RE.test(payload.sessionId) ? payload.sessionId : null;
   const abortController = new AbortController();
   abortSignal?.addEventListener("abort", () => {
@@ -73,6 +136,7 @@ export async function runClaude(
     `effectiveSid=${sid?.slice(0, 8) ?? "none"} ` +
     `sessionExists=${sessionExists} ` +
     `remapSize=${sessionRemapSize()} ` +
+    `model=${claudeModel ?? "default"} ultra=${ultra} ` +
     `rootDir=${rootDir.split("/").slice(-3).join("/")}`,
   );
 
@@ -102,33 +166,33 @@ export async function runClaude(
             ENV.SKILLS_DIR,
             screenshotDirFor(payload.projectId),
           ],
-          model: payload.modelId || undefined,
+          model: claudeModel || undefined,
           permissionMode: "bypassPermissions",
           allowDangerouslySkipPermissions: true,
+          // Stream partial messages so reasoning + text arrive as live
+          // deltas — without this, thinking is never emitted as
+          // thinking_delta and the timeline shows no thoughts.
+          includePartialMessages: true,
+          // Adaptive thinking on EVERY turn (not just Ultra) so the
+          // model's reasoning is captured and shown in the timeline. The
+          // model decides how much to think; simple turns stay fast.
+          // Ultra raises effort to xhigh on top of this.
+          thinking: { type: "adaptive" as const },
+          // Ultra mode (Opus 4.8 Ultra preset): xhigh effort, adaptive
+          // thinking, subagent orchestration. {} on normal turns.
+          ...(ultra ? ULTRA_OPTIONS : {}),
           // Skills come from `additionalDirectories` only — never from cwd's
           // `.claude/` or `~/.claude/`. Empty `settingSources` makes that
           // explicit and prevents an adapter cwd that happens to contain a
           // `.claude/skills/` from silently bleeding into product runtime.
           settingSources: [],
-          // Disallowed tools — force MCP ask-user, tighten toolbox to relevant tools.
-          // Claude Code's native AskUserQuestion has no UI surface in our chat sidebar;
-          // force the model onto mcp__ask-user__ask_user which routes through the
-          // editor's ElicitForm. The rest are SDK tools irrelevant to a sandbox
-          // web-design editor (no cron, no worktrees, no notebooks, no remote
-          // triggers, no scheduling, no LSP, no subagent-spawning).
-          disallowedTools: [
-            "AskUserQuestion",
-            "CronCreate", "CronDelete", "CronList",
-            "EnterWorktree", "ExitWorktree",
-            "Monitor",
-            "NotebookEdit",
-            "PushNotification",
-            "RemoteTrigger",
-            "ScheduleWakeup",
-            "Task", "TaskOutput", "TaskStop",
-            "LSP",
-            ...(isSandbox ? ["Bash"] : []),
-          ] as string[],
+          // Disallowed tools — force MCP ask-user, tighten the toolbox.
+          // Claude Code's native AskUserQuestion has no UI surface in our
+          // chat sidebar; forcing mcp__ask-user__ask_user routes through
+          // the editor's ElicitForm. The rest are SDK tools irrelevant to
+          // a sandbox web-design editor. Computed above so Ultra mode can
+          // re-enable the workflow (Task*) tools. See `disallowedTools`.
+          disallowedTools,
           abortController,
           ...sessionOpts,
           mcpServers: {
