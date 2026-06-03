@@ -70,6 +70,10 @@ export type AgentUsage = {
   outputTokens?: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
+  /** Tokens the model spent reasoning (codex reasoning_output_tokens).
+   *  Proves reasoning happened even when the provider withholds the text,
+   *  so the UI can show an honest "reasoned · ~N tok" marker. */
+  reasoningTokens?: number;
   durationMs?: number;
   model?: string;
 };

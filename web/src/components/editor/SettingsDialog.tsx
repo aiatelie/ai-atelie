@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react";
 import s from "./settingsDialog.module.css";
 import { useAgents, rescanAgents, type AgentInfo } from "../../data/agents";
+import { CodexSignInButton } from "./CodexSignInButton";
 import {
   getDesign, setDesign, clearDesign, designs, type Design, type DesignMeta,
 } from "../../lib/theme";
@@ -669,6 +670,7 @@ function AdapterCard({ agent }: { agent: AgentInfo }) {
       {hint && (
         <div className={s.hint}>
           <div className={s.hintText}>{hint}</div>
+          {agent.id === "codex" && status === "auth" && <CodexSignInButton />}
           {command && <CopyButton command={command} />}
         </div>
       )}

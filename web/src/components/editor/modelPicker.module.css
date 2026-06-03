@@ -27,6 +27,7 @@
   flex-shrink: 0;
 }
 .modelDot[data-provider="kimi"] { background: var(--info); }
+.modelDot[data-provider="codex"] { background: var(--success); }
 
 .modelMenu {
   position: absolute;

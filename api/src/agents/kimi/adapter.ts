@@ -25,6 +25,7 @@ export const kimiAdapter: AgentAdapter = {
     silentTimeoutMs: KIMI_SILENT_TIMEOUT_MS,
     supportsPrewarmPool: ENV.KIMI_POOL_ENABLED,
     supportsCompletion: true,
+    reasoning: { mode: "streams", enablement: "kimi `think` parts forwarded as reasoning" },
   },
   async run({ payload, send, abortSignal, baseUrl, streamId }) {
     return runKimi(payload, send, abortSignal, baseUrl, streamId);

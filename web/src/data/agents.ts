@@ -20,6 +20,13 @@ export type AgentCapabilities = {
   bashAllowedInSandbox: boolean;
   silentTimeoutMs?: number;
   supportsPrewarmPool: boolean;
+  /** How this adapter surfaces reasoning — mirrors api AgentCapabilities.
+   *  Optional here so an older server (no field) doesn't break the UI. */
+  reasoning?: {
+    mode: "streams" | "hidden-but-present" | "none";
+    enablement?: string;
+    note?: string;
+  };
 };
 
 export type AgentInfo = {
@@ -106,4 +113,67 @@ export function useAgents(): AgentInfo[] {
 export async function rescanAgents(): Promise<AgentInfo[]> {
   invalidateAgentsCache();
   return fetchAgents({ refresh: true });
+}
+
+export type CodexLoginEvent =
+  | { type: "status"; message: string }
+  | { type: "url"; url: string }
+  | { type: "done"; authed: boolean }
+  | { type: "error"; message: string };
+
+/** Kick off `codex login` on the backend (which opens the user's
+ *  browser for the ChatGPT OAuth flow) and stream progress. The
+ *  endpoint is POST + SSE, so we read the response body directly
+ *  rather than via EventSource (which is GET-only). On a successful
+ *  sign-in we rescanAgents() so the picker/adapter list refreshes.
+ *  Resolves true when codex reports authed. */
+export async function loginCodex(onEvent: (e: CodexLoginEvent) => void): Promise<boolean> {
+  let res: Response;
+  try {
+    res = await fetch("/api/agents/codex/login", { method: "POST" });
+  } catch {
+    onEvent({ type: "error", message: "Couldn't reach the API server." });
+    return false;
+  }
+  if (res.status === 409) {
+    onEvent({ type: "error", message: "A sign-in is already in progress." });
+    return false;
+  }
+  if (!res.ok || !res.body) {
+    onEvent({ type: "error", message: `Sign-in failed (HTTP ${res.status}).` });
+    return false;
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let authed = false;
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let idx;
+    // SSE frames are separated by a blank line.
+    while ((idx = buf.indexOf("\n\n")) !== -1) {
+      const frame = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      let event = "message";
+      let data = "";
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!data) continue;
+      let parsed: { message?: string; url?: string; authed?: boolean };
+      try { parsed = JSON.parse(data); } catch { continue; }
+      if (event === "status" && parsed.message) onEvent({ type: "status", message: parsed.message });
+      else if (event === "url" && parsed.url) onEvent({ type: "url", url: parsed.url });
+      else if (event === "done") { authed = !!parsed.authed; onEvent({ type: "done", authed }); }
+      else if (event === "error") onEvent({ type: "error", message: parsed.message ?? "Sign-in failed." });
+    }
+  }
+
+  if (authed) await rescanAgents();
+  return authed;
 }

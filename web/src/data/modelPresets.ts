@@ -27,7 +27,7 @@
 
 import type { AgentInfo } from "./agents";
 
-export type Provider = "kimi" | "claude" | "opencode";
+export type Provider = "kimi" | "claude" | "opencode" | "codex";
 export type ModelTier = "primary" | "secondary" | "legacy";
 
 export type ModelPreset = {
@@ -36,16 +36,31 @@ export type ModelPreset = {
   description?: string;
   provider: Provider;
   tier: ModelTier;
+  /** Renders the "thinking" badge in the picker. Set on models that
+   *  decide their own thinking depth (e.g. the Opus 4.8 Ultra preset). */
+  supportsAdaptiveThinking?: boolean;
 };
 
 export const MODEL_PRESETS: ModelPreset[] = [
   // ─── Claude (Anthropic CLI) ─────────────────────────────────
   {
-    id: "claude-opus-4-7",
-    label: "Claude Opus 4.7",
+    id: "claude-opus-4-8",
+    label: "Claude Opus 4.8",
     description: "Anthropic · most capable",
     provider: "claude",
     tier: "primary",
+  },
+  {
+    // The "-ultra" suffix is a routing sentinel: the claude adapter
+    // strips it back to "claude-opus-4-8" and flips on xhigh effort +
+    // subagent workflow orchestration. See api/src/services/claude.ts
+    // resolveClaudeModel().
+    id: "claude-opus-4-8-ultra",
+    label: "Claude Opus 4.8 Ultra",
+    description: "Anthropic · xhigh effort + workflow",
+    provider: "claude",
+    tier: "primary",
+    supportsAdaptiveThinking: true,
   },
   {
     id: "claude-sonnet-4-6",
@@ -60,6 +75,18 @@ export const MODEL_PRESETS: ModelPreset[] = [
     description: "Anthropic · fastest",
     provider: "claude",
     tier: "secondary",
+  },
+  // ─── Codex (OpenAI CLI) ─────────────────────────────────────
+  // Bare "codex" id (no "/", so it never collides with the opencode
+  // rule). No model is sent: with a ChatGPT-account login, Codex picks
+  // the model server-side and rejects explicit `-m` overrides. Auth via
+  // the "Sign in to Codex" button (or `codex login`).
+  {
+    id: "codex",
+    label: "Codex",
+    description: "OpenAI · ChatGPT subscription",
+    provider: "codex",
+    tier: "primary",
   },
   // ─── Kimi (Moonshot CLI) ────────────────────────────────────
   // The id is the real model id from ~/.kimi/config.toml, which is what
@@ -76,7 +103,7 @@ export const MODEL_PRESETS: ModelPreset[] = [
   },
 ];
 
-export const DEFAULT_MODEL_ID = "claude-opus-4-7";
+export const DEFAULT_MODEL_ID = "claude-opus-4-8";
 
 /** Mirror of api/src/agents/registry.ts:pickAdapter(). Used only for
  *  the picker dot color — the server is the source of truth for
@@ -86,6 +113,7 @@ export function providerOf(modelId: string | undefined): Provider {
   if (modelId === "opus" || modelId === "sonnet" || modelId === "haiku") return "claude";
   if (modelId.startsWith("claude")) return "claude";
   if (modelId.startsWith("kimi") || modelId.startsWith("moonshot")) return "kimi";
+  if (modelId.startsWith("codex")) return "codex";
   if (modelId.includes("/")) return "opencode";
   return "kimi";
 }

@@ -13,15 +13,17 @@
 import { claudeAdapter } from "./claude/adapter.ts";
 import { kimiAdapter } from "./kimi/adapter.ts";
 import { opencodeAdapter } from "./opencode/adapter.ts";
+import { codexAdapter } from "./codex/adapter.ts";
 import type { AgentAdapter } from "./types.ts";
 
-const ADAPTERS: AgentAdapter[] = [claudeAdapter, kimiAdapter, opencodeAdapter];
+const ADAPTERS: AgentAdapter[] = [claudeAdapter, kimiAdapter, opencodeAdapter, codexAdapter];
 
 /** Pick the right adapter for a given model id.
  *
  *    - empty modelId                                 → claude (default)
  *    - "opus" | "sonnet" | "haiku"                   → claude
  *    - starts with "claude"                          → claude
+ *    - starts with "codex" ("codex:gpt-5-codex")      → codex
  *    - contains "/"  (provider/model — OpenCode shape) → opencode
  *    - everything else                               → kimi
  *
@@ -41,6 +43,9 @@ export function pickAdapter(modelId: string | undefined): AgentAdapter {
   if (modelId === "opus" || modelId === "sonnet" || modelId === "haiku") return claudeAdapter;
   if (modelId.startsWith("claude")) return claudeAdapter;
   if (modelId.startsWith("kimi") || modelId.startsWith("moonshot")) return kimiAdapter;
+  // Codex ids carry a "codex:" prefix (no "/", so this must come before
+  // the opencode `provider/model` rule). Adapter strips it → real -m.
+  if (modelId.startsWith("codex")) return codexAdapter;
   if (modelId.includes("/")) return opencodeAdapter;
   return kimiAdapter;
 }

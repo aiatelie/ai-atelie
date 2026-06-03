@@ -1,0 +1,29 @@
+/* Codex sign-in button — shared by the Adapters settings card and the
+ * chat error bubble. Compact, inline-flex so status/url can wrap below
+ * the button in tight rows. */
+
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--ink-10);
+  background: var(--surface);
+  color: var(--ink-92);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: 600 11.5px var(--font-system);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--surface-4); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+
+.status { font-size: 11px; color: var(--ink-50); }
+.url { font-size: 11px; color: var(--info); text-decoration: underline; }
+.err { font-size: 11px; color: var(--danger); }
+.ok { font-size: 11px; color: var(--success); }

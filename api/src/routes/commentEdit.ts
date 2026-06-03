@@ -31,7 +31,8 @@ import {
 } from "../services/elicitBus.ts";
 import { projectDirOf, internalBaseUrl } from "../services/projectStore.ts";
 import { openRunLog } from "../services/runLogger.ts";
-import type { CommentPayload } from "../services/types.ts";
+import type { CommentPayload, AgentEvent } from "../services/types.ts";
+import { pushCanonical, finalizeCanonical, disposeCanonical } from "../services/canonicalLog.ts";
 
 /** Validate a client-provided streamId before we use it as a registry
  *  key (which becomes part of the run-log filename). Allows the
@@ -181,6 +182,22 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
       try {
         runLog.log(`sse event=${event} data=${json.length > 600 ? json.slice(0, 600) + "…(+" + (json.length - 600) + ")" : json}`);
       } catch { /* unstringifiable; skip */ }
+      // Dual-emit: tee every normalized `agent` event into the canonical
+      // block log and ride canonical events alongside on a `canon` channel.
+      // Phase 5 routes them through appendBufferedEvent too (own eventIndex,
+      // ringed + fanned to tailers) so a reconnected client re-folds the
+      // canonical log identically — the whole "reconnect == continuous"
+      // guarantee. Without this, canon frames were live-only and a reload
+      // lost the canonical log, silently falling back to the legacy timeline.
+      if (event === "agent") {
+        for (const ce of pushCanonical(requestStreamId, data as AgentEvent)) {
+          const cjson = JSON.stringify(ce);
+          const cidx = appendBufferedEvent(requestStreamId, "canon", cjson);
+          stream
+            .writeSSE(cidx == null ? { event: "canon", data: cjson } : { event: "canon", data: cjson, id: String(cidx) })
+            .catch(() => { /* aborted */ });
+        }
+      }
     };
 
     // Keepalive: prevent the client's 90s no-event watchdog from declaring
@@ -321,6 +338,14 @@ commentEditRoutes.post("/api/comment-edit", async (c) => {
       agentDone = true;
       heartbeatActive = false;
       clearTimeout(timeoutTimer);
+      // Close any open reasoning/text block in the canonical log and ride
+      // the closers on the `canon` wire. Keep the in-memory ring for the
+      // same window as the SSE buffer (in-tab reconnect), then free it —
+      // the durable jsonl remains the post-reload backstop.
+      for (const ce of finalizeCanonical(requestStreamId)) {
+        stream.writeSSE({ event: "canon", data: JSON.stringify(ce) }).catch(() => { /* aborted */ });
+      }
+      setTimeout(() => disposeCanonical(requestStreamId), 60_000).unref?.();
       // Defer activeRuns deletion via markRunFinished so the buffered
       // events stick around for BUFFER_GC_MS — covers the slow-reload
       // case where the user reloads AFTER the run completed but before
@@ -354,23 +379,39 @@ commentEditRoutes.get("/api/comment-edit/replay/:streamId", async (c) => {
   cancelGraceAbort(streamId);
 
   return streamSSE(c, async (stream) => {
-    // 1. Flush whatever the buffer holds since fromIndex.
-    for (const ev of replaySince(streamId, fromIndex)) {
-      await stream
-        .writeSSE({ event: ev.event, id: String(ev.eventIndex), data: ev.data })
-        .catch(() => { /* socket gone */ });
-    }
-    // 2. If the run already finished, the buffer carries the terminal
-    //    `status: done` event — nothing more to forward.
-    if (run.finishedAt) return;
-
-    // 3. Tail live: every appendBufferedEvent fans out to this tailer.
-    const tailer = (ev: { eventIndex: number; event: string; data: string }) => {
+    type WireEv = { eventIndex: number; event: string; data: string };
+    // De-dup writer: each eventIndex is sent at most once, in increasing
+    // order. `highWater` tracks the highest index already written.
+    let highWater = fromIndex - 1;
+    const writeEv = (ev: WireEv) => {
+      if (ev.eventIndex <= highWater) return; // already sent → idempotent
+      highWater = ev.eventIndex;
       stream
         .writeSSE({ event: ev.event, id: String(ev.eventIndex), data: ev.data })
         .catch(() => { /* socket gone */ });
     };
+
+    // Tailer-detach gap fix: attach the live tailer BEFORE snapshotting the
+    // backlog, so an event appended in the window between the snapshot and
+    // the attach can't slip through unseen. Events that land during the
+    // flush are queued, then drained — deduped against the backlog by
+    // eventIndex. (Canon events are also order-independent on the client,
+    // since reduce() sorts by seq, but we preserve wire order regardless.)
+    let flushing = true;
+    const queued: WireEv[] = [];
+    const tailer = (ev: WireEv) => { if (flushing) queued.push(ev); else writeEv(ev); };
     attachTailer(streamId, tailer);
+
+    // 1. Flush the buffered backlog since fromIndex.
+    for (const ev of replaySince(streamId, fromIndex)) writeEv(ev);
+    // 2. Drain anything that arrived mid-flush (deduped against the backlog).
+    flushing = false;
+    for (const ev of queued) writeEv(ev);
+    queued.length = 0;
+
+    // 3. If the run already finished, the terminal frame is now flushed —
+    //    detach and close; nothing more will arrive.
+    if (run.finishedAt) { detachTailer(streamId, tailer); return; }
 
     // Same heartbeat behavior as the primary endpoint so the resumed
     // client's stall watchdog stays satisfied during long tool calls.
@@ -393,6 +434,13 @@ commentEditRoutes.get("/api/comment-edit/replay/:streamId", async (c) => {
       if (!alive || run.finishedAt) break;
       try { await stream.write(":keepalive\n\n"); } catch { break; }
     }
+    // Detach on normal finish too (loop exits when run.finishedAt flips):
+    // onAbort only fires on client disconnect, so without this the tailer
+    // would linger until the run's BUFFER_GC_MS sweep. Harmless either way
+    // (no events fire post-finish, and the run + its tailer set are GC'd),
+    // but detaching here keeps the tailer lifecycle tidy. No-op if already
+    // detached by onAbort.
+    detachTailer(streamId, tailer);
   });
 });
 
