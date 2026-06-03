@@ -582,7 +582,7 @@
   background: var(--surface);
   border: 1px solid var(--ink-08);
   border-radius: var(--radius-lg);
-  padding: 18px;
+  padding: 0;
   cursor: pointer;
   transition:
     border-color var(--motion-fast) var(--ease-out-expressive),
@@ -590,10 +590,59 @@
     transform var(--motion-fast) var(--ease-out-expressive);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 132px;
+  gap: 0;
   position: relative;
+  overflow: hidden;
   box-shadow: var(--shadow-card);
+}
+
+/* ── Card poster — live, scaled render of the project's main page ── */
+.poster {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--ink-04);
+  border-bottom: 1px solid var(--ink-08);
+}
+.posterFrame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  transform-origin: top left;
+  pointer-events: none;
+  background: var(--surface);
+  opacity: 0;
+  transition: opacity 240ms var(--ease-out-expressive);
+}
+.posterFrame[data-loaded="true"] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .posterFrame { transition: none; }
+}
+.posterFallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 120% at 30% 20%, var(--ink-04), var(--ink-12));
+}
+.posterMonogram {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: var(--weight-semi);
+  color: var(--ink-25);
+  letter-spacing: var(--tracking-heading);
+}
+
+/* Text block below the poster. */
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
 }
 .card:hover {
   border-color: var(--ink-15);
@@ -623,14 +672,22 @@
   gap: 12px;
   font-size: var(--text-xs);
   color: var(--ink-65);
-  margin-top: auto;
 }
 .cardActions {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  /* Floats over the poster art — a translucent chip keeps the controls
+     legible whether the design behind is light or dark. */
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--ink-08);
+  box-shadow: var(--shadow-card);
   opacity: 0;
   transition: opacity var(--motion-fast) var(--ease-out-expressive);
 }
@@ -684,24 +741,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
-}
-
-.tabsList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.tabPill {
-  background: var(--ink-04);
-  font-size: var(--text-xs);
-  border-radius: var(--radius-xs);
-  padding: 2px 6px;
-  color: var(--ink-65);
-  font-family: var(--font-mono);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
 
 /* ── Empty hero (centered inside main pane) ────────────────── */
