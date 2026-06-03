@@ -125,7 +125,20 @@ const AI_COMPLETE_BRIDGE = `
 })();</script>
 `;
 
-function injectReloadClient(html: string, id: string): string {
+function injectReloadClient(html: string, id: string, poster = false): string {
+  // Poster mode: a static, non-interactive thumbnail render (the project
+  // grid paints one of these per card). Two things must NOT happen here:
+  //   1. the live-reload EventSource — a grid of posters would open dozens
+  //      of SSE connections and exhaust the HTTP/1.1 socket pool, starving
+  //      real requests; and
+  //   2. window.ai.complete() — an artifact that calls it on load would
+  //      fire a real, rate-limited, billable completion just to paint a
+  //      preview. We stub window.ai to a no-op so that path is inert.
+  if (poster) {
+    const stub = `\n<script>window.ai={complete:function(){return Promise.resolve("");}};</script>\n`;
+    if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, stub + "</body>");
+    return html + stub;
+  }
   const snippet = `
 <script>(function(){try{
   var K="__cc_scroll";
@@ -727,7 +740,8 @@ projectsRoutes.get("/p/:id/_preview/*", async (c) => {
   const exists = await getRepos().projectFiles.exists(id, validated.path);
   if (!exists) return c.text("Component not found", 404);
   const compName = basename(file).replace(/\.(jsx|tsx|js|ts)$/, "");
-  const html = injectReloadClient(previewHtml(id, file, compName), id);
+  const poster = c.req.query("__poster") === "1";
+  const html = injectReloadClient(previewHtml(id, file, compName), id, poster);
   return new Response(html, {
     status: 200,
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
@@ -760,7 +774,8 @@ projectsRoutes.get("/p/:id/*", async (c) => {
   const mime = MIME[ext] ?? "application/octet-stream";
   if (ext === ".html" || ext === ".htm") {
     const text = new TextDecoder().decode(result.bytes);
-    return new Response(injectReloadClient(text, id), {
+    const poster = c.req.query("__poster") === "1";
+    return new Response(injectReloadClient(text, id, poster), {
       status: 200,
       headers: { "content-type": mime, "cache-control": "no-store" },
     });

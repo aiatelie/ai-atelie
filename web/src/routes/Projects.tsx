@@ -12,7 +12,7 @@
  * form input rather than a browser `alert()`.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import s from "../components/projects/projects.module.css";
 import { NewProjectForm } from "../components/projects/NewProjectForm";
@@ -246,13 +246,14 @@ function LoadingSkeleton() {
     <div className={s.grid} aria-busy="true">
       {[0, 1, 2].map((i) => (
         <div key={i} className={s.card} aria-hidden="true">
-          <Skeleton width="60%" height={18} />
-          <div className={s.tabsList}>
-            <Skeleton variant="rect" width={80} height={20} />
-            <Skeleton variant="rect" width={64} height={20} />
+          <div className={s.poster}>
+            <div className={s.posterFallback} />
           </div>
-          <div className={s.cardMeta}>
-            <Skeleton width={120} height={11} />
+          <div className={s.cardBody}>
+            <Skeleton width="60%" height={18} />
+            <div className={s.cardMeta}>
+              <Skeleton width={120} height={11} />
+            </div>
           </div>
         </div>
       ))}
@@ -279,21 +280,23 @@ function ProjectCard({
   if (editing) {
     return (
       <div className={s.card} onClick={(e) => e.stopPropagation()}>
-        <input
-          autoFocus
-          className={s.formInput}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => { onRename(draft.trim() || project.name); setEditing(false); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { onRename(draft.trim() || project.name); setEditing(false); }
-            if (e.key === "Escape") { setDraft(project.name); setEditing(false); }
-          }}
-        />
-        <div className={s.cardMeta}>
-          <span>{tabsLabel}</span>
-          <span>·</span>
-          <span>{lastUpdated}</span>
+        <div className={s.cardBody}>
+          <input
+            autoFocus
+            className={s.formInput}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { onRename(draft.trim() || project.name); setEditing(false); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { onRename(draft.trim() || project.name); setEditing(false); }
+              if (e.key === "Escape") { setDraft(project.name); setEditing(false); }
+            }}
+          />
+          <div className={s.cardMeta}>
+            <span>{tabsLabel}</span>
+            <span>·</span>
+            <span>{lastUpdated}</span>
+          </div>
         </div>
       </div>
     );
@@ -301,27 +304,22 @@ function ProjectCard({
 
   return (
     <div className={s.card} onClick={onOpen}>
-      <div className={s.cardName}>{project.name}</div>
-      {isRemix && (
-        <div className={s.cardRemixMeta}>
-          <span className={s.cardRemixBadge}>Remix</span>
-          {project.originProjectName && (
-            <span className={s.cardRemixFrom}>from {project.originProjectName}</span>
-          )}
-        </div>
-      )}
-      <div className={s.tabsList}>
-        {project.openTabs.slice(0, 5).map((t) => (
-          <span key={t.id} className={s.tabPill}>{t.label}</span>
-        ))}
-        {project.openTabs.length > 5 && (
-          <span className={s.tabPill}>+{project.openTabs.length - 5}</span>
+      <ProjectPoster project={project} />
+      <div className={s.cardBody}>
+        <div className={s.cardName}>{project.name}</div>
+        {isRemix && (
+          <div className={s.cardRemixMeta}>
+            <span className={s.cardRemixBadge}>Remix</span>
+            {project.originProjectName && (
+              <span className={s.cardRemixFrom}>from {project.originProjectName}</span>
+            )}
+          </div>
         )}
-      </div>
-      <div className={s.cardMeta}>
-        <span>{tabsLabel}</span>
-        <span>·</span>
-        <span>{lastUpdated}</span>
+        <div className={s.cardMeta}>
+          <span>{tabsLabel}</span>
+          <span>·</span>
+          <span>{lastUpdated}</span>
+        </div>
       </div>
       <div className={s.cardActions}>
         <button
@@ -352,6 +350,82 @@ function ProjectCard({
           title="Delete"
         >×</button>
       </div>
+    </div>
+  );
+}
+
+/* The card's visual identity: a live, scaled-down, non-interactive render
+ * of the project's main page — so the grid reads as a wall of designs, not
+ * a file list. The iframe is mounted lazily (only when the card nears the
+ * viewport) and served in `__poster` mode so it skips live-reload SSE and
+ * never fires a real window.ai.complete(). It renders at a fixed design
+ * width and is CSS-scaled to the card, like a website screenshot. */
+const POSTER_W = 1280;
+const POSTER_RATIO = 0.625; // 16:10
+
+function ProjectPoster({ project }: { project: Project }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(false);
+  const [scale, setScale] = useState(0.18);
+  const [loaded, setLoaded] = useState(false);
+
+  // First open tab is the main page; fall back to the project entry.
+  const route = project.openTabs[0]?.route ?? "index.html";
+  const hasRenderable = project.openTabs.length > 0;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      if (w) setScale(w / POSTER_W);
+    };
+    measure();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) { setInView(true); io.disconnect(); }
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    io.observe(el);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => { io.disconnect(); ro.disconnect(); };
+  }, []);
+
+  const src = hasRenderable
+    ? `/p/${encodeURIComponent(project.id)}/${route.replace(/^\/+/, "")}?__poster=1`
+    : null;
+
+  return (
+    <div ref={ref} className={s.poster} aria-hidden="true">
+      {src && inView && (
+        <iframe
+          className={s.posterFrame}
+          src={src}
+          title=""
+          tabIndex={-1}
+          scrolling="no"
+          loading="lazy"
+          sandbox="allow-scripts allow-same-origin"
+          data-loaded={loaded}
+          style={{
+            width: POSTER_W,
+            height: POSTER_W * POSTER_RATIO,
+            transform: `scale(${scale})`,
+          }}
+          onLoad={() => setLoaded(true)}
+        />
+      )}
+      {(!src || !loaded) && (
+        <div className={s.posterFallback}>
+          <span className={s.posterMonogram}>
+            {(project.name.trim()[0] ?? "·").toUpperCase()}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
